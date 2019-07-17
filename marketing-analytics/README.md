@@ -1,0 +1,3 @@
+Folders that gathers various tools useful to perform some marketing tasks:
+- bigquery-export-queries: a set of queries that you can run in BigQuery on raw data such as [Data Transfer Service](https://cloud.google.com/bigquery/transfer/) data for example.
+- activation: includes various tools to do marketing activation such as a connector to send big amount of data to Google Marketing Platform and Google Ads.

@@ -1,0 +1,54 @@
+{
+  "CM": {
+    "foo": {
+      "cmAccountId": "[YOUR-DCM-ACCOUNT-ID]",
+      "cmConfig": {
+        "idType": "encryptedUserId",
+        "conversion": {
+          "floodlightConfigurationId": "[YOUR-FL-CONFIG-ID]",
+          "floodlightActivityId": "[YOUR-FL-ACTIVITY-ID]",
+          "quantity": 1
+        },
+        "customVariables": [
+          "U2"
+        ],
+        "encryptionInfo": {
+          "encryptionEntityId": "[YOUR-ENCRYPTION-ID]",
+          "encryptionEntityType": "DCM_ADVERTISER",
+          "encryptionSource": "AD_SERVING"
+        }
+      }
+    }
+  },
+  "GA": {
+    "bar": {
+      "dataImportHeader": "[YOUR-DATA-IMPORT-HEADER]",
+      "gaConfig": {
+        "accountId": "[YOUR-GA-ACCOUNT-ID]",
+        "webPropertyId": "[YOUR-WEB-PROPERTY-ID]",
+        "customDataSourceId": "[YOUR-CUSTOM-DATASOURCE-ID]"
+      }
+    }
+  },
+  "MP": {
+    "baz": {
+      "mpConfig":{
+        "v": "1",
+        "t": "transaction",
+        "ni": "1",
+        "dl": "[YOUR-SOMETHING-URL]",
+        "tid": "[YOUR-WEB-PROPERTY-ID]"
+      }
+    }
+  },
+  "SFTP": {
+    "qux": {
+      "sftp":{
+        "host": "[YOUR-SFTP-HOST]",
+        "port": "[YOUR-SFTP-PORT]",
+        "username": "[YOUR-SFTP-USERNAME]",
+        "password": "[YOUR-SFTP-PASSWORD]"
+      }
+    }
+  }
+}

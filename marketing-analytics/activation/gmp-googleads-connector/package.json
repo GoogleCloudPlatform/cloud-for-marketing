@@ -1,0 +1,30 @@
+{
+  "name": "tentacles",
+  "version": "0.0.2",
+  "private": true,
+  "author": "lushu77@gmail.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector"
+  },
+  "files": [
+    "src/"
+  ],
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/storage": "^2.5.0",
+    "nodejs-common": "file:libs/nodejs-common-0.0.1.tgz",
+    "ssh2-sftp-client": "^2.5.0"
+  },
+  "devDependencies": {
+    "jasmine": "^3.3.1"
+  },
+  "scripts": {
+    "prepare": "mkdir -p libs; cd libs/; npm pack -s ../../common-libs/nodejs-common; cd ..; ",
+    "test": "node node_modules/jasmine/bin/jasmine"
+  },
+  "cloud-repo-tools": {
+    "requiresKeyFile": true,
+    "requiresProjectId": true
+  }
+}
