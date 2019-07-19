@@ -17,21 +17,21 @@
 -- This example is using the Google analytics sample data set
 -- This script calculates the average amount of money spent per session
 
+WITH Sessions AS (
+  SELECT
+    fullVisitorId,
+    SUM(totals.visits) AS total_visits_per_user,
+    SUM(totals.transactionRevenue) AS total_transactionrevenue_per_user
+  FROM
+    `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+  WHERE
+    _TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
+    AND totals.visits > 0
+    AND totals.transactions >= 1
+    AND totals.transactionRevenue IS NOT NULL
+  GROUP BY fullVisitorId
+)
 SELECT
-( SUM(total_transactionrevenue_per_user) / SUM(total_visits_per_user) ) AS
-avg_revenue_by_user_per_visit
-FROM (
-SELECT
-fullVisitorId,
-SUM( totals.visits ) AS total_visits_per_user,
-SUM( totals.transactionRevenue ) AS total_transactionrevenue_per_user
-FROM
-`bigquery-public-data.google_analytics_sample.ga_sessions_*`
-WHERE
-_TABLE_SUFFIX BETWEEN '20170701' AND '20170731'
-AND
-totals.visits > 0
-AND totals.transactions >= 1
-AND totals.transactionRevenue IS NOT NULL
-GROUP BY
-fullVisitorId )
+  (SUM(total_transactionrevenue_per_user/1e6) /
+      SUM(total_visits_per_user)) AS avg_revenue_by_user_per_visit
+FROM Sessions
