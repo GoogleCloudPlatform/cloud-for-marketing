@@ -10,7 +10,7 @@
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lushu/cloud-for-marketing/tree/master/marketing-analytics/activation/common-libs/nodejs-common"
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/common-libs/nodejs-common"
   },
   "dependencies": {
     "@google-cloud/bigquery": "^3.0.0",

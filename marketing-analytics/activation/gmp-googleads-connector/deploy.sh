@@ -15,7 +15,9 @@
 # limitations under the License.
 
 # Cloud Functions Runtime Environment
-CF_RUNTIME=nodejs6
+if [[ -z ${CF_RUNTIME} ]]; then
+  CF_RUNTIME=nodejs6
+fi
 
 # Project configuration file
 CONFIG_FILE="./config.json"
@@ -268,7 +270,7 @@ confirm_apis(){
   for i in "${!INTEGRATION_APIS_DESCRIPTION[@]}"; do
     printf "%s) %s\n" "${i}" "${INTEGRATION_APIS_DESCRIPTION[$i]}"
   done
-  printf '%s' "Use common to separate APIs or * for all: [*]"
+  printf '%s' "Use comma to separate APIs or * for all: [*]"
   IFS=', ' read -r -a input
 
   if [[ ${#input[@]} = 0 || ${input[0]} = '*' ]]; then
@@ -618,7 +620,7 @@ deploy_tentacles(){
   fi
   printf '%s\n' " 3. '${PROJECT_NAME}_api' based on Pub/Sub topic[${PS_TOPIC}-push]."
   printf '%s\n' "   Will set environment variable: ${envVar}"
-  gcloud functions deploy "${PROJECT_NAME}"_api2 --entry-point requestApi "${SERVICE_ACCOUNT_KEY}" --trigger-topic "${PS_TOPIC}"-push "${CF_FLAGS[@]}";
+  gcloud functions deploy "${PROJECT_NAME}"_api --entry-point requestApi "${SERVICE_ACCOUNT_KEY}" --trigger-topic "${PS_TOPIC}"-push "${CF_FLAGS[@]}"
   quit_if_failed $?
 }
 
@@ -639,8 +641,8 @@ post_installation(){
     printf '%s\n' "   * Create User Profile for [${existentEmail}] and grant the access to 'Insert offline conversions'"
   fi
   printf '\n'
-  printf '%s\n' "Finally, follow the document (https://github.com/lushu/cloud-for-marketing/blob/master/README.md) to create configuration for your integration requests."
-   printf '%s\n' "Save the configuration to a JSON file, e.g. './config_api.json' and run './deploy.sh update_api_config' to update the configuration to Firestore/Datastore, then Tentacles can use them."
+  printf '%s\n' "Finally, follow the document (https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md#4-api-details) to create configuration of the integration."
+  printf '%s\n' "Save the configuration to a JSON file, e.g. './config_api.json' and run './deploy.sh update_api_config' to update the configuration to Firestore/Datastore, then Tentacles can use them."
 }
 
 print_finished(){

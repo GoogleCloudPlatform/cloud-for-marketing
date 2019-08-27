@@ -5,7 +5,7 @@
   "author": "lushu77@gmail.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lushu/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/"
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector"
   },
   "files": [
     "src/"

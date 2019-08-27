@@ -1,6 +1,6 @@
 # GMP and Google Ads Connector
 
-<!--* freshness: { owner: 'lushu' reviewed: '2019-07-02' } *-->
+<!--* freshness: { owner: 'lushu' reviewed: '2019-07-24' } *-->
 
 GMP and Google Ads Connector (code name **Tentacles**) is an out-of-box solution
 based on Google Cloud Platform. It can send a massive amount data to GMP (e.g.
@@ -62,8 +62,8 @@ LEGEND                          │                V        ▒               �
 
 **Components' description:**
 
-Components       | GCP Product     | Description                             
----------------- | --------------- | --------------------------------------- 
+Components       | GCP Product     | Description
+---------------- | --------------- | ---------------------------------------
 (gcs)            | Cloud Storage   | New files will automatically trigger Cloud Functions **\[initiator\]** to start the whole process.
 \[init\]iator    | Cloud Functions | Triggered by **(gcs)**, it validates the file first. Then it slices and publishes the data as messages to **{ps-data}**. After that, it sends a **nudge** message to **{ps-tran}**.
 {ps-data}        | Pub/Sub         | This message queue will hold the data from incoming files. It only has pull subscriptions. So all data will be held here until taken away intendedly.
@@ -98,7 +98,7 @@ Components       | GCP Product     | Description
 
 ### 2.2. Check the permissions
 
-Parts of Cloud Project permissions are required to install this solution. 
+Parts of Cloud Project permissions are required to install this solution.
 Usually, a user as the role 'Project Editor' can do the installation. If more
 precise permissions are preferred, the user may need following roles:
 
@@ -272,18 +272,18 @@ There are two exceptions:
 
 ### 4.1. MP: Google Analytics Measurement Protocol
 
-API Specification       | Value                                              
------------------------ | -------------------------------------------------- 
-API Code                | MP                                                 
-Data Format             | JSONL                                              
-Authentication          | No need                                            
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | MP
+Data Format             | JSONL
+Authentication          | No need
 What Tentacles does     | Merging the **data** with the **configuration** to build the hit URLs and sent them to Google Analytics.
-**Usage Scenarios**     | Uploading offline conversions                      
-Transfer Data on        | Pub/Sub                                            
-Require Service Account | NO                                                 
-Request Type            | HTTP Post                                          
-\# Records per request  | 20                                                 
-QPS                     | -                                                  
+**Usage Scenarios**     | Uploading offline conversions
+Transfer Data on        | Pub/Sub
+Require Service Account | NO
+Request Type            | HTTP Post
+\# Records per request  | 20
+QPS                     | -
 Reference               | [Measurement Protocol Overview][mp_doc]
 
 [mp_doc]: https://developers.google.com/analytics/devguides/collection/protocol/v1/
@@ -320,18 +320,18 @@ find in
 
 ### 4.2. GA: Google Analytics Data Import
 
-API Specification       | Value                                            
------------------------ | ------------------------------------------------ 
-API Code                | GA                                               
-Data Format             | CSV                                              
+API Specification       | Value
+----------------------- | ------------------------------------------------
+API Code                | GA
+Data Format             | CSV
 Authentication          | [Create an account based][create_ga_account] for the Service Account's email with the [Read & Analyze permission][grant_ga_permission]
 What Tentacles does     | Using the GA data import configuration to upload the file directly.
-**Usage Scenarios**     | Upload user segment information from prediction results of Machine Learning models or CRM 
-Transfer Data on        | GCS                                              
-Require Service Account | YES                                              
-Request Type            | File upload based on GA API Client Library       
-\# Records per requests | - / The maximum of single file size is 1GB       
-QPS                     | -                                                
+**Usage Scenarios**     | Upload user segment information from prediction results of Machine Learning models or CRM
+Transfer Data on        | GCS
+Require Service Account | YES
+Request Type            | File upload based on GA API Client Library
+\# Records per requests | - / The maximum of single file size is 1GB
+QPS                     | -
 Reference               | [Custom Data import example][ga_example]
 
 [create_ga_account]:https://support.google.com/analytics/answer/1009694?hl=en
@@ -370,18 +370,18 @@ automatically attach this line at the beginning of data file before uploading.
 
 ### 4.3. CM: DCM/DFA Reporting and Trafficking API to upload offline conversions
 
-API Specification       | Value                                              
------------------------ | -------------------------------------------------- 
-API Code                | CM                                                 
-Data Format             | JSONL                                              
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | CM
+Data Format             | JSONL
 Authentication          | [Create a User Profile][create_user_profile] for the Service Account's email with a role that has the **Insert offline conversion** permission
 What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to CM API endpoint.
 **Usage Scenarios**     | 1. Personalizing Ads via user variables in conversions;<br> 2. Uploading verified(offline process) purchases as the **real** transactions to let CM do the optimization based on better data.
-Transfer Data on        | Pub/Sub                                            
-Require Service Account | YES                                                
-Request Type            | HTTP Request to RESTful endpoint                   
-\# Records per request  | 1,000                                              
-QPS                     | 1                                                  
+Transfer Data on        | Pub/Sub
+Require Service Account | YES
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | 1,000
+QPS                     | 1
 Reference               | [Overview: DCM/DFA Reporting and Trafficking API's Conversions service][conversions_overview]
 
 [create_user_profile]:https://support.google.com/dcm/answer/6098287?hl=en
