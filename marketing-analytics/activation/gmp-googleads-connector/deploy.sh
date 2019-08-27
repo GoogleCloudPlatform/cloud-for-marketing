@@ -16,8 +16,12 @@
 
 # Cloud Functions Runtime Environment
 if [[ -z ${CF_RUNTIME} ]]; then
-  CF_RUNTIME=nodejs6
+  CF_RUNTIME=nodejs8
 fi
+
+# Default project name is 'tentacles'. It will be used as prefix of Cloud Functions, PubSub, etc.
+# You can change it here (only lowercase letters, numbers and dashes(-) are suggested).
+PROJECT_NAME="tentacles"
 
 # Project configuration file
 CONFIG_FILE="./config.json"
@@ -25,7 +29,7 @@ CONFIG_FILE="./config.json"
 # Service account key file
 SA_KEY_FILE="./keys/service-account.key.json"
 
-DEFAULT_SERVICE_ACCOUNT="tentacles-api"
+DEFAULT_SERVICE_ACCOUNT="${PROJECT_NAME}-api"
 
 # Whether or not service account is required for this installation based on the selection of APIs.
 NEED_SERVICE_ACCOUNT="false"
@@ -49,6 +53,7 @@ declare -a INTEGRATION_APIS_DESCRIPTION=(
   "Google Analytics Data Import"
   "Campaign Manager Conversions Upload"
   "SFTP Upload"
+  "Google Ads conversions scheduled uploads based on Google Sheets"
   "Search Ads 360 Conversions Upload"
 #  "Google Ads"
 )
@@ -59,6 +64,7 @@ declare -a INTEGRATION_APIS=(
   "analytics"
   "dfareporting doubleclicksearch"
   "N/A"
+  "sheets.googleapis.com"
   "doubleclicksearch"
   "googleads"
 )
@@ -69,6 +75,7 @@ declare -a INTEGRATION_APIS_CODE=(
   "GA"
   "CM"
   "SFTP"
+  "GS"
   "SA"
 )
 
@@ -160,6 +167,10 @@ get_value_from_json_file(){
   fi
 }
 
+get_default_bucket_name(){
+  printf '%s' "${PROJECT_NAME}-$(printf '%s' "$1" | sed  -r 's/^([^:]*:)?(.*)$/\2/')"
+}
+
 get_sa_domain_from_gcp_id(){
   if [[ $1 =~ .*(:).* ]]; then
     printf '%s' "$(printf '%s' "$1" | sed  -r 's/^([^:]*):(.*)$/\2.\1/').iam.gserviceaccount.com"
@@ -180,8 +191,7 @@ check_firestore_existence(){
 }
 
 load_config(){
-  PROJECT_NAME=$(get_value_from_json_file "./package.json" 'name')
-  printf '%s\n' "Project code name '${PROJECT_NAME}', will be used as Cloud Functions' prefix name."
+  printf '%s\n' "Project name suffix '${PROJECT_NAME}'"
   if [[ -f "${CONFIG_FILE}" ]]; then
     printf '%s\n' "Find configuration file '${CONFIG_FILE}', loading ..."
     OUTBOUND=$(get_value_from_json_file "${CONFIG_FILE}" 'OUTBOUND')
@@ -202,11 +212,6 @@ quit_if_failed(){
     printf '%s\n' "[Error] Quit."
     exit 1
   fi
-}
-
-# most gcp components have lower case naming requirement
-get_random_string(){
-  date +%s | shasum | base64 | head -c "$1" | tr '[:upper:]' '[:lower:]'
 }
 
 print_welcome(){
@@ -252,17 +257,74 @@ check_in_cloud_shell(){
 
 confirm_project(){
   STEP=$((STEP+1))
-  printf '%s\n' "STEP[${STEP}] Confirm Google Cloud Project..."
-  printf '%s' "Tentacles is going to be installed in the Google Cloud Project [${GOOGLE_CLOUD_PROJECT}], continue? [Y/n]"
-  read -r input
-  if [[ -z ${input} || ${input} = 'y' || ${input} = 'Y' ]];then
-    printf '%s\n' "[OK] Continue with project [${GOOGLE_CLOUD_PROJECT}]"
-    return 0
-  else
-    printf '%s\n' "[User cancelled] If you want to create a new project, see: https://cloud.google.com/resource-manager/docs/creating-managing-projects"
-    return 1
-  fi
+  printf '%s\n' "STEP[${STEP}] Confirm Google Cloud Project (GCP) ..."
+  while :; do
+    printf '%s' "Input the ID of GCP that Tentacles is going to be installed[${GOOGLE_CLOUD_PROJECT}]:"
+    read -r input
+    INPUT_GCP=${input:-"${GOOGLE_CLOUD_PROJECT}"}
+    result=$(gcloud config set project "${INPUT_GCP}" --user-output-enabled=false 2>&1)
+    if [[ -z ${result} ]]; then
+      printf '%s\n' "[OK] Continue installation in [${INPUT_GCP}]."
+      GOOGLE_CLOUD_PROJECT="${INPUT_GCP}"
+      return 0
+    else
+      printf '%s\n' "  [Failed] ${result}"
+    fi
+  done
 }
+
+set_region(){
+  declare -a locations
+  locationsRaw=$(gcloud functions regions list)
+  locations=($(printf "${locationsRaw}"|grep "projects"|sed 's/projects\/.*\/locations\///'))
+  while :; do
+    declare -a existFunctions=($(gcloud functions list --filter="name~${PROJECT_NAME}" --format="value(REGION[])"))
+    if [[ ${#existFunctions[@]} -gt 0 ]]; then
+      existRegion=$(printf "${existFunctions[1]}" | cut -d/ -f4 | uniq)
+      printf '%s\n' "Tentacles' Cloud Functions are already installed in region: ${existRegion}."
+      for i in "${!existFunctions[@]}"; do
+        existFunction="${existFunctions[$i]}"
+        printf '  %s\n' "${existFunction}"
+      done
+      printf '%s' "Would you like to continue update those Cloud Functions in region '${existRegion}'? [Y/n]:"
+      read -r continue
+      CONTINUE=${continue:-"Y"}
+      if [[ ${CONTINUE} = "Y" || ${CONTINUE} = "y" ]]; then
+        region=${existRegion}
+        break
+      else
+        printf '%s' "If you want to deploy to other regions, current Cloud Functions will be deleted, Confirm? [N/y]:"
+        read -r confirmDelete
+        if [[ ${confirmDelete} = "Y" || ${confirmDelete} = "y" ]]; then
+          for i in "${!existFunctions[@]}"; do
+            existFunction=$(printf "${existFunctions[$i]}" | cut -d/ -f6)
+            currentRegion=$(printf "${existFunctions[$i]}" | cut -d/ -f4)
+            gcloud functions delete --region="${currentRegion}" "${existFunction}"
+          done
+        else
+          continue
+        fi
+      fi
+    else
+      printf '%s\n' "Following are available regions for Cloud Functions. Please select the region to deploy:"
+      select region in "${locations[@]}"; do
+        if [[ " ${locations[@]} " =~ " ${region} " ]]; then
+          break 2
+        fi
+      done
+    fi
+  done
+  REGION="${region}"
+}
+
+confirm_region(){
+  STEP=$((STEP+1))
+  printf '%s\n' "STEP[${STEP}] Select the region to deploy Tentacles..."
+  printf '%s\n' "Tentacles is based on Cloud Functions and Cloud Storage. Please select the region to deploy based on your requirement."
+  set_region
+  printf '%s\n' "[ok] Will deploy Tentacles to ${REGION}."
+}
+
 
 confirm_apis(){
   STEP=$((STEP+1))
@@ -352,7 +414,7 @@ create_bucket(){
   printf '%s\n' "  For more, see https://cloud.google.com/functions/docs/calling/storage"
   printf '%s\n' "  You can use existent bucket or create a new one here."
 #  generate default Bucket name
-  GCS_BUCKET=${GCS_BUCKET:-"tentacles-$(get_random_string 4)"}
+  GCS_BUCKET=${GCS_BUCKET:-"$(get_default_bucket_name "${GOOGLE_CLOUD_PROJECT}")"}
 # available buckets in current project
   local all_buckets="$(gsutil ls)";
   while :; do
@@ -369,6 +431,23 @@ create_bucket(){
     result="$(gsutil ls -p "${GOOGLE_CLOUD_PROJECT}" "${bucket_str}" 2>&1)"
     if [[ ${result} =~ .*(BucketNotFoundException: 404 ).* ]]; then
       printf '%s\n' " not existent. Continue to create Bucket."
+      if [[ -n ${REGION} ]]; then
+        printf '%s' "Would you like to create the Storage Bucket at '${REGION}'? [Y/n]:"
+        read -r useRegion
+        noSelectionRegion=${useRegion:-"Y"}
+        if [[ ${noSelectionRegion} = "Y" || ${noSelectionRegion} = "y" ]]; then
+          location=${REGION}
+          printf '%s\n' "  Try to create the Bucket [${bucket}] at ${location}..."
+          gsutil mb -c REGIONAL -l "${location}" "${bucket_str}"
+          if [[ $? -gt 0 ]]; then
+            printf '%s\n' "Fail to create Bucket named ${bucket}. Please try again."
+            continue
+          else
+            GCS_BUCKET=${bucket}
+            break
+          fi
+        fi
+      fi
       printf '%s\n' "Please select the Storage region:"
       select region in "${STORAGE_REGIONS[@]}"; do
         if [[ -n "${region}" ]]; then
@@ -436,7 +515,7 @@ confirm_folder(){
 confirm_topic(){
   STEP=$((STEP+1))
   printf '%s\n' "STEP[${STEP}] Confirm Topic prefix for Pub/Sub..."
-  PS_TOPIC=${PS_TOPIC:-"tentacles"}
+  PS_TOPIC=${PS_TOPIC:-"${PROJECT_NAME}"}
   printf '%s\n' "  Rationale: Tentacles uses Pub/Sub to manage the data flow. To avoid potential conflicts"
   printf '%s\n' "  with other applications' Topics, a unified prefix for Topics and Subscriptions will be used."
   printf '%s' "Input the prefix for Topics [${PS_TOPIC}]: "
@@ -490,25 +569,27 @@ create_subscriptions(){
 }
 
 create_service_account(){
-  STEP=$((STEP+1))
-  printf '%s\n' "STEP[${STEP}] Create Service Account..."
+#  STEP=$((STEP+1))
+#  printf '%s\n' "STEP[${STEP}] Create Service Account..."
   printf '%s\n' "  Rationale: Some external APIs may require authentication based on OAuth or JWT(service account)."
   printf '%s\n' "  For example, Google Analytics Data Import or Campaign Manager."
   printf '%s\n' "  In this step, we'll prepare the service account. For more information, see https://cloud.google.com/iam/docs/creating-managing-service-accounts"
+  local suffix=$(get_sa_domain_from_gcp_id "${GOOGLE_CLOUD_PROJECT}")
 
   local email
   if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
     email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
-    printf '%s' "There is already a key file with service account[${email}]. Would you like to continue creating a new one? [N/y]"
-    read -r input
-    if [[ ${input} != 'y' && ${input} != 'Y' ]]; then
-      printf '%s\n' "[OK] Will use existent service account [${email}]"
-      SA_NAME=$(printf "${email}" | cut -d@ -f1)
-      return 0
+    if [[ ${email} =~ .*("@${suffix}") ]]; then
+      printf '%s' "There is already a key file with service account[${email}]. Would you like to continue creating a new one? [N/y]"
+      read -r input
+      if [[ ${input} != 'y' && ${input} != 'Y' ]]; then
+        printf '%s\n' "[OK] Will use existent service account [${email}]"
+        SA_NAME=$(printf "${email}" | cut -d@ -f1)
+        return 0
+      fi
     fi
   fi
 
-  local suffix=$(get_sa_domain_from_gcp_id "${GOOGLE_CLOUD_PROJECT}")
   SA_NAME="${SA_NAME:-"${DEFAULT_SERVICE_ACCOUNT}"}"
   while :; do
     printf '%s' "Input the name of service account [${SA_NAME}]: "
@@ -544,21 +625,30 @@ create_service_account(){
 
 download_service_account_key(){
   STEP=$((STEP+1))
-  printf '%s\n' "STEP[${STEP}] Download key file of the Service Account [${SA_NAME}]..."
-  local prompt defaultValue email existentEmail
+  printf '%s\n' "STEP[${STEP}] Download key file of the Service Account ..."
   if [[ -z ${SA_NAME} ]];then
-    SA_NAME="${SA_NAME:-"${DEFAULT_SERVICE_ACCOUNT}"}"
-    printf '%s' "Input the name of service account [${SA_NAME}]: "
-    read -r sa
-    SA_NAME=${sa:-"${SA_NAME}"}
+    create_service_account
   fi
-  email="${SA_NAME}@$(get_sa_domain_from_gcp_id "${GOOGLE_CLOUD_PROJECT}")"
+  local prompt defaultValue email existentEmail
+  local suffix=$(get_sa_domain_from_gcp_id "${GOOGLE_CLOUD_PROJECT}")
+#  if [[ -z ${SA_NAME} ]];then
+#    SA_NAME="${SA_NAME:-"${DEFAULT_SERVICE_ACCOUNT}"}"
+#    printf '%s' "Input the name of service account [${SA_NAME}]: "
+#    read -r sa
+#    SA_NAME=${sa:-"${SA_NAME}"}
+#  fi
+  email="${SA_NAME}@${suffix}"
   if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
     existentEmail=$(get_value_from_json_file ${SA_KEY_FILE} 'client_email' 2>&1)
-    printf '%s\n' "  There is already a service account key file for [${existentEmail}]"
-    printf '%s\n' "  The key id is $(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id')"
-    prompt="Would you like to create a new one for [${email}] to overwrite it? [N/y] "
-    defaultValue="n"
+    if [[ ${existentEmail} =~ .*("@${suffix}") ]]; then
+      printf '%s\n' "  There is already a service account key file for [${existentEmail}]"
+      printf '%s\n' "  The key id is $(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id')"
+      prompt="Would you like to create a new one for [${email}] to overwrite it? [N/y] "
+      defaultValue="n"
+    else
+      prompt="Would you like to download the key file for [${email}] and save it as ${SA_KEY_FILE}? [Y/n] "
+      defaultValue="y"
+    fi
   else
     prompt="Would you like to download the key file for [${email}] and save it as ${SA_KEY_FILE}? [Y/n] "
     defaultValue="y"
@@ -586,23 +676,13 @@ deploy_tentacles(){
   STEP=$((STEP+1))
   printf '%s\n' "STEP[${STEP}] Start to deploy Tentacles..."
   printf '%s\n' "Tentacles is combined of three Cloud Functions."
-
-  declare -a locations
-  locationsRaw=$(gcloud functions regions list)
-  locations=($(printf "${locationsRaw}"|grep "projects"|sed 's/projects\/.*\/locations\///'))
-
-  printf '%s\n' "Available regions for Cloud Functions to be deployed are:"
-  select region in "${locations[@]}"; do
-    if [[ " ${locations[@]} " =~ " ${region} " ]]; then
-      break;
-    fi
-    printf '%s\n' "Please select the region to deploy the Cloud Functions:"
+  while [[ -z ${REGION} ]]; do
+    set_region
   done
-
-  printf '%s\n' "[ok] Will deploy Cloud Functions to ${region}."
+  printf '%s\n' "[ok] Will deploy Cloud Functions to ${REGION}."
 
   declare -a CF_FLAGS=()
-  CF_FLAGS+=(--region="${region}")
+  CF_FLAGS+=(--region="${REGION}")
   CF_FLAGS+=(--timeout=540 --memory=2048MB --runtime="${CF_RUNTIME}")
   CF_FLAGS+=(--set-env-vars=TENTACLES_TOPIC_PREFIX="${PS_TOPIC}",TENTACLES_OUTBOUND="${OUTBOUND}")
 
@@ -639,6 +719,9 @@ post_installation(){
     printf '%s\n' "  2. For Campaign Manager"
     printf '%s\n' "   * DCM/DFA Reporting and Trafficking API's Conversions service, see: https://developers.google.com/doubleclick-advertisers/guides/conversions_overview"
     printf '%s\n' "   * Create User Profile for [${existentEmail}] and grant the access to 'Insert offline conversions'"
+    printf '%s\n' "  3. For Google Ads conversions scheduled uploads based on Google Sheets"
+    printf '%s\n' "   * Import conversions from ad clicks into Google Ads, see: https://support.google.com/google-ads/answer/7014069"
+    printf '%s\n' "   * Add [${existentEmail}] as an Editor of the Google Spreadsheet that Google Ads will take conversions from."
   fi
   printf '\n'
   printf '%s\n' "Finally, follow the document (https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md#4-api-details) to create configuration of the integration."
@@ -667,6 +750,15 @@ update_api_config(){
   node -e "require('./index.js').uploadApiConfig(require(process.argv[1]))" "${app_config}"
 }
 
+copy_file_to_gcs(){
+  printf '%s\n' "=========================="
+  target="gs://$(get_value_from_json_file "${CONFIG_FILE}" "GCS_BUCKET")/$(get_value_from_json_file "${CONFIG_FILE}" "OUTBOUND")"
+  printf '%s\n' "Copy integration data file to target folder in Google Cloud Storage: ${target}"
+  # gsutil support wildcard name. Use '*' to replace '[' here.
+  source="$(printf '%s' "$1" | sed -r 's/\[/\*/g' )"
+  gsutil cp ''"${source}"'' "${target}"
+}
+
 print_service_account(){
   printf '%s\n' "$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')"
 }
@@ -687,53 +779,53 @@ install_tentacles(){
   confirm_project
   quit_if_failed $?
 
-  # step 2.1
-  confirm_apis
-  quit_if_failed $?
-
-  # step 2.2
-  check_permissions
-  quit_if_failed $?
-
   # step 3
-  enable_apis
+  confirm_region
   quit_if_failed $?
 
   # step 4
-  create_bucket
+  confirm_apis
   quit_if_failed $?
 
   # step 5
-  confirm_folder
+  check_permissions
   quit_if_failed $?
 
   # step 6
-  confirm_topic
+  enable_apis
   quit_if_failed $?
 
   # step 7
-  save_config
+  create_bucket
   quit_if_failed $?
 
   # step 8
+  confirm_folder
+  quit_if_failed $?
+
+  # step 9
+  confirm_topic
+  quit_if_failed $?
+
+  # step 10
+  save_config
+  quit_if_failed $?
+
+  # step 11
   create_subscriptions
   quit_if_failed $?
 
 
+  # step 12
   if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
-    # step 9
-    create_service_account
-    quit_if_failed $?
-
-    # step 10
     download_service_account_key
     quit_if_failed $?
   fi
 
-  # step 11
+  # step 13
   deploy_tentacles
 
-  # step 12
+  # step 14
   post_installation
 
   print_finished
