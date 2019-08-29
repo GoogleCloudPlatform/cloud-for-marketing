@@ -1,0 +1,58 @@
+{
+  "name": "DataVisualizationPipeline",
+  "description": "Step 2. This is an optional - but recommended - step in the pipeline to output data from Step 1 into BigQuery for exploration before processing it further.",
+  "parameters": [{
+    "name": "inputAvroSessionsLocation",
+    "label": "Location of the input user Sessions in AVRO format.",
+    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/",
+    "is_optional": false
+  },
+  {
+    "name": "startDate",
+    "label": "Start date in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": false
+  },
+  {
+    "name": "endDate",
+    "label": "End date (not inclusive) in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": false
+  },
+  {
+    "name": "slideTimeInSeconds",
+    "label": "Slide Length (seconds).",
+    "help_text": "The time interval - in seconds - to slide snapshot dates by. e.g 604800 (for 7 days)",
+    "is_optional": false
+  },
+  {
+    "name": "minimumLookaheadTimeInSeconds",
+    "label": "Minimum lookahead time (seconds).",
+    "help_text": "The time - in seconds - for the prediction window to start from, respective of the current date. e.g 86400 (for the prediction window to start from the next day)",
+    "is_optional": false
+  },
+  {
+    "name": "maximumLookaheadTimeInSeconds",
+    "label": "Maximum lookahead time (seconds).",
+    "help_text": "The time - in seconds - for the prediction window to end on, respective of the current date. The length of the prediction window being the max - min times. e.g 1209600 (would have a prediction window of 14 days)",
+    "is_optional": false
+  },
+  {
+    "name": "stopOnFirstPositiveLabel",
+    "label": "Set true to stop window generation after the first positive label per user.",
+    "help_text": "Stop considering a user once they have a positive label. e.g true",
+    "is_optional": false
+  },
+  {
+    "name": "outputBigQueryFactsTable",
+    "label": "Location to write the BigQuery Facts table.",
+    "help_text": "The location of the BigQuery Facts table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_facts_table",
+    "is_optional": false
+  },
+  {
+    "name": "outputBigQueryUserActivityTable",
+    "label": "Location to write the BigQuery UserActivity table.",
+    "help_text": "The location of the BigQuery Instance table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_instance_table",
+    "is_optional": false
+  }]
+}
