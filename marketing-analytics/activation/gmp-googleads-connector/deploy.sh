@@ -21,7 +21,9 @@ fi
 
 # Default project name is 'tentacles'. It will be used as prefix of Cloud Functions, PubSub, etc.
 # You can change it here (only lowercase letters, numbers and dashes(-) are suggested).
-PROJECT_NAME="tentacles"
+if [[ -z ${PROJECT_NAME} ]]; then
+  PROJECT_NAME="tentacles"
+fi
 
 # Project configuration file
 CONFIG_FILE="./config.json"
@@ -362,7 +364,7 @@ check_permissions(){
   for role in "${!GOOGLE_CLOUD_PERMISSIONS[@]}"; do
     printf '%s'  "  Check permissions for ${role}... "
     declare -a permissions=(${GOOGLE_CLOUD_PERMISSIONS[${role}]})
-    node -e "require('./index.js').checkPermissions(process.argv.slice(1))" "${permissions[@]}" 1>/dev/null
+    GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}" node -e "require('./index.js').checkPermissions(process.argv.slice(1))" "${permissions[@]}" 1>/dev/null
     if [[ $? -gt 0 ]]; then
         message='failed'
         error=1
@@ -715,7 +717,7 @@ post_installation(){
     printf '%s\n' "This should be done before use Tentacles to send out data to them."
     printf '%s\n' "  1. For Google Analytics Data Import"
     printf '%s\n' "   * Set up Data set for Data Import, see: https://support.google.com/analytics/answer/3191417?hl=en"
-    printf '%s\n' "   * Grant the 'Read & Analyze' access to [${existentEmail}]"
+    printf '%s\n' "   * Grant the 'Edit' access to [${existentEmail}]"
     printf '%s\n' "  2. For Campaign Manager"
     printf '%s\n' "   * DCM/DFA Reporting and Trafficking API's Conversions service, see: https://developers.google.com/doubleclick-advertisers/guides/conversions_overview"
     printf '%s\n' "   * Create User Profile for [${existentEmail}] and grant the access to 'Insert offline conversions'"
