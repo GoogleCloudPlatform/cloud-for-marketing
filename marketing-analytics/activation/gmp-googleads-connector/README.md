@@ -327,7 +327,7 @@ API Specification       | Value
 ----------------------- | ------------------------------------------------
 API Code                | GA
 Data Format             | CSV
-Authentication          | [Create an account based][create_ga_account] for the Service Account's email with the [Read & Analyze permission][grant_ga_permission]
+Authentication          | [Create an account based][create_ga_account] for the Service Account's email with the [Edit permission][grant_ga_permission]
 What Tentacles does     | Using the GA data import configuration to upload the file directly.
 **Usage Scenarios**     | Upload user segment information from prediction results of Machine Learning models or CRM
 Transfer Data on        | GCS
