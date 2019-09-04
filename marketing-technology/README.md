@@ -1,1 +1,1 @@
-Placeholder folder for Marketing Technology sample codes.
+Folder for Marketing Technology sample codes.
