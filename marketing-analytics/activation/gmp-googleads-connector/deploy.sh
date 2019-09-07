@@ -696,13 +696,11 @@ deploy_tentacles(){
   gcloud functions deploy "${PROJECT_NAME}"_tran --entry-point transport --trigger-topic "${PS_TOPIC}"-trigger "${CF_FLAGS[@]}"
   quit_if_failed $?
 
-  local envVar=""
   if [[ -f "${SA_KEY_FILE}" ]]; then
-    SERVICE_ACCOUNT_KEY="--set-env-vars=API_SERVICE_ACCOUNT=${SA_KEY_FILE}"
+    CF_FLAGS+=(--set-env-vars=API_SERVICE_ACCOUNT="${SA_KEY_FILE}")
   fi
   printf '%s\n' " 3. '${PROJECT_NAME}_api' based on Pub/Sub topic[${PS_TOPIC}-push]."
-  printf '%s\n' "   Will set environment variable: ${envVar}"
-  gcloud functions deploy "${PROJECT_NAME}"_api --entry-point requestApi "${SERVICE_ACCOUNT_KEY}" --trigger-topic "${PS_TOPIC}"-push "${CF_FLAGS[@]}"
+  gcloud functions deploy "${PROJECT_NAME}"_api --entry-point requestApi --trigger-topic "${PS_TOPIC}"-push "${CF_FLAGS[@]}"
   quit_if_failed $?
 }
 
