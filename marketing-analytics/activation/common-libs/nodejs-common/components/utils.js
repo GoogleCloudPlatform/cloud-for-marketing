@@ -50,11 +50,11 @@ exports.getLogger = getLogger;
 /**
  * Splits the given array to small sized arrays based on the given split size.
  *
- * @param {!Array<string>} records Array of string to be split.
+ * @param {!Array<T>} records Array of any type to be split.
  * @param {number} splitSize Split size.
- * @return {!Array<!Array<string>>} Array of 'string array' whose size is no
+ * @return {!Array<!Array<T>>} Array of 'any type array' whose size is no
  *     greater than the given split size.
- * @private
+ * @template T
  */
 const splitArray = (records, splitSize) => {
   const results = [];
@@ -65,6 +65,8 @@ const splitArray = (records, splitSize) => {
   }
   return results;
 };
+
+exports.splitArray = splitArray;
 
 /**
  * Sends a round of data in multiple batches (requests). Number of records in
@@ -85,7 +87,7 @@ const splitArray = (records, splitSize) => {
 const sendSingleRound = (sendingFn, sliced, recordSize, qps, roundId) => {
   const logger = getLogger('SPEED_CTL');
   const batchArray = splitArray(sliced, recordSize);
-  const securedDefer = Math.ceil(batchArray.length / qps) * 1000;
+  const securedDefer = Math.ceil(batchArray.length / qps * 1000);
   logger.debug(`Task round[${roundId}] has ${
       batchArray.length} requests/batches. Start:`);
   const deferPromise = wait(securedDefer).then(() => {

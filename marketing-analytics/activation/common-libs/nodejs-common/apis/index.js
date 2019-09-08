@@ -50,3 +50,12 @@ exports.MeasurementProtocol = require('./measurement_protocol.js');
  * @const {{CloudPlatformApis:!CloudPlatformApis}}
  */
 exports.CloudPlatformApis = require('./cloud_platform_apis.js');
+
+/**
+ * APIs integration class for Google Spreadsheets.
+ * @const {{
+ *   Spreadsheets:!Spreadsheets,
+ *   ParseDataRequest:!ParseDataRequest,
+ * }}
+ */
+exports.Spreadsheets = require('./spreadsheets.js');

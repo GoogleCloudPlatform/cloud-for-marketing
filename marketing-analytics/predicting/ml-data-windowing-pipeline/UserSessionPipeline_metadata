@@ -1,0 +1,41 @@
+{
+  "name": "UserSessionPipeline",
+  "description": "Step 1. The pipeline has been optimised to read data directly from the Google Analytics 360 BigQuery output table between a set of specified dates. This stage digests
+the Analytics data into AVRO files.",
+  "parameters": [{
+    "name": "inputBigQuerySQL",
+    "label": "Input BigQuery SQL command for extracting GA Sessions columns.",
+    "help_text": "The SQL to select from the Google Analytics table in BigQuery (Note: Ensure the pipeline has access to this). e.g SELECT * FROM 'bigquery-public-data.google_analytics_sample.ga_sessions_*`",
+    "is_optional": false
+  },
+  {
+    "name": "startDate",
+    "label": "Start date in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": true
+  },
+  {
+    "name": "endDate",
+    "label": "End date (not inclusive) in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": true
+  },
+  {
+    "name": "predictionFactName",
+    "label": "Name of the Fact with the prediction target.",
+    "help_text": "The name of the BigQuery column that contains the value we are trying to predict (can have multiple columns separated by commas). e.g hits.eventInfo.eventAction",
+    "is_optional": false
+  },
+  {
+    "name": "predictionFactValues",
+    "label": "Comma separated list of target values for the prediction Fact.",
+    "help_text": "The value in the BigQuery column that represents a positive label of what we are trying to predict (can have multiple values separated by commas). e.g Add to Cart",
+    "is_optional": false
+  },
+  {
+    "name": "outputSessionsAvroPrefix",
+    "label": "Location prefix to write all user Sessions in AVRO format.",
+    "help_text": "The location on Google Cloud Storage to output the AVRO files to. e.g gs://mldatawindowingpipeline/usersession-output/",
+    "is_optional": false
+  }]
+}

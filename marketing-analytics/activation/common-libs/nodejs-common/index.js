@@ -26,3 +26,6 @@ exports.NativeModeAccess = require('./components/native_mode_access.js');
 exports.PubSubUtils = require('./components/pubsub_utils.js');
 exports.StorageUtils = require('./components/storage_utils.js');
 exports.utils = require('./components/utils.js');
+
+exports.getCloudProduct = require('./components/gcloud.js');
+exports.BigQueryStorageConnector = require('./components/bigquery_storage.js');

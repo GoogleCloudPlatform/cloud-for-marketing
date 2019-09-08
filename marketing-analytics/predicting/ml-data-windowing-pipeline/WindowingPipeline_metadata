@@ -1,0 +1,70 @@
+{
+  "name": "WindowingPipeline",
+  "description": "Step 3. Using the AVRO files from Step 1 build snapshots of effective dates sliding at set intervals, windowing the data based on a specified lookback and prediction window.",
+  "parameters": [{
+    "name": "inputAvroSessionsLocation",
+    "label": "Location of the input user Sessions in AVRO format.",
+    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/",
+    "is_optional": false
+  },
+  {
+    "name": "startDate",
+    "label": "Start date in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": true
+  },
+  {
+    "name": "endDate",
+    "label": "End date (not inclusive) in dd/mm/yyyy format.",
+    "help_text": "",
+    "is_optional": true
+  },
+  {
+    "name": "slideTimeInSeconds",
+    "label": "Slide Length (seconds).",
+    "help_text": "The time interval - in seconds - to slide snapshot dates by. e.g 604800 (for 7 days)",
+    "is_optional": false
+  },
+ {
+    "name": "minimumLookaheadTimeInSeconds",
+    "label": "Minimum lookahead time (seconds).",
+    "help_text": "The time - in seconds - for the prediction window to start from, respective of the current date. e.g 86400 (for the prediction window to start from the next day)",
+    "is_optional": false
+  },
+  {
+    "name": "maximumLookaheadTimeInSeconds",
+    "label": "Maximum lookahead time (seconds).",
+    "help_text": "The time - in seconds - for the prediction window to end on, respective of the current date. The length of the prediction window being the max - min times. e.g 1209600 (would have a prediction window of 14 days)",
+    "is_optional": false
+  },
+  {
+    "name": "stopOnFirstPositiveLabel",
+    "label": "Set true to stop window generation after the first positive label per user.",
+    "help_text": "Stop considering a user once they have a positive label. e.g true",
+    "is_optional": false
+  },
+  {
+    "name": "lookbackGapInSeconds",
+    "label": "Lookback gap (seconds). Sessions within the lookback gap before an effective date are not added to a LookbackWindow.",
+    "help_text": "Gap - in seconds - to add between the current date and the lookback window, typically this is 1 day to simulate a real life scoring scenario. e.g 86400 (for 1 day)",
+    "is_optional": false
+  },
+  {
+    "name": "windowTimeInSeconds",
+    "label": "Window Length (seconds).",
+    "help_text": "The size - in seconds - of the lookback window. e.g 7776000 (for 90 days)",
+    "is_optional": false
+  },
+  {
+    "name": "outputSlidingWindowAvroPrefix",
+    "label": "Location prefix to write the sliding lookback windows.",
+    "help_text": "The location on Google Cloud Storage to output the AVRO files to, for windowed data at date intervals based on the sliding amount specified. e.g gs://yourbucket/windowing-output/",
+    "is_optional": false
+  },
+  {
+    "name": "outputSessionBasedWindowAvroPrefix",
+    "label": "Location prefix to write the session-based lookback windows.",
+    "help_text": "The location on Google Cloud Storage to output the AVRO files to, for windowed data at date intervals based on Google Analytics sessions. e.g gs://yourbucket/windowing-session-output/",
+    "is_optional": false
+  }]
+}

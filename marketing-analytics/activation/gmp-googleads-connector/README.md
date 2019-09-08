@@ -1,6 +1,8 @@
 # GMP and Google Ads Connector
 
-<!--* freshness: { owner: 'lushu' reviewed: '2019-07-24' } *-->
+<!--* freshness: { owner: 'lushu' reviewed: '2019-08-27' } *-->
+
+Disclaimer: This is not an official Google product.
 
 GMP and Google Ads Connector (code name **Tentacles**) is an out-of-box solution
 based on Google Cloud Platform. It can send a massive amount data to GMP (e.g.
@@ -28,7 +30,8 @@ way.
   - [4.1. MP: Google Analytics Measurement Protocol](#41-mp-google-analytics-measurement-protocol)
   - [4.2. GA: Google Analytics Data Import](#42-ga-google-analytics-data-import)
   - [4.3. CM: DCM/DFA Reporting and Trafficking API to upload offline conversions](#43-cm-dcmdfa-reporting-and-trafficking-api-to-upload-offline-conversions)
-  - [4.4. SFTP](#44-sftp)
+  - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
+  - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
 
 ## 1. Key Concepts
 
@@ -324,7 +327,7 @@ API Specification       | Value
 ----------------------- | ------------------------------------------------
 API Code                | GA
 Data Format             | CSV
-Authentication          | [Create an account based][create_ga_account] for the Service Account's email with the [Read & Analyze permission][grant_ga_permission]
+Authentication          | [Create an account based][create_ga_account] for the Service Account's email with the [Edit permission][grant_ga_permission]
 What Tentacles does     | Using the GA data import configuration to upload the file directly.
 **Usage Scenarios**     | Upload user segment information from prediction results of Machine Learning models or CRM
 Transfer Data on        | GCS
@@ -445,7 +448,7 @@ Attributed to encrypted user ID (`encryptedUserId`):
 {"encryptedUserId":"EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example","U2":"a|b|c"}
 ```
 
-### 4.4. SFTP
+### 4.4. SFTP: Business Data upload to Search Ads 360
 
 API Specification       | Value
 ----------------------- | -----------------------------------------------------
@@ -488,3 +491,65 @@ generated.
 *   *Sample Data file content:*
 
 It could be any file.
+
+
+### 4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | GS
+Data Format             | CSV
+Authentication          | Add the Service Account's email as the editor of the Google Spreadsheet that Google Ads will consume.
+What Tentacles does     | Load the **data** from the CSV to the given SpreadSheet through Google Sheets API.
+**Usage Scenarios**     | Import conversions from ad clicks into Google Ads for non Google Ads API clients.
+Transfer Data on        | GCS
+Require Service Account | YES
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | -
+QPS                     | -
+Reference               | [Import conversions from ad clicks into Google Ads][import_conversions]<br>[Google Sheets API][sheets_api]
+
+[import_conversions]:https://support.google.com/google-ads/answer/7014069
+[sheets_api]:https://developers.google.com/sheets/api/reference/rest/
+
+Google Sheets API can be used to read, write, and format data in Sheets. Google Ads supports to use 
+a Google Sheet as the data source of scheduled uploads of conversions. The extra benefit is this 
+integration does **not** require an Google Ads Developer Token.
+
+Note: Google Sheets has the limit of 10,000,000 cells for a single SpreadSheet. If every conversion 
+needs 5 properties/columns/fields, then for a single Spreadsheet data source, there could be about 2
+millions conversions supported.
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "spreadsheetId": "[YOUR-SPREADSHEET-ID]",
+  "sheetName": "[YOUR-SHEET-NAME]",
+  "sheetHeader": "[ANYTHING-PUT-AHEAD-OF-CSV]",
+  "pasteData": {
+    "coordinate": {
+      "rowIndex": 0,
+      "columnIndex": 0
+    },
+    "delimiter": ","
+  }
+}
+```
+
+*   Fields' definition:
+    *   `spreadsheetId`, the [Spreadsheet ID](https://developers.google.com/sheets/api/guides/concepts#spreadsheet_id).
+    *   `sheetName`, the name of sheet that will load CSV data.
+    *   `sheetHeader`, fixed row(s) at the top of the Sheet before the CSV data. This is optional.
+    *   `pasteData`, [`PasteDataRequest`][PasteDataRequest] for Sheets API batchUpdate.
+    
+[PasteDataRequest]:https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
+
+*   *Sample Data file content:*
+
+```
+Google_Click_ID,Conversion_Name,Conversion_Time,Conversion_Value,Conversion_Currency
+EAIaIQobChMIrLGCr66x4wIVVeh3Ch2eygjsEAAYASAAEgIFAKE_BwE,foo,2019-07-13 00:02:00,1,USD
+EAIaIQobChMIvdTVjayx4wIV0eF3Ch0eGQAQEAAYBCAAEgIFAKE_BwE,foo,2019-07-13 00:04:00,1,USD
+EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,1,USD
+```

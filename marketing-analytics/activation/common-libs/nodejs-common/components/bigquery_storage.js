@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * @fileoverview Utility class for data connector between Cloud Storage and
+ * BigQuery.
+ */
+
 'use strict';
 
 const {BigQuery, Table, Job} = require('@google-cloud/bigquery');
@@ -21,16 +26,16 @@ const {wait} = require('./utils.js');
 /**
  * @typedef {{
  *     schema:{
- *       fields:Array<{
+ *       fields:!Array<{
  *         mode:string,
  *         name:string,
  *         type:string,
  *       }>,
  *     },
- *     timePartitioning:{
+ *     timePartitioning:({
  *       type:string,
  *       requirePartitionFilter:boolean,
- *     }|undefined,
+ *     }|undefined),
  * }}
  */
 let TableSchema;
@@ -39,10 +44,10 @@ exports.TableSchema = TableSchema;
 
 /**
  * @typedef {{
- *   projectId:string|undefined,
- *   datasetId:string|undefined,
- *   tableId:string|undefined,
- *   keyFilename:string|undefined,
+ *   projectId:(string|undefined),
+ *   datasetId:(string|undefined),
+ *   tableId:(string|undefined),
+ *   keyFilename:(string|undefined),
  * }}
  */
 let BigQueryTableConfig;
@@ -51,10 +56,10 @@ exports.BigQueryTableConfig = BigQueryTableConfig;
 
 /**
  * @typedef {{
- *   projectId:string|undefined,
- *   bucket:string|undefined,
- *   name:string|undefined,
- *   keyFilename:string|undefined,
+ *   projectId:(string|undefined),
+ *   bucket:(string|undefined),
+ *   name:(string|undefined),
+ *   keyFilename:(string|undefined),
  * }}
  */
 let StorageFileConfig;
@@ -68,7 +73,7 @@ exports.StorageFileConfig = StorageFileConfig;
  *     writeDisposition:string,
  *     skipLeadingRows:number,
  *     autodetect:boolean,
- *     compression:boolean|undefined,
+ *     compression:(boolean|undefined),
  * }}
  */
 let LoadOptions;
@@ -94,9 +99,9 @@ exports.ExtractOptions = ExtractOptions;
  * @enum {string}
  */
 const WriteDisposition = {
-  WRITE_APPEND: 'WRITE_APPEND', // Append to existent.
-  WRITE_EMPTY: 'WRITE_EMPTY', // Only exports data when there is no data.
-  WRITE_TRUNCATE: 'WRITE_TRUNCATE', // Overwrite existent.
+  WRITE_APPEND: 'WRITE_APPEND',      // Append to existent.
+  WRITE_EMPTY: 'WRITE_EMPTY',        // Only exports data when there is no data.
+  WRITE_TRUNCATE: 'WRITE_TRUNCATE',  // Overwrite existent.
 };
 
 exports.WriteDisposition = WriteDisposition;
@@ -115,51 +120,56 @@ exports.WriteDisposition = WriteDisposition;
  * GCS(source) --> BQ(store) --[query]--> BQ(output) --> GCS(output)
  */
 class BigQueryStorageConnector {
-
   /**
    * Initialize the instance.
    * For output BigQuery, if datasetId is omitted, it will use store BiqQuery's
    * datasetId. Same as the bucket for output Storage.
    * 'projectId' is necessary for operations of BigQuery.s
-   * @param {StorageFileConfig=} sourceStorageOptions
-   * @param {BigQueryTableConfig=} storeBigqueryOptions
-   * @param {BigQueryTableConfig=} outputBigqueryOptions
-   * @param {StorageFileConfig=} outputStorageOptions
+   * @param {!StorageFileConfig=} sourceStorageOptions
+   * @param {!BigQueryTableConfig=} storeBigqueryOptions
+   * @param {!BigQueryTableConfig=} outputBigqueryOptions
+   * @param {!StorageFileConfig=} outputStorageOptions
    * @param {{
-   *   projectId:string|undefined,
-   *   datasetId:string|undefined,
-   *   bucket:string|undefined,
+   *   projectId:(string|undefined),
+   *   datasetId:(string|undefined),
+   *   bucket:(string|undefined),
    * }=} defaultOptions The default options for BigQuery and Storage.
    */
-  constructor(sourceStorageOptions = {},
-      storeBigqueryOptions = {},
-      outputBigqueryOptions = {},
-      outputStorageOptions = {},
+  constructor(
+      sourceStorageOptions = {}, storeBigqueryOptions = {},
+      outputBigqueryOptions = {}, outputStorageOptions = {},
       defaultOptions = {}) {
-    /** @type {StorageFileConfig} */ this.sourceStorageOptions = Object.assign({
+    /** @const {!StorageFileConfig} */
+    this.sourceStorageOptions = Object.assign(
+        {
           projectId: defaultOptions.projectId,
           bucket: defaultOptions.bucket,
         },
         sourceStorageOptions);
-    /** @type {BigQueryTableConfig} */
+    /** @const {!BigQueryTableConfig} */
     this.storeBigqueryOptions = Object.assign(
         {
           projectId: defaultOptions.projectId,
           datasetId: defaultOptions.datasetId,
-        }, storeBigqueryOptions);
-    /** @type {BigQueryTableConfig} */
+        },
+        storeBigqueryOptions);
+    /** @const {!BigQueryTableConfig} */
     this.outputBigqueryOptions = Object.assign(
         {
           projectId: defaultOptions.projectId,
           datasetId: defaultOptions.datasetId,
-        }, {
+        },
+        {
           datasetId: this.storeBigqueryOptions.datasetId,
         },
         outputBigqueryOptions);
-    /** @type {StorageFileConfig} */ this.outputStorageOptions = Object.assign({
+    /** @const {!StorageFileConfig} */
+    this.outputStorageOptions = Object.assign(
+        {
           projectId: defaultOptions.projectId,
           bucket: defaultOptions.bucket,
-        }, {
+        },
+        {
           bucket: this.sourceStorageOptions.bucket,
         },
         outputStorageOptions);
@@ -168,10 +178,10 @@ class BigQueryStorageConnector {
   /**
    * Gets the instance of Cloud Storage.
    * @param {!StorageFileConfig} options StorageFileConfig instance.
-   * @return {Storage} Cloud Storage instance.
+   * @return {!Storage} Cloud Storage instance.
    * @private
    */
-  getStorage(options) {
+  getStorage_(options) {
     return new Storage(
         {projectId: options.projectId, keyFilename: options.keyFilename});
   }
@@ -179,10 +189,10 @@ class BigQueryStorageConnector {
   /**
    * Gets the instance of BigQuery.
    * @param {!BigQueryTableConfig} options BigQueryTableConfig instance.
-   * @return {BigQuery} BigQuery instance.
+   * @return {!BigQuery} BigQuery instance.
    * @private
    */
-  getBigQuery(options) {
+  getBigQuery_(options) {
     return new BigQuery(
         {projectId: options.projectId, keyFilename: options.keyFilename});
   }
@@ -198,11 +208,11 @@ class BigQueryStorageConnector {
    * @return {!BigQueryTableConfig} The complete BigQueryTableConfig.
    * @private
    */
-  getBigQueryTableConfig(tableOptions, defaultOptions) {
-    return Object.assign({}, defaultOptions,
-        (typeof tableOptions === 'string')
-            ? {tableId: tableOptions}
-            : tableOptions);
+  getBigQueryTableConfig_(tableOptions, defaultOptions) {
+    return Object.assign(
+        {}, defaultOptions,
+        (typeof tableOptions === 'string') ? {tableId: tableOptions} :
+            tableOptions);
   }
 
   /**
@@ -214,11 +224,10 @@ class BigQueryStorageConnector {
    * @return {!StorageFileConfig} The complete StorageConfig.
    * @private
    */
-  getStorageFileConfig(fileOptions, defaultOptions) {
-    return Object.assign({}, defaultOptions,
-        (typeof fileOptions === 'string')
-            ? {name: fileOptions}
-            : fileOptions);
+  getStorageFileConfig_(fileOptions, defaultOptions) {
+    return Object.assign(
+        {}, defaultOptions,
+        (typeof fileOptions === 'string') ? {name: fileOptions} : fileOptions);
   }
 
   /**
@@ -226,29 +235,34 @@ class BigQueryStorageConnector {
    * it creates the table based on the given schema then return the Table
    * object. If it is a partition table, it returns the partitioned table
    * object for import.
-   * @param {string|BigQueryTableConfig=} storeTableOptions The Table ID or
+   * @param {string|!BigQueryTableConfig=} storeTableOptions The Table ID or
    *     BigQueryTableConfig of the BQ table to store incoming data.
    * @param {!TableSchema} schema Schema to create the table if it doesn't
    *     exist.
-   * @param {string|undefined=} partitionDay. If the target table is
+   * @param {string|undefined=} partitionDay If the target table is
    *     partitioned, this is partition day of the target table in 'YYYYMMDD'
    *     format.
    * @return {!Promise<!Table>}
    */
   getTableForLoading(storeTableOptions = {}, schema, partitionDay = undefined) {
-    const tableOptions = this.getBigQueryTableConfig(storeTableOptions,
-        this.storeBigqueryOptions);
+    const tableOptions = this.getBigQueryTableConfig_(
+        storeTableOptions, this.storeBigqueryOptions);
     return this.getOrCreateTable(tableOptions, schema).then((table) => {
       if (!schema.timePartitioning || !partitionDay) {
-        console.log(`It's ${schema.timePartitioning ? ''
-            : 'not '} partitioned with given partition day: ${partitionDay}.`);
+        console.log(`It's ${
+            schema.timePartitioning ?
+                '' :
+                'not '} partitioned with given partition day: ${
+            partitionDay}.`);
         return table;
       }
       const partitionedTable = `${tableOptions.tableId}\$${partitionDay}`;
       console.log(`Get partition table: [${partitionedTable}]`);
-      return this.getBigQuery(tableOptions).dataset(
-          tableOptions.datasetId).table(partitionedTable).get().then(
-          ([table]) => table);
+      return this.getBigQuery_(tableOptions)
+          .dataset(tableOptions.datasetId)
+          .table(partitionedTable)
+          .get()
+          .then(([table]) => table);
     });
   }
 
@@ -258,46 +272,50 @@ class BigQueryStorageConnector {
    * @param {!BigQueryTableConfig} tableOptions BigQuery Table configuration.
    * @param {!TableSchema} tableSchema Schema to create the table if it doesn't
    *     exist.
-   * @return {!Promise<Table>} The Table.
+   * @return {!Promise<!Table>} The Table.
    */
   getOrCreateTable(tableOptions, tableSchema) {
-    return this.getBigQuery(tableOptions).dataset(tableOptions.datasetId).get({
-      autoCreate: true
-    }).then(([dataset]) => {
-      const table = dataset.table(tableOptions.tableId);
-      return table.exists().then(([tableExists]) => {
-        if (tableExists) {
-          console.log(
-              `[${JSON.stringify(tableOptions)}] Exist. Continue to load.`
-          );
-          return table.get();
-        } else {
-          console.log(
-              `[${JSON.stringify(tableOptions)}] doesn't exist. CREATE with:`);
-          console.log(JSON.stringify(tableSchema));
-          return table.create(tableSchema);
-        }
-      }).then(([table]) => table);
-    });
+    return this.getBigQuery_(tableOptions)
+        .dataset(tableOptions.datasetId)
+        .get({autoCreate: true})
+        .then(([dataset]) => {
+          const table = dataset.table(tableOptions.tableId);
+          return table.exists()
+              .then(([tableExists]) => {
+                if (tableExists) {
+                  console.log(`[${
+                      JSON.stringify(tableOptions)}] Exist. Continue to load.`);
+                  return table.get();
+                } else {
+                  console.log(`[${
+                      JSON.stringify(
+                          tableOptions)}] doesn't exist. CREATE with:`);
+                  console.log(JSON.stringify(tableSchema));
+                  return table.create(tableSchema);
+                }
+              })
+              .then(([table]) => table);
+        });
   }
 
   /**
    * Loads Google Cloud Storage file into BigQuery.
-   * @param {StorageFileConfig|string} sourceFileOptions
+   * @param {!StorageFileConfig|string} sourceFileOptions
    * @param {!Table} storeTable A promised BigQuery Table.
    * @param {!LoadOptions} metadata Settings let BigQuery understand the loaded
    *     files.
    * @return {!Promise<void>}
    */
   loadStorageToBigQuery(sourceFileOptions, storeTable, metadata) {
-    console.log(
-        `Start to load GCS '${sourceFileOptions.name}' from [${sourceFileOptions.bucket}]`);
-    const fileOptions = this.getStorageFileConfig(sourceFileOptions,
-        this.sourceStorageOptions);
-    const fileObj = this.getStorage(fileOptions).bucket(
-        fileOptions.bucket).file(fileOptions.name);
-    metadata.compression = fileOptions.name.endsWith(".gz")
-        || fileOptions.name.endsWith(".zip");
+    console.log(`Start to load GCS '${sourceFileOptions.name}' from [${
+        sourceFileOptions.bucket}]`);
+    const fileOptions = this.getStorageFileConfig_(
+        sourceFileOptions, this.sourceStorageOptions);
+    const fileObj = this.getStorage_(fileOptions)
+        .bucket(fileOptions.bucket)
+        .file(fileOptions.name);
+    metadata.compression =
+        fileOptions.name.endsWith('.gz') || fileOptions.name.endsWith('.zip');
     console.log(`Import metadata: ${JSON.stringify(metadata)}.`);
     return storeTable.load(fileObj, metadata).catch((error) => {
       console.error(`Job failed for ${fileOptions.name}: `, error);
@@ -308,19 +326,20 @@ class BigQueryStorageConnector {
   /**
    * Runs a query on BigQuery and exports the result to the given table.
    * @param {string} query The query SQL.
-   * @param {Object<string,*>=} params Named parameter objects of the query.
-   * @param {string|BigQueryTableConfig=} outputTableOptions The Table ID or
+   * @param {!Object<string,*>=} params Named parameter objects of the query.
+   * @param {string|!BigQueryTableConfig=} outputTableOptions The Table ID or
    *     BigQueryTableConfig of the BQ table to store result of the query.
    *     Partition tableId is supported.
-   * @param {WriteDisposition=} writeDisposition Specifies the action that
+   * @param {!WriteDisposition=} writeDisposition Specifies the action that
    *     occurs if destination table already exists. Default value is
    *     'WRITE_TRUNCATE'.
    * @return {!Promise<!Job>} BigQuery Job.
    */
-  queryToBigQuery(query, params = {}, outputTableOptions = {},
+  queryToBigQuery(
+      query, params = {}, outputTableOptions = {},
       writeDisposition = WriteDisposition.WRITE_TRUNCATE) {
-    const tableOptions = this.getBigQueryTableConfig(outputTableOptions,
-        this.outputBigqueryOptions);
+    const tableOptions = this.getBigQueryTableConfig_(
+        outputTableOptions, this.outputBigqueryOptions);
     const options = {
       query: query,
       params: params,
@@ -330,18 +349,19 @@ class BigQueryStorageConnector {
     if (tableOptions.tableId.indexOf('$') > -1) {
       options.timePartitioning = {type: 'DAY', requirePartitionFilter: false};
     }
-    console.log(`Export to: ${JSON.stringify(tableOptions)} with query: `,
-        query);
-    return this.getBigQuery(tableOptions).createQueryJob(options).then(
-        ([job]) => {
-          console.log(
-              `Create job[${job.id}] on query [${options.query.split(
-                  '\n')[0]}]`);
-          return this.waitForFinished(job);
-        }).catch((error) => {
-      console.error(`Error in query to BigQuery:`, error);
-      throw(error);
-    });
+    console.log(
+        `Export to: ${JSON.stringify(tableOptions)} with query: `, query);
+    return this.getBigQuery_(tableOptions)
+        .createQueryJob(options)
+        .then(([job]) => {
+          console.log(`Create job[${job.id}] on query [${
+              options.query.split('\n')[0]}]`);
+          return this.waitForFinished_(job);
+        })
+        .catch((error) => {
+          console.error(`Error in query to BigQuery:`, error);
+          throw (error);
+        });
   }
 
   /**
@@ -349,36 +369,42 @@ class BigQueryStorageConnector {
    * https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs#configuration.extract
    *
    * @param {!ExtractOptions} extractOptions Options for extraction.
-   * @param {string|StorageFileConfig=} outputFileOptions File name or
+   * @param {string|!StorageFileConfig=} outputFileOptions File name or
    *     configuration for the output Storage file. The file name should be the
    *     full path file name under GCS bucket. In order to support massive
    *     data, an astral is expected in the file name.
-   * @param {string|BigQueryTableConfig=} outputTableOptions The Table ID or
+   * @param {string|!BigQueryTableConfig=} outputTableOptions The Table ID or
    *     BigQueryTableConfig of the BQ table to be exported. Partition tableId
    *     is supported in '$YYYYMMDD' suffix format.
    * @return {!Promise<number>} How many files exported to GCS.
    */
-  extractBigQueryToStorage(extractOptions, outputFileOptions = {},
-      outputTableOptions = {}) {
-    const tableOptions = this.getBigQueryTableConfig(outputTableOptions,
-        this.outputBigqueryOptions);
-    const fileOptions = this.getStorageFileConfig(outputFileOptions,
-        this.outputStorageOptions);
-    const fileObject = this.getStorage(fileOptions).bucket(
-        fileOptions.bucket).file(fileOptions.name);
-    return this.getBigQuery(tableOptions).dataset(tableOptions.datasetId).table(
-        tableOptions.tableId).extract(fileObject, extractOptions).then(
-        ([job]) => {
+  extractBigQueryToStorage(
+      extractOptions, outputFileOptions = {}, outputTableOptions = {}) {
+    const tableOptions = this.getBigQueryTableConfig_(
+        outputTableOptions, this.outputBigqueryOptions);
+    const fileOptions = this.getStorageFileConfig_(
+        outputFileOptions, this.outputStorageOptions);
+    const fileObject = this.getStorage_(fileOptions)
+        .bucket(fileOptions.bucket)
+        .file(fileOptions.name);
+    return this.getBigQuery_(tableOptions)
+        .dataset(tableOptions.datasetId)
+        .table(tableOptions.tableId)
+        .extract(fileObject, extractOptions)
+        .then(([job]) => {
           const errors = job.status.errors;
-          if (errors && errors.length > 0) throw errors;
+          if (errors && errors.length > 0) {
+            throw errors;
+          }
           const fileCounts = job.statistics.extract.destinationUriFileCounts[0];
-          console.log(
-              `Job ${job.id} status ${job.status.state} with ${fileCounts} files.`);
+          console.log(`Job ${job.id} status ${job.status.state} with ${
+              fileCounts} files.`);
           return parseInt(fileCounts);
-        }).catch((error) => {
-      console.error('Error in extract BQ to GCS:', error);
-      throw(error);
-    });
+        })
+        .catch((error) => {
+          console.error('Error in extract BQ to GCS:', error);
+          throw (error);
+        });
   }
 
   /**
@@ -386,16 +412,15 @@ class BigQueryStorageConnector {
    * @param {!Job} job BigQuery Job object.
    * @param {number=} count Counter of Job check times. It waits for 5 seconds
    *     between checks.
-   * @returns {!Promise<!Job>}
+   * @return {!Promise<!Job>}
    * @private
    */
-  waitForFinished(job, count = 0) {
+  waitForFinished_(job, count = 0) {
     return job.get().then(([job, response]) => {
-      if (response.status.state !== "DONE") {
-        console.log(
-            `Job[${job.id}] is not finished [${count}]. Wait 5 sec.`);
+      if (response.status.state !== 'DONE') {
+        console.log(`Job[${job.id}] is not finished [${count}]. Wait 5 sec.`);
         return wait(5000, count++).then((count) => {
-          return this.waitForFinished(job, count);
+          return this.waitForFinished_(job, count);
         });
       } else {
         console.log(`Job[${job.id}] done [${count}].`);
@@ -409,7 +434,7 @@ class BigQueryStorageConnector {
    * to Storage file(s). For huge amount query results, BQ doesn't support to
    * export to GCS directly.
    * @param {string} query The query SQL.
-   * @param {object<string,*>} params Named parameter objects of the query.
+   * @param {!Object<string,*>} params Named parameter objects of the query.
    * @param {string|!BigQueryTableConfig} outputTableOptions The Table ID or
    *     BigQueryTableConfig of the BQ table to store result of the query.
    *     Partition tableId is supported.
@@ -420,15 +445,13 @@ class BigQueryStorageConnector {
    * @param {!ExtractOptions} extractOptions Options for extraction.
    * @return {!Promise<number>} How many files exported to GCS.
    */
-  queryToStorageThroughBigQuery(query, params, outputTableOptions,
-      outputFileOptions, extractOptions) {
+  queryToStorageThroughBigQuery(
+      query, params, outputTableOptions, outputFileOptions, extractOptions) {
     return this.queryToBigQuery(query, outputTableOptions, params).then(() => {
-      return this.extractBigQueryToStorage(outputTableOptions,
-          outputFileOptions, extractOptions);
+      return this.extractBigQueryToStorage(
+          outputTableOptions, outputFileOptions, extractOptions);
     });
   }
-
 }
 
 exports.BigQueryStorageConnector = BigQueryStorageConnector;
-

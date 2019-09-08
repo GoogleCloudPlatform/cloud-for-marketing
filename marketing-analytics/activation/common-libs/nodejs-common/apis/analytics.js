@@ -47,6 +47,7 @@ class Analytics {
       return google.analytics({
         version: 'v3',
         auth: auth,
+        maxContentLength: 1000 * 1024 * 1024,
       });
     });
     this.logger = getLogger('API.GA');

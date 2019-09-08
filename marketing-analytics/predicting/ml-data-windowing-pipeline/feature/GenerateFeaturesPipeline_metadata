@@ -1,0 +1,58 @@
+{
+  "name": "GenerateFeaturesPipeline",
+  "description": "Step 4. Using the AVRO files from Step 3 create features based on the lookback windows created. The features are based on different types of aggregations or events that happened in the lookback window. The resulting output will be a BigQuery table containing features for all snapshots of users, ready for ML training.",
+  "parameters": [{
+    "name": "windowedAvroLocationPrefix",
+    "label": "Location prefix to read the windowed avro objects.",
+    "help_text": "The location of the Sliding or Session Window AVRO files from Step 3. e.g gs://yourbucket/windowing-output/",
+    "is_optional": false
+  },
+  {
+    "name": "sumFromVariables",
+    "label": "Sum value from variables in facts table in lookback window.",
+    "help_text": "This feature calculates the total sum of all numeric values within the lookback window. The input expects the column name containing values to sum. e.g totals.hits:[]:[]",
+    "is_optional": true
+  },
+  {
+    "name": "averageByTenureValueFromVariables",
+    "label": "Average by tenure value from variables in facts table in lookback window.",
+    "help_text": "This feature calculates the average days a user has been active in the lookback window (or their tenure if it's smaller than the lookback window size). The input expects just a column name that represents an active user, with an empty list. e.g totals.hits:[]:[]",
+    "is_optional": true
+  },
+  {
+    "name": "averageValueFromVariables",
+    "label": "Average value from variables in facts table in lookback window.",
+    "help_text": "This feature calculates the average for values in the lookback window. The input expects  just a column name that contains the values to average, with an empty list. e.g totals.hits:[]:[]",
+    "is_optional": true
+  },
+  {
+    "name": "countValueFromVariables",
+    "label": "Count value from variables in facts table in lookback window.",
+    "help_text": "This feature counts the number of occurrences of a value in the lookback window. The input expects a column name and a list of values to count, with a default if the value not within the list of values submitted.. e.g channelGrouping:[Organic Search,Social,Direct,Referral,Paid Search,Affiliates,Others]:[Others]",
+    "is_optional": true
+  },
+  {
+    "name": "mostFreqValueFromVariables",
+    "label": "Most frequent value from variables in facts table in lookback window.",
+    "help_text": "This feature calculates the most frequent value active within the lookback window. The input expects a column name and list of values to find the most frequent from, with a default if the value not within the list of values submitted.. e.g  channelGrouping:[Organic Search,Social,Direct,Referral,Paid Search,Affiliates,Others]:[Others]",
+    "is_optional": true
+  },
+  {
+    "name": "proportionsValueFromVariables",
+    "label": "Proportion of values from variables in facts in lookback window.",
+    "help_text": "This feature calculates the proportions a set of values are active within the lookback window. The input expects a column name and list of values to find proportions from, with a default if the value not within the list of values submitted.. e.g  channelGrouping:[Organic Search,Social,Direct,Referral,Paid Search,Affiliates,Others]:[Others]",
+    "is_optional": true
+  },
+  {
+    "name": "recentValueFromVariables",
+    "label": "Recent value from variables in facts table in lookback window.",
+    "help_text": "This feature extracts the most recent value used in the lookback window. The input expects a list of values to consider for a column, and a default if the value not within the list of values submitted. e.g channelGrouping:[Organic Search,Social,Direct,Referral,Paid Search,Affiliates,Others]:[Others]",
+    "is_optional": true
+  },
+  {
+    "name": "featureDestinationTable",
+    "label": "Feature BigQuery Destination.",
+    "help_text": "The location of the BigQuery Features table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_features_table",
+    "is_optional": false
+  }
+}

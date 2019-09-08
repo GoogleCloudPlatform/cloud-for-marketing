@@ -50,5 +50,19 @@
         "password": "[YOUR-SFTP-PASSWORD]"
       }
     }
+  },
+  "GS": {
+    "foo": {
+      "spreadsheetId": "[YOUR-SPREADSHEET-ID]",
+      "sheetName": "[YOUR-SHEET-NAME]",
+      "sheetHeader": "[ANYTHING-PUT-AHEAD-OF-CSV]",
+      "pasteData": {
+        "coordinate": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "delimiter": ","
+      }
+    }
   }
 }
