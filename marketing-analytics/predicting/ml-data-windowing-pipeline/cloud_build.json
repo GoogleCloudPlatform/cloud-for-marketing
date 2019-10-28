@@ -1,0 +1,73 @@
+{
+  "steps": [
+    {
+      "name": "gcr.io/cloud-builders/mvn",
+      "args":
+        [
+          "-Pdataflow-runner",
+          "compile",
+          "exec:java",
+          "-D_MAIN_CLASS=UserSessionPipeline",
+          "-D_PROJECT_ID=$PROJECT_ID",
+          "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+        ],
+      "id": "build-user-pipeline",
+      "waitFor": ["-"]
+    },
+    {
+      "name": "gcr.io/cloud-builders/mvn",
+      "args":
+        [
+          "-Pdataflow-runner",
+          "compile",
+          "exec:java",
+          "-D_MAIN_CLASS=DataVisualizationPipeline",
+          "-D_PROJECT_ID=$PROJECT_ID",
+          "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+        ],
+      "id": "build-visualization-pipeline",
+      "waitFor": ["-"]
+    },
+    {
+      "name": "gcr.io/cloud-builders/mvn",
+      "args":
+        [
+          "-Pdataflow-runner",
+          "compile",
+          "exec:java",
+          "-D_MAIN_CLASS=WindowingPipeline",
+          "-D_PROJECT_ID=$PROJECT_ID",
+          "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+        ],
+      "id": "build-windowing-pipeline",
+      "waitFor": ["-"]
+    },
+    {
+      "name": "gcr.io/cloud-builders/mvn",
+      "args":
+        [
+          "-Pdataflow-runner",
+          "compile",
+          "exec:java",
+          "-D_MAIN_CLASS=feature.GenerateFeaturesPipeline",
+          "-D_PROJECT_ID=$PROJECT_ID",
+          "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+        ],
+      "id": "build-features-pipeline",
+      "waitFor": ["-"]
+    }
+  ],
+  "artifacts": {
+        "objects": {
+            "location": "gs://${_BUCKET_NAME}/mlwp_templates",
+            "paths": [
+              "*_metadata",
+              "feature/*_metadata"
+            ]
+        }
+    }
+}

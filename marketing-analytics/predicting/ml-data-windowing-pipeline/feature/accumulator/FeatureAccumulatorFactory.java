@@ -119,7 +119,8 @@ public class FeatureAccumulatorFactory implements Serializable {
     }
     return AccumulatorOptions.builder()
         .setColumn(factName)
-        .setValueToFeatureName(createValueToFeatureNameMap(accumulatorType, values, factName))
+        .setValueToFeatureName(
+            createValueToFeatureNameMap(accumulatorType, values, factName, defaultValue))
         .setType(accumulatorType.toString())
         .setSchemaType(getSchemaType(accumulatorType))
         .setDefaultValue(defaultValue)
@@ -135,9 +136,14 @@ public class FeatureAccumulatorFactory implements Serializable {
   }
 
   protected ImmutableMap<String, String> createValueToFeatureNameMap(
-      AccumulatorType accumulatorType, List<String> values, String factName) {
+      AccumulatorType accumulatorType, List<String> values, String factName, String defaultValue) {
     String prefix = accumulatorType + UNDERSCORE + encodeValueName(factName);
     ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+
+    // Add default value to the list of values being considered.
+    if (!Strings.isNullOrEmpty(defaultValue) && !values.contains(defaultValue)) {
+      values.add(defaultValue);
+    }
 
     for (String value : values) {
       if (accumulatorType.isSingleOutput()) {

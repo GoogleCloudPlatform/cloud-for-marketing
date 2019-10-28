@@ -17,37 +17,37 @@ package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipelin
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.LookbackWindow;
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Session;
 import java.util.List;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.values.KV;
-import org.joda.time.Duration;
-import org.joda.time.Instant;
 
 /**
  * Parent class for mapping a user's sessions time into LookbackWindows.
  */
 public class MapSortedSessionsIntoLookbackWindows extends DoFn<
     KV<String, List<Session>>, LookbackWindow> {
-  protected Instant startTime;
-  protected Instant endTime;
-  protected Duration lookbackGapDuration;
-  protected Duration windowDuration;
-  protected Duration minimumLookaheadDuration;
-  protected Duration maximumLookaheadDuration;
-  protected boolean stopOnFirstPositiveLabel;
+  protected ValueProvider<String> startTimeProvider;
+  protected ValueProvider<String> endTimeProvider;
+  protected ValueProvider<Long> lookbackGapInSecondsProvider;
+  protected ValueProvider<Long> windowTimeInSecondsProvider;
+  protected ValueProvider<Long> minimumLookaheadTimeInSecondsProvider;
+  protected ValueProvider<Long> maximumLookaheadTimeInSecondsProvider;
+  protected ValueProvider<Boolean> stopOnFirstPositiveLabelProvider;
 
   public MapSortedSessionsIntoLookbackWindows(
-      Instant startTime, Instant endTime,
-      Duration lookbackGapDuration,
-      Duration windowDuration,
-      Duration minimumLookaheadDuration, Duration maximumLookaheadDuration,
-      boolean stopOnFirstPositiveLabel) {
-    this.startTime = startTime;
-    this.endTime = endTime;
-    this.lookbackGapDuration = lookbackGapDuration;
-    this.windowDuration = windowDuration;
-    this.minimumLookaheadDuration = minimumLookaheadDuration;
-    this.maximumLookaheadDuration = maximumLookaheadDuration;
-    this.stopOnFirstPositiveLabel = stopOnFirstPositiveLabel;
+      ValueProvider<String> startTime,
+      ValueProvider<String> endTime,
+      ValueProvider<Long> lookbackGapInSeconds,
+      ValueProvider<Long> windowTimeInSeconds,
+      ValueProvider<Long> minimumLookaheadTimeInSeconds,
+      ValueProvider<Long> maximumLookaheadTimeInSeconds,
+      ValueProvider<Boolean> stopOnFirstPositiveLabel) {
+    startTimeProvider = startTime;
+    endTimeProvider = endTime;
+    lookbackGapInSecondsProvider = lookbackGapInSeconds;
+    windowTimeInSecondsProvider = windowTimeInSeconds;
+    minimumLookaheadTimeInSecondsProvider = minimumLookaheadTimeInSeconds;
+    maximumLookaheadTimeInSecondsProvider = maximumLookaheadTimeInSeconds;
+    stopOnFirstPositiveLabelProvider = stopOnFirstPositiveLabel;
   }
 }
-

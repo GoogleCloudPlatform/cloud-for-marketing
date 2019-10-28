@@ -14,7 +14,6 @@
 
 package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.transform;
 
-
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
@@ -28,6 +27,8 @@ import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline
 import java.util.Map;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.values.PCollectionView;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
 
 /**
  * Function to extract features from the {@link LookbackWindow} based on a map of {@link
@@ -38,8 +39,17 @@ public class ExtractFeatureFn extends DoFn<LookbackWindow, TableRow> {
   public static final String USER_ID = "userId";
   public static final String START_TIME = "startTime";
   public static final String END_TIME = "endTime";
+  public static final String EFFECTIVE_DATE_WEEK_OF_YEAR = "effectiveDateWeekOfYear";
+  public static final String EFFECTIVE_DATE_MONTH_OF_YEAR = "effectiveDateMonthOfYear";
   public static final String PREDICTION_LABEL = "predictionLabel";
+  public static final String EFFECTIVE_DATE_WEEK_OF_YEAR_SUFFIX = "W";
+  public static final String EFFECTIVE_DATE_MONTH_OF_YEAR_SUFFIX = "M";
+  public static final String EFFECTIVE_DATE = "effectiveDate";
+  private static final DateTimeFormatter DATE_TIME_FORMATTER =
+      DateTimeFormat.forPattern("YYYY-MM-dd hh:mm:ss");
+  ;
   private final FeatureAccumulatorFactory featureAccumulatorFactory;
+
   // View map of Fact Name and List of AccumulatorOptions that needs to be aggregated.
   private final PCollectionView<Map<String, Iterable<AccumulatorOptions>>> accumulatorOptionsView;
 
@@ -76,6 +86,17 @@ public class ExtractFeatureFn extends DoFn<LookbackWindow, TableRow> {
     row.set(USER_ID, window.getUserId());
     row.set(START_TIME, window.getStartTime().getMillis());
     row.set(END_TIME, window.getEndTime().getMillis());
+    row.set(START_TIME, window.getStartTime().getMillis());
+
+    row.set(EFFECTIVE_DATE, DATE_TIME_FORMATTER.print(window.getEffectiveDate()));
+    row.set(
+        EFFECTIVE_DATE_WEEK_OF_YEAR,
+        window.getEffectiveDate().toDateTime().getWeekOfWeekyear()
+            + EFFECTIVE_DATE_WEEK_OF_YEAR_SUFFIX);
+    row.set(
+        EFFECTIVE_DATE_MONTH_OF_YEAR,
+        window.getEffectiveDate().toDateTime().getMonthOfYear()
+            + EFFECTIVE_DATE_MONTH_OF_YEAR_SUFFIX);
     row.set(PREDICTION_LABEL, window.getPredictionLabel());
 
     for (FeatureAccumulator featureAccumulator : accumulators.values()) {

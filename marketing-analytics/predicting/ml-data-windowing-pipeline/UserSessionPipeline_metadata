@@ -9,18 +9,6 @@ the Analytics data into AVRO files.",
     "is_optional": false
   },
   {
-    "name": "startDate",
-    "label": "Start date in dd/mm/yyyy format.",
-    "help_text": "",
-    "is_optional": true
-  },
-  {
-    "name": "endDate",
-    "label": "End date (not inclusive) in dd/mm/yyyy format.",
-    "help_text": "",
-    "is_optional": true
-  },
-  {
     "name": "predictionFactName",
     "label": "Name of the Fact with the prediction target.",
     "help_text": "The name of the BigQuery column that contains the value we are trying to predict (can have multiple columns separated by commas). e.g hits.eventInfo.eventAction",

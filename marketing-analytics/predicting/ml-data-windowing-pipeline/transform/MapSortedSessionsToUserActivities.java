@@ -18,6 +18,7 @@ import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.UserActivity;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.values.KV;
 import org.joda.time.Duration;
@@ -30,28 +31,39 @@ import org.joda.time.Instant;
 public class MapSortedSessionsToUserActivities extends DoFn<
     KV<String, List<Session>>, UserActivity> {
 
-  protected Instant startTime;
-  protected Instant endTime;
-  protected Duration slideDuration;
-  protected Duration minimumLookaheadDuration;
-  protected Duration maximumLookaheadDuration;
-  protected boolean stopOnFirstPositiveLabel;
+  protected ValueProvider<String> startTimeProvider;
+  protected ValueProvider<String> endTimeProvider;
+  protected ValueProvider<Long> slideTimeInSecondsProvider;
+  protected ValueProvider<Long> minimumLookaheadTimeInSecondsProvider;
+  protected ValueProvider<Long> maximumLookaheadTimeInSecondsProvider;
+  protected ValueProvider<Boolean> stopOnFirstPositiveLabelProvider;
 
   public MapSortedSessionsToUserActivities(
-      Instant startTime, Instant endTime, Duration slideDuration,
-      Duration minimumLookaheadDuration, Duration maximumLookaheadDuration,
-      boolean stopOnFirstPositiveLabel) {
-    this.startTime = startTime;
-    this.endTime = endTime;
-    this.slideDuration = slideDuration;
-    this.minimumLookaheadDuration = minimumLookaheadDuration;
-    this.maximumLookaheadDuration = maximumLookaheadDuration;
-    this.stopOnFirstPositiveLabel = stopOnFirstPositiveLabel;
+      ValueProvider<String> startTime,
+      ValueProvider<String> endTime,
+      ValueProvider<Long> slideTimeInSeconds,
+      ValueProvider<Long> minimumLookaheadTimeInSeconds,
+      ValueProvider<Long> maximumLookaheadTimeInSeconds,
+      ValueProvider<Boolean> stopOnFirstPositiveLabel) {
+    startTimeProvider = startTime;
+    endTimeProvider = endTime;
+    slideTimeInSecondsProvider = slideTimeInSeconds;
+    minimumLookaheadTimeInSecondsProvider = minimumLookaheadTimeInSeconds;
+    maximumLookaheadTimeInSecondsProvider = maximumLookaheadTimeInSeconds;
+    stopOnFirstPositiveLabelProvider = stopOnFirstPositiveLabel;
   }
 
   @ProcessElement
-  // TODO(dabraham): Add tests.
   public void processElement(ProcessContext context) {
+    Instant startTime = DateUtil.parseStartDateStringToInstant(startTimeProvider.get());
+    Instant endTime = DateUtil.parseEndDateStringToInstant(endTimeProvider.get());
+    Duration slideDuration = Duration.standardSeconds(slideTimeInSecondsProvider.get());
+    Duration minimumLookaheadDuration =
+        Duration.standardSeconds(minimumLookaheadTimeInSecondsProvider.get());
+    Duration maximumLookaheadDuration =
+        Duration.standardSeconds(maximumLookaheadTimeInSecondsProvider.get());
+    Boolean stopOnFirstPositiveLabel = stopOnFirstPositiveLabelProvider.get();
+
     KV<String, List<Session>> kv = context.element();
     String userId = kv.getKey();
     ArrayList<Session> sessions = new ArrayList<>(kv.getValue());
@@ -69,7 +81,8 @@ public class MapSortedSessionsToUserActivities extends DoFn<
          snapshotTime = snapshotTime.plus(slideDuration)) {
       userActivity.setSnapshotTime(snapshotTime);
       userActivity.setDurationSinceStartDate(new Duration(startTime, snapshotTime));
-      userActivity.setHasPositiveLabel(false);
+      userActivity.setHasPositiveLabel(SortedSessionsUtil.hasLabelInInterval(
+          positiveLabelTimes, minimumLookaheadDuration, maximumLookaheadDuration, snapshotTime));
       if (userActivity.getDurationSinceFirstActivity() != null) {
         userActivity.setDurationSinceFirstActivity(
             userActivity.getDurationSinceFirstActivity().plus(slideDuration));
@@ -89,11 +102,6 @@ public class MapSortedSessionsToUserActivities extends DoFn<
         if (userActivity.getDurationSinceFirstActivity() == null) {
           userActivity.setDurationSinceFirstActivity(durationSinceSessionEnd);
         }
-        userActivity.setHasPositiveLabel(SortedSessionsUtil.hasLabelInInterval(
-                                         positiveLabelTimes,
-                                         minimumLookaheadDuration,
-                                         maximumLookaheadDuration,
-                                         sessions.get(sessionIndex).getLastHitTime()));
       }
       context.output(userActivity);
       if (stopOnFirstPositiveLabel && userActivity.getHasPositiveLabel()) {

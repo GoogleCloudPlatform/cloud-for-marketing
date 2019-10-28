@@ -20,9 +20,7 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.AvroIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.transforms.Filter;
 import org.apache.beam.sdk.transforms.ParDo;
-import org.joda.time.Instant;
 
 /**
  * Pipeline for converting Google Analytics BigQuery data into user Sessions.
@@ -32,16 +30,12 @@ public class UserSessionPipeline {
     UserSessionPipelineOptions options =
         PipelineOptionsFactory.fromArgs(args).withValidation().as(UserSessionPipelineOptions.class);
     Pipeline pipeline = Pipeline.create(options);
-    Instant startTime = DateUtil.parseStartDateStringToInstant(options.getStartDate());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(options.getEndDate());
     pipeline
         .apply("Read BigQuery GA Table",
-            BigQueryIO.readTableRows().fromQuery(options.getInputBigQuerySQL()).usingStandardSql())
+            BigQueryIO.readTableRows().withTemplateCompatibility().fromQuery(
+                options.getInputBigQuerySQL()).usingStandardSql().withoutValidation())
         .apply("MapGATableRowToSession", ParDo.of(new MapGATableRowToSession(
             options.getPredictionFactName(), options.getPredictionFactValues())))
-        .apply(Filter.by((Session session) ->
-            session.getVisitStartTime().compareTo(startTime) >= 0
-            && session.getLastHitTime().compareTo(endTime) < 0))
         .apply(AvroIO.write(Session.class).to(
             options.getOutputSessionsAvroPrefix()).withSuffix(".avro"));
     pipeline.run();

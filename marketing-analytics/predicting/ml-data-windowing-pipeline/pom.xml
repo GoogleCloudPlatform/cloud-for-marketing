@@ -22,7 +22,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline</groupId>
   <artifactId>mldatawindowingpipeline</artifactId>
-  <version>0.1</version>
+  <version>1.1</version>
 
   <packaging>jar</packaging>
 
@@ -75,6 +75,7 @@
         <configuration>
           <source>1.8</source>
           <target>1.8</target>
+          <useIncrementalCompilation>false</useIncrementalCompilation>
         </configuration>
       </plugin>
       <plugin>
@@ -139,8 +140,23 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
           <version>${maven-exec-plugin.version}</version>
+          <executions>
+              <execution>
+                  <goals>
+                      <goal>exec</goal>
+                  </goals>
+              </execution>
+          </executions>
           <configuration>
             <cleanupDaemonThreads>false</cleanupDaemonThreads>
+            <executable>java</executable>
+            <mainClass>com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.${_MAIN_CLASS}</mainClass>
+            <arguments>
+              <argument>--runner=DataflowRunner</argument>
+              <argument>--project=${_PROJECT_ID}</argument>
+              <argument>--templateLocation=${_OUTPUT_LOCATION}/${_MAIN_CLASS}</argument>
+              <argument>--tempLocation=${_TEMP_LOCATION}</argument>
+            </arguments>
           </configuration>
         </plugin>
       </plugins>

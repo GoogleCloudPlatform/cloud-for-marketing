@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.joda.time.DateTime;
 import org.joda.time.Duration;
@@ -31,14 +32,17 @@ import org.joda.time.Instant;
  */
 public class MapGATableRowToSession extends DoFn<TableRow, Session> {
   // Fact name of the label that we are trying to predict.
-  private final String labelFactName;
+  private final ValueProvider<String> labelFactNameProvider;
+  private String labelFactName;
   // Positive values of the label we are trying to predict. All other labels for the target fact
   // are considered negative.
-  private final HashSet<String> positiveLabelFactValues;
+  private final ValueProvider<String> positiveLabelFactValuesProvider;
+  private HashSet<String> positiveLabelFactValues;
 
-  public MapGATableRowToSession(String labelFactName, String positiveLabelFactValues) {
-    this.labelFactName = labelFactName;
-    this.positiveLabelFactValues = new HashSet<>(Arrays.asList(positiveLabelFactValues.split(",")));
+  public MapGATableRowToSession(ValueProvider<String> labelFactName,
+                                ValueProvider<String> positiveLabelFactValues) {
+    labelFactNameProvider = labelFactName;
+    positiveLabelFactValuesProvider = positiveLabelFactValues;
   }
 
   // Returns given url with the trailing forward slash removed if present and otherwise non-empty.
@@ -65,7 +69,12 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
       if (factNamePrefix.equals("hits")) {
         childTime = childTime.plus(
             Duration.millis(Long.parseLong(tablerow.get("time").toString()) / 1000));
+        DateTime dateTime = childTime.toDateTime();
+        addFactToSession(
+            "dayOfWeekOfHit", String.valueOf(dateTime.getDayOfWeek()), childTime, session);
+        addFactToSession("hourOfHit", String.valueOf(dateTime.getHourOfDay()), childTime, session);
       }
+
       for (Map.Entry<String, Object> entry : tablerow.entrySet()) {
         String childFactNamePrefix = factNamePrefix;
         if (!factNamePrefix.isEmpty()) {
@@ -111,6 +120,10 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
   // Converts BigQuery TableRows from Google Analytics to Sessions.
   @ProcessElement
   public void processElement(ProcessContext context) {
+    labelFactName = labelFactNameProvider.get();
+    positiveLabelFactValues =
+        new HashSet<>(Arrays.asList(positiveLabelFactValuesProvider.get().split(",")));
+
     TableRow tablerow = context.element();
      Session session = new Session();
     session.setId(String.format("%s/%s", tablerow.get("fullVisitorId"), tablerow.get("visitId")));

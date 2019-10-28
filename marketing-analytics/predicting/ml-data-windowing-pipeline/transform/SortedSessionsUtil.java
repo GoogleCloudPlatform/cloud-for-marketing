@@ -28,7 +28,7 @@ public class SortedSessionsUtil {
   }
 
   // Returns the collection of positive label time instants for the given Sessions between the
-  // given start and end instant inclusive.
+  // given start (inclusive) and end instant (not inclusive).
   public static ArrayList<Instant> getPositiveLabelTimes(
       ArrayList<Session> sessions, Instant startTime, Instant endTime) {
     ArrayList<Instant> positiveLabelTimes = new ArrayList<>();
@@ -37,7 +37,7 @@ public class SortedSessionsUtil {
         continue;
       }
       if (session.getVisitStartTime().isBefore(startTime)
-          || session.getLastHitTime().isAfter(endTime)) {
+          || !session.getLastHitTime().isBefore(endTime)) {
         continue;
       }
       positiveLabelTimes.add(session.getVisitStartTime());

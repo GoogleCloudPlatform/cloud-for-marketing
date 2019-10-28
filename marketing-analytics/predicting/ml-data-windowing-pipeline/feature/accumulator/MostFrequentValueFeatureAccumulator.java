@@ -49,23 +49,17 @@ public class MostFrequentValueFeatureAccumulator extends FeatureAccumulator {
 
   @Override
   public Map<String, Object> getFeatures() {
-    ImmutableMap.Builder<String, Object> features = ImmutableMap.builder();
+
+    if (getValueToFeatureName().isEmpty()) {
+      return ImmutableMap.of();
+    }
 
     Optional<String> valueWithMaxCount =
         valueBag.stream()
             .max(
                 Comparator.<String>comparingInt(valueBag::getCount)
                     .thenComparing(s -> s, reverseOrder()));
-    if (valueWithMaxCount.isPresent()) {
-      String featureName = getValueToFeatureName().get(valueWithMaxCount.get());
-      features.put(featureName, valueWithMaxCount.get());
-    } else {
-      // If there are no entries in valueBag, select any featureName from valueToFeatureName and
-      // associate value to "".
-      String featureName = getValueToFeatureName().values().iterator().next();
-      features.put(featureName, "");
-    }
-
-    return features.build();
+    String featureName = getValueToFeatureName().values().iterator().next();
+    return ImmutableMap.of(featureName, valueWithMaxCount.orElse(""));
   }
 }

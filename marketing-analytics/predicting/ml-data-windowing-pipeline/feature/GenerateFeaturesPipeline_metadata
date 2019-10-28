@@ -2,9 +2,9 @@
   "name": "GenerateFeaturesPipeline",
   "description": "Step 4. Using the AVRO files from Step 3 create features based on the lookback windows created. The features are based on different types of aggregations or events that happened in the lookback window. The resulting output will be a BigQuery table containing features for all snapshots of users, ready for ML training.",
   "parameters": [{
-    "name": "windowedAvroLocationPrefix",
-    "label": "Location prefix to read the windowed avro objects.",
-    "help_text": "The location of the Sliding or Session Window AVRO files from Step 3. e.g gs://yourbucket/windowing-output/",
+    "name": "windowedAvroLocation",
+    "label": "Location to read the windowed avro objects.",
+    "help_text": "The location of the Sliding or Session Window AVRO files from Step 3. e.g gs://yourbucket/windowing-output/*.avro",
     "is_optional": false
   },
   {
@@ -52,7 +52,7 @@
   {
     "name": "featureDestinationTable",
     "label": "Feature BigQuery Destination.",
-    "help_text": "The location of the BigQuery Features table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_features_table",
+    "help_text": "The location of the BigQuery Features table (Note: Ensure the pipeline has write access to this). e.g myproject:mydataset.ga_features_table",
     "is_optional": false
-  }
+  }]
 }
