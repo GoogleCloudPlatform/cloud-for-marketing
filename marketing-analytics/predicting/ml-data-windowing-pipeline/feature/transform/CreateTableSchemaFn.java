@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.apache.beam.sdk.extensions.gcp.util.Transport;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.values.KV;
 
@@ -29,9 +30,9 @@ import org.apache.beam.sdk.values.KV;
 public class CreateTableSchemaFn extends DoFn<Iterable<KV<String, String>>, Map<String, String>> {
 
   public static final String NULLABLE = "NULLABLE";
-  private final String tableOutput;
+  private final ValueProvider<String> tableOutput;
 
-  public CreateTableSchemaFn(String tableOutput) {
+  public CreateTableSchemaFn(ValueProvider<String> tableOutput) {
     this.tableOutput = tableOutput;
   }
 
@@ -57,6 +58,6 @@ public class CreateTableSchemaFn extends DoFn<Iterable<KV<String, String>>, Map<
     } catch (IOException e) {
       throw new IllegalArgumentException("Error creating bq schema", e);
     }
-    context.output(ImmutableMap.of(tableOutput, jsonSchema));
+    context.output(ImmutableMap.of(tableOutput.get(), jsonSchema));
   }
 }

@@ -17,6 +17,27 @@ the date).
 We’ve built this for you to help improve the quality of the dataset used in
 these models, and streamline the process.
 
+## Quickstart
+
+You can use Google Cloud Build to generate Templates for the entire pipeline
+without installing any development tools.
+
+1.  Be sure you are logged into the correct Google Cloud account in your
+    console.
+
+2.  [Create a GCS Bucket](https://cloud.google.com/storage/docs/creating-buckets)
+    to hold temporary files and the generated templates.
+
+3.  Navigate to the root directory of the project, and run the build with:
+
+    ```bash
+    gcloud builds submit --config=cloud_build.json --substitutions=_BUCKET_NAME=$MY_BUCKET_NAME
+    ```
+
+4.  After you've created the templates, they will be located in the
+    `mlwp_templates` folder in your GCS Bucket. You can
+    [run them with these instructions](https://cloud.google.com/dataflow/docs/guides/templates/running-templates#custom-templates).
+
 ## Initial Setup
 
 1. [Google Cloud SDK](https://cloud.google.com/sdk/install).
@@ -136,6 +157,8 @@ snapshots of users, ready for ML training.
 * Input BigQuery SQL *Required*<br>
   The SQL to select from the Google Analytics table in BigQuery (Note: Ensure
   the pipeline has access to this).<br>
+  Note: If useful, you can reduce dataset size early on by using the SQL to
+  filter on the relevant date period being considered.<br>
   e.g SELECT * FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`
 
 * Prediction Fact Name *Required*<br>
@@ -153,12 +176,6 @@ snapshots of users, ready for ML training.
   The location on Google Cloud Storage to output the AVRO files to.<br>
   e.g gs://[GCS BUCKET]/usersession-output/
 
-* Start Date<br>
-  Start date to consider data from, in dd/mm/yyyy format.
-
-* End Date<br>
-  End date (not inclusive) to stop considering data, in dd/mm/yyyy format.
-
 #### To run this directly (using the examples from options above):
 
     $ mvn -Pdataflow-runner compile exec:java \
@@ -175,11 +192,10 @@ pipeline running.
 #### To build a template:
 
     $ mvn -Pdataflow-runner compile exec:java \
-        -Dexec.mainClass=com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.UserSessionPipeline \
-        -Dexec.args="--runner=DataflowRunner \
-        --project='[CLOUD PROJECT TO RUN IN]' \
-        --templateLocation='gs://[GCS BUCKET]/usersession-template/' \
-        --stagingLocation='gs://[GCS BUCKET]/temp/'"
+        -D_MAIN_CLASS=UserSessionPipeline \
+        -D_PROJECT_ID=[CLOUD PROJECT TO RUN IN] \
+        -D_OUTPUT_LOCATION=gs://[GCS BUCKET]/usersession-template \
+        -D_TEMP_LOCATION=gs://[GCS BUCKET]/temp/mlwp_templates
 
 ### Step 2. DataVisualizationPipeline.java
 
@@ -255,11 +271,10 @@ pipeline running.
 #### To build a template:
 
     $ mvn -Pdataflow-runner compile exec:java \
-        -Dexec.mainClass=com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.DataVisualizationPipeline \
-        -Dexec.args="--runner=DataflowRunner \
-        --project='[CLOUD PROJECT TO RUN IN]' \
-        --templateLocation='gs://[GCS BUCKET]/datavisualization-template/’ \
-        --stagingLocation='gs://[GCS BUCKET]/temp/'"
+        -D_MAIN_CLASS=DataVisualizationPipeline \
+        -D_PROJECT_ID=[CLOUD PROJECT TO RUN IN] \
+        -D_OUTPUT_LOCATION=gs://[GCS BUCKET]/datavisualization-template \
+        -D_TEMP_LOCATION=gs://[GCS BUCKET]/temp/mlwp_templates
 
 ### Step 3. WindowingPipeline.java
 
@@ -348,25 +363,24 @@ pipeline running.
 #### To build a template:
 
     $ mvn -Pdataflow-runner compile exec:java \
-        -Dexec.mainClass=com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.WindowingPipeline \
-        -Dexec.args="--runner=DataflowRunner \
-        --project='[CLOUD PROJECT TO RUN IN]' \
-        --templateLocation='gs://[GCS BUCKET]/windowing-template/' \
-        --stagingLocation='gs://[GCS BUCKET]/temp/'"
+        -D_MAIN_CLASS=WindowingPipeline \
+        -D_PROJECT_ID=[CLOUD PROJECT TO RUN IN] \
+        -D_OUTPUT_LOCATION=gs://[GCS BUCKET]/windowing-template \
+        -D_TEMP_LOCATION=gs://[GCS BUCKET]/temp/mlwp_templates
 
 ### Step 4. GenerateFeaturesPipeline.java
 
 #### Options:
 
-* Windowed AVRO Location Prefix *Required*<br>
-  The location of the Sliding or Session Window AVRO files from Step 3.<br>
-  e.g gs://[GCS BUCKET]/windowing-output/
-
-* Feature Destination Table *Required*<br>
-  The location of the BigQuery Features table (Note: Ensure the pipeline has
-  write access to this).<br>
-  e.g myproject:mydataset.ga_features_table
-  **Note: the format[project_id]:[dataset_id].[table_id]**
+*   Windowed AVRO Location *Required*<br>
+    The location of the Sliding or Session Window AVRO files from Step 3.<br>
+    e.g gs://[GCS BUCKET]/windowing-output/*.avro
+    
+*   Feature Destination Table *Required*<br>
+    The location of the BigQuery Features table (Note: Ensure the pipeline has
+    write access to this).<br>
+    e.g myproject:mydataset.ga_features_table
+    **Note: the format[project_id]:[dataset_id].[table_id]**
 
 #### Feature Options:
 
@@ -448,7 +462,7 @@ then the option does not need to be used.
         -Dexec.mainClass=com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.GenerateFeaturesPipeline \
         -Dexec.args="--runner=DataflowRunner \
         --project='[CLOUD PROJECT TO RUN IN]' \
-        --windowedAvroLocationPrefix='gs://[GCS BUCKET]/windowing-output/' \
+        --windowedAvroLocation='gs://[GCS BUCKET]/windowing-output/*.avro' \
         --featureDestinationTable='myproject:mydataset.ga_features_table' \
         --recentValueFromVariables='-' \
         --averageByTenureValueFromVariables='-' \
@@ -463,18 +477,11 @@ pipeline running.
 
 #### To build a template:
 
-NOTE: The location of the Windowed AVRO Location needs to be fixed in this
-template. We reccomend create a generate location for this and using that as the
-template locations.
-
-
     $ mvn -Pdataflow-runner compile exec:java \
-        -Dexec.mainClass=com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.GenerateFeaturesPipeline \
-        -Dexec.args="--runner=DataflowRunner \
-        --project='[CLOUD PROJECT TO RUN IN]' \
-        --templateLocation=’gs://[GCS BUCKET]/feature-template/’ \
-        --stagingLocation=’gs://[GCS BUCKET]/temp/’ \
-        --windowedAvroLocationPrefix='gs://yourbucket/windowing-output/'"
+        -D_MAIN_CLASS=feature.GenerateFeaturesPipeline \
+        -D_PROJECT_ID=[CLOUD PROJECT TO RUN IN] \
+        -D_OUTPUT_LOCATION=gs://[GCS BUCKET]/feature-template \
+        -D_TEMP_LOCATION=gs://[GCS BUCKET]/temp/mlwp_templates
 
 ## Reference
 

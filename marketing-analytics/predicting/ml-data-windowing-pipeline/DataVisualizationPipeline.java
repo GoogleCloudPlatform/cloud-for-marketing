@@ -28,8 +28,6 @@ import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.GroupByKey;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
-import org.joda.time.Duration;
-import org.joda.time.Instant;
 
 /**
  * Pipeline for outputing the Facts and UserActivity data tables from the input user Sessions.
@@ -40,8 +38,7 @@ public class DataVisualizationPipeline {
         PipelineOptionsFactory.fromArgs(args).withValidation().as(
             DataVisualizationPipelineOptions.class);
     Pipeline pipeline = Pipeline.create(options);
-    Instant startTime = DateUtil.parseStartDateStringToInstant(options.getStartDate());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(options.getEndDate());
+
     PCollection<Session> sessions = pipeline
         .apply(AvroIO.read(Session.class).from(options.getInputAvroSessionsLocation()));
 
@@ -66,11 +63,11 @@ public class DataVisualizationPipeline {
             "MapSortedSessionsToUserActivities",
             ParDo.of(
                 new MapSortedSessionsToUserActivities(
-                    startTime,
-                    endTime,
-                    Duration.standardSeconds(options.getSlideTimeInSeconds()),
-                    Duration.standardSeconds(options.getMinimumLookaheadTimeInSeconds()),
-                    Duration.standardSeconds(options.getMaximumLookaheadTimeInSeconds()),
+                    options.getStartDate(),
+                    options.getEndDate(),
+                    options.getSlideTimeInSeconds(),
+                    options.getMinimumLookaheadTimeInSeconds(),
+                    options.getMaximumLookaheadTimeInSeconds(),
                     options.getStopOnFirstPositiveLabel())))
         .apply("MapUserActivityToTableRow", ParDo.of(new MapUserActivityToTableRow()))
         .apply(

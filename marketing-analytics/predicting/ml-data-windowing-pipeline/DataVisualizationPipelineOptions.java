@@ -18,6 +18,7 @@ import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.Validation;
+import org.apache.beam.sdk.options.ValueProvider;
 
 /**
  * The options used to setup a UserSessionPipeline.
@@ -26,50 +27,50 @@ public interface DataVisualizationPipelineOptions extends PipelineOptions {
 
   @Description("Location of the input user Sessions in AVRO format.")
   @Validation.Required
-  String getInputAvroSessionsLocation();
-  void setInputAvroSessionsLocation(String inputAvroSessionsLocation);
+  ValueProvider<String> getInputAvroSessionsLocation();
+  void setInputAvroSessionsLocation(ValueProvider<String> inputAvroSessionsLocation);
 
   @Description("Start date in dd/mm/yyyy format.")
   @Validation.Required
-  String getStartDate();
-  void setStartDate(String startDate);
+  ValueProvider<String> getStartDate();
+  void setStartDate(ValueProvider<String> startDate);
 
   @Description("End date (not inclusive) in dd/mm/yyyy format.")
   @Validation.Required
-  String getEndDate();
-  void setEndDate(String endDate);
+  ValueProvider<String> getEndDate();
+  void setEndDate(ValueProvider<String> endDate);
 
   @Description("Slide Length (seconds)")
   @Default.Long(86400L)
   @Validation.Required
-  long getSlideTimeInSeconds();
-  void setSlideTimeInSeconds(long slideTimeInSeconds);
+  ValueProvider<Long> getSlideTimeInSeconds();
+  void setSlideTimeInSeconds(ValueProvider<Long> slideTimeInSeconds);
 
   @Description("Minimum lookahead time (seconds)")
   @Default.Long(86400L)
   @Validation.Required
-  long getMinimumLookaheadTimeInSeconds();
-  void setMinimumLookaheadTimeInSeconds(long minimumLookaheadTimeInSeconds);
+  ValueProvider<Long> getMinimumLookaheadTimeInSeconds();
+  void setMinimumLookaheadTimeInSeconds(ValueProvider<Long> minimumLookaheadTimeInSeconds);
 
   @Description("Maximum lookahead time (seconds)")
   @Default.Long(604800L)
   @Validation.Required
-  long getMaximumLookaheadTimeInSeconds();
-  void setMaximumLookaheadTimeInSeconds(long maximumLookaheadTimeInSeconds);
+  ValueProvider<Long> getMaximumLookaheadTimeInSeconds();
+  void setMaximumLookaheadTimeInSeconds(ValueProvider<Long> maximumLookaheadTimeInSeconds);
 
   @Description("Set true to stop window generation after the first positive label per user.")
   @Default.Boolean(true)
   @Validation.Required
-  boolean getStopOnFirstPositiveLabel();
-  void setStopOnFirstPositiveLabel(boolean stopOnFirstPositiveLabel);
+  ValueProvider<Boolean> getStopOnFirstPositiveLabel();
+  void setStopOnFirstPositiveLabel(ValueProvider<Boolean> stopOnFirstPositiveLabel);
 
   @Description("Location to write the BigQuery Facts table.")
   @Validation.Required
-  String getOutputBigQueryFactsTable();
-  void setOutputBigQueryFactsTable(String outputBigQueryFactsTable);
+  ValueProvider<String> getOutputBigQueryFactsTable();
+  void setOutputBigQueryFactsTable(ValueProvider<String> outputBigQueryFactsTable);
 
   @Description("Location to write the BigQuery UserActivity table.")
   @Validation.Required
-  String getOutputBigQueryUserActivityTable();
-  void setOutputBigQueryUserActivityTable(String outputBigQueryUserActivityTable);
+  ValueProvider<String> getOutputBigQueryUserActivityTable();
+  void setOutputBigQueryUserActivityTable(ValueProvider<String> outputBigQueryUserActivityTable);
 }

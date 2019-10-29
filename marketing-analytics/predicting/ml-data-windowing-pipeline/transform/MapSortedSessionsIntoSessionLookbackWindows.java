@@ -18,6 +18,7 @@ import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Session;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.values.KV;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
@@ -29,19 +30,35 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     MapSortedSessionsIntoLookbackWindows {
 
   public MapSortedSessionsIntoSessionLookbackWindows(
-      Instant startTime, Instant endTime,
-      Duration lookbackGapDuration,
-      Duration windowDuration,
-      Duration minimumLookaheadDuration, Duration maximumLookaheadDuration,
-      boolean stopOnFirstPositiveLabel) {
-    super(startTime, endTime, lookbackGapDuration, windowDuration,
-        minimumLookaheadDuration, maximumLookaheadDuration,
-        stopOnFirstPositiveLabel);
+      ValueProvider<String> startTime,
+      ValueProvider<String> endTime,
+      ValueProvider<Long> lookbackGapInSeconds,
+      ValueProvider<Long> windowTimeInSeconds,
+      ValueProvider<Long> minimumLookaheadTimeInSeconds,
+      ValueProvider<Long> maximumLookaheadTimeInSeconds,
+      ValueProvider<Boolean> stopOnFirstPositiveLabel) {
+    super(startTime,
+          endTime,
+          lookbackGapInSeconds,
+          windowTimeInSeconds,
+          minimumLookaheadTimeInSeconds,
+          maximumLookaheadTimeInSeconds,
+          stopOnFirstPositiveLabel);
   }
 
   @ProcessElement
-  // TODO(dabraham): Add tests.
   public void processElement(ProcessContext context) {
+    Instant startTime = DateUtil.parseStartDateStringToInstant(startTimeProvider.get());
+    Instant endTime = DateUtil.parseEndDateStringToInstant(endTimeProvider.get());
+    Duration lookbackGapDuration =
+        Duration.standardSeconds(lookbackGapInSecondsProvider.get());
+    Duration windowDuration = Duration.standardSeconds(windowTimeInSecondsProvider.get());
+    Duration minimumLookaheadDuration =
+        Duration.standardSeconds(minimumLookaheadTimeInSecondsProvider.get());
+    Duration maximumLookaheadDuration =
+        Duration.standardSeconds(maximumLookaheadTimeInSecondsProvider.get());
+    boolean stopOnFirstPositiveLabel = stopOnFirstPositiveLabelProvider.get();
+
     KV<String, List<Session>> kv = context.element();
     String userId = kv.getKey();
     ArrayList<Session> sessions = new ArrayList<>(kv.getValue());
@@ -62,6 +79,9 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     int firstSessionIndex = 0;
     for (int lastSessionIndex = 0; lastSessionIndex < sessions.size(); lastSessionIndex++) {
       Session lastSession = sessions.get(lastSessionIndex);
+      if (!lastSession.getLastHitTime().isBefore(endTime)) {
+        break;
+      }
       Session firstSession = sessions.get(firstSessionIndex);
       while (lastSession.getLastHitTime()
                  .minus(lookbackGapDuration).minus(windowDuration)
@@ -93,4 +113,3 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     }
   }
 }
-

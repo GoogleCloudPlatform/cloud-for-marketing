@@ -28,8 +28,6 @@ import org.apache.beam.sdk.transforms.GroupByKey;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
-import org.joda.time.Duration;
-import org.joda.time.Instant;
 
 /**
  * Outputs a collection of sliding and session-based LookbackWindows for each user. For both
@@ -47,15 +45,6 @@ public class WindowingPipeline {
     WindowingPipelineOptions options =
         PipelineOptionsFactory.fromArgs(args).withValidation().as(WindowingPipelineOptions.class);
     Pipeline pipeline = Pipeline.create(options);
-    Instant startTime = DateUtil.parseStartDateStringToInstant(options.getStartDate());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(options.getEndDate());
-    Duration lookbackGapDuration = Duration.standardSeconds(options.getLookbackGapInSeconds());
-    Duration windowDuration = Duration.standardSeconds(options.getWindowTimeInSeconds());
-    Duration slideDuration = Duration.standardSeconds(options.getSlideTimeInSeconds());
-    Duration minLookaheadDuration =
-        Duration.standardSeconds(options.getMinimumLookaheadTimeInSeconds());
-    Duration maxLookaheadDuration =
-        Duration.standardSeconds(options.getMaximumLookaheadTimeInSeconds());
 
     PCollection<KV<String, List<Session>>> userToSortedSessionList = pipeline
         .apply(AvroIO.read(Session.class).from(options.getInputAvroSessionsLocation()))
@@ -67,9 +56,14 @@ public class WindowingPipeline {
     userToSortedSessionList
         .apply("MapSortedSessionsIntoSlidingLookbackWindows", ParDo.of(
             new MapSortedSessionsIntoSlidingLookbackWindows(
-                startTime, endTime,
-                lookbackGapDuration, windowDuration, slideDuration,
-                minLookaheadDuration, maxLookaheadDuration, options.getStopOnFirstPositiveLabel())))
+                options.getStartDate(),
+                options.getEndDate(),
+                options.getLookbackGapInSeconds(),
+                options.getWindowTimeInSeconds(),
+                options.getSlideTimeInSeconds(),
+                options.getMinimumLookaheadTimeInSeconds(),
+                options.getMaximumLookaheadTimeInSeconds(),
+                options.getStopOnFirstPositiveLabel())))
        .apply(
            AvroIO.write(LookbackWindow.class)
                .to(options.getOutputSlidingWindowAvroPrefix()).withSuffix(".avro"));
@@ -78,8 +72,12 @@ public class WindowingPipeline {
     userToSortedSessionList
         .apply("MapSortedSessionsIntoSessionLookbackWindows", ParDo.of(
             new MapSortedSessionsIntoSessionLookbackWindows(
-                startTime, endTime,
-                lookbackGapDuration, windowDuration, minLookaheadDuration, maxLookaheadDuration,
+                options.getStartDate(),
+                options.getEndDate(),
+                options.getLookbackGapInSeconds(),
+                options.getWindowTimeInSeconds(),
+                options.getMinimumLookaheadTimeInSeconds(),
+                options.getMaximumLookaheadTimeInSeconds(),
                 options.getStopOnFirstPositiveLabel())))
         .apply(
             AvroIO.write(LookbackWindow.class)

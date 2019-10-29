@@ -18,6 +18,7 @@ import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.Validation;
+import org.apache.beam.sdk.options.ValueProvider;
 
 /**
  * The options used to setup a WindowingPipeline.
@@ -26,62 +27,63 @@ public interface WindowingPipelineOptions extends PipelineOptions {
 
   @Description("Location of the input user Sessions in AVRO format.")
   @Validation.Required
-  String getInputAvroSessionsLocation();
-  void setInputAvroSessionsLocation(String inputAvroSessionsLocation);
+  ValueProvider<String> getInputAvroSessionsLocation();
+  void setInputAvroSessionsLocation(ValueProvider<String> inputAvroSessionsLocation);
 
   @Description("Start date in dd/mm/yyyy format.")
-  String getStartDate();
-  void setStartDate(String startDate);
+  ValueProvider<String> getStartDate();
+  void setStartDate(ValueProvider<String> startDate);
 
   @Description("End date in dd/mm/yyyy format.")
-  String getEndDate();
-  void setEndDate(String endDate);
+  ValueProvider<String> getEndDate();
+  void setEndDate(ValueProvider<String> endDate);
 
   @Description("Minimum lookahead time (seconds)")
   @Default.Long(86400L)
   @Validation.Required
-  long getMinimumLookaheadTimeInSeconds();
-  void setMinimumLookaheadTimeInSeconds(long minimumLookaheadTimeInSeconds);
+  ValueProvider<Long> getMinimumLookaheadTimeInSeconds();
+  void setMinimumLookaheadTimeInSeconds(ValueProvider<Long> minimumLookaheadTimeInSeconds);
 
   @Description("Maximum lookahead time (seconds)")
   @Default.Long(604800L)
   @Validation.Required
-  long getMaximumLookaheadTimeInSeconds();
-  void setMaximumLookaheadTimeInSeconds(long maximumLookaheadTimeInSeconds);
+  ValueProvider<Long> getMaximumLookaheadTimeInSeconds();
+  void setMaximumLookaheadTimeInSeconds(ValueProvider<Long> maximumLookaheadTimeInSeconds);
 
   @Description("Lookback gap (seconds). Sessions within the lookback gap before an effective "
                + "date are not added to a LookbackWindow.")
   @Default.Long(86400L)
   @Validation.Required
-  long getLookbackGapInSeconds();
-  void setLookbackGapInSeconds(long lookbackGapInSeconds);
+  ValueProvider<Long> getLookbackGapInSeconds();
+  void setLookbackGapInSeconds(ValueProvider<Long> lookbackGapInSeconds);
 
 
   @Description("Window Length (seconds)")
   @Default.Long(2592000L)
   @Validation.Required
-  long getWindowTimeInSeconds();
-  void setWindowTimeInSeconds(long windowTimeInSeconds);
+  ValueProvider<Long> getWindowTimeInSeconds();
+  void setWindowTimeInSeconds(ValueProvider<Long> windowTimeInSeconds);
 
   @Description("Slide Length (seconds)")
   @Default.Long(86400L)
   @Validation.Required
-  long getSlideTimeInSeconds();
-  void setSlideTimeInSeconds(long slideTimeInSeconds);
+  ValueProvider<Long> getSlideTimeInSeconds();
+  void setSlideTimeInSeconds(ValueProvider<Long> slideTimeInSeconds);
 
   @Description("Set true to stop window generation after the first positive label per user.")
   @Default.Boolean(true)
   @Validation.Required
-  boolean getStopOnFirstPositiveLabel();
-  void setStopOnFirstPositiveLabel(boolean stopOnFirstPositiveLabel);
+  ValueProvider<Boolean> getStopOnFirstPositiveLabel();
+  void setStopOnFirstPositiveLabel(ValueProvider<Boolean> stopOnFirstPositiveLabel);
 
   @Description("Location prefix to write the sliding lookback windows.")
   @Validation.Required
-  String getOutputSlidingWindowAvroPrefix();
-  void setOutputSlidingWindowAvroPrefix(String outputSlidingWindowAvroPrefix);
+  ValueProvider<String> getOutputSlidingWindowAvroPrefix();
+  void setOutputSlidingWindowAvroPrefix(ValueProvider<String> outputSlidingWindowAvroPrefix);
 
   @Description("Location prefix to write the session-based lookback windows.")
   @Validation.Required
-  String getOutputSessionBasedWindowAvroPrefix();
-  void setOutputSessionBasedWindowAvroPrefix(String outputSessionBasedWindowAvroPrefix);
+  ValueProvider<String> getOutputSessionBasedWindowAvroPrefix();
+  void setOutputSessionBasedWindowAvroPrefix(
+      ValueProvider<String> outputSessionBasedWindowAvroPrefix);
 }

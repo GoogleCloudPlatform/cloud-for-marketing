@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline;
+package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.transform;
 
 import java.time.Duration;
 import java.time.LocalDate;

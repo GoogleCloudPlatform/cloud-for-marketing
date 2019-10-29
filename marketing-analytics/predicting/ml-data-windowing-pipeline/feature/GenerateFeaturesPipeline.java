@@ -50,7 +50,6 @@ import org.apache.beam.sdk.values.PCollectionView;
  */
 public class GenerateFeaturesPipeline {
 
-  public static final String AVRO_FILES_SUFFIX = "-*.avro";
   public static final String INTEGER = "INTEGER";
   public static final String STRING = "STRING";
   public static final String BOOL = "BOOL";
@@ -123,6 +122,9 @@ public class GenerateFeaturesPipeline {
                         schemas.add(KV.of("userId", STRING));
                         schemas.add(KV.of("startTime", INTEGER));
                         schemas.add(KV.of("endTime", INTEGER));
+                        schemas.add(KV.of("effectiveDate", "DATETIME"));
+                        schemas.add(KV.of("effectiveDateWeekOfYear", STRING));
+                        schemas.add(KV.of("effectiveDateMonthOfYear", STRING));
                         schemas.add(KV.of("predictionLabel", BOOL));
                         return schemas;
                       }
@@ -136,7 +138,7 @@ public class GenerateFeaturesPipeline {
         .apply(
             "Read Windowed Avro Facts",
             AvroIO.read(LookbackWindow.class)
-                .from(options.getWindowedAvroLocationPrefix() + AVRO_FILES_SUFFIX))
+                .from(options.getWindowedAvroLocation()))
         .apply(
             "Extract Features",
             ParDo.of(new ExtractFeatureFn(factory, accumulatorOptionsView))

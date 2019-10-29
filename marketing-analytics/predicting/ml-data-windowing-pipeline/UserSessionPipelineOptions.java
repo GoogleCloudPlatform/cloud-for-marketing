@@ -17,6 +17,7 @@ package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipelin
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.Validation;
+import org.apache.beam.sdk.options.ValueProvider;
 
 /**
  * The options used to setup a UserSessionPipeline.
@@ -24,29 +25,21 @@ import org.apache.beam.sdk.options.Validation;
 public interface UserSessionPipelineOptions extends PipelineOptions {
   @Description("Input BigQuery SQL command for extracting GA Sessions columns.")
   @Validation.Required
-  String getInputBigQuerySQL();
-  void setInputBigQuerySQL(String inputBigQuerySQL);
-
-  @Description("Start date in dd/mm/yyyy format.")
-  String getStartDate();
-  void setStartDate(String startDate);
-
-  @Description("End date (not inclusive) in dd/mm/yyyy format.")
-  String getEndDate();
-  void setEndDate(String endDate);
+  ValueProvider<String> getInputBigQuerySQL();
+  void setInputBigQuerySQL(ValueProvider<String> inputBigQuerySQL);
 
   @Description("Name of the Fact with the prediction target.")
   @Validation.Required
-  String getPredictionFactName();
-  void setPredictionFactName(String predictionFactName);
+  ValueProvider<String> getPredictionFactName();
+  void setPredictionFactName(ValueProvider<String> predictionFactName);
 
   @Description("Comma separated list of target values for the prediction Fact.")
   @Validation.Required
-  String getPredictionFactValues();
-  void setPredictionFactValues(String predictionFactValues);
+  ValueProvider<String> getPredictionFactValues();
+  void setPredictionFactValues(ValueProvider<String> predictionFactValues);
 
   @Description("Location prefix to write all user Sessions in AVRO format.")
   @Validation.Required
-  String getOutputSessionsAvroPrefix();
-  void setOutputSessionsAvroPrefix(String outputSessionsAvroPrefix);
+  ValueProvider<String> getOutputSessionsAvroPrefix();
+  void setOutputSessionsAvroPrefix(ValueProvider<String> outputSessionsAvroPrefix);
 }
