@@ -69,8 +69,3 @@ exports.Spreadsheets = require('./spreadsheets.js');
  */
 exports.doubleclicksearch = require('./doubleclick_search.js');
 
-/**
- * APIs integration class for BigQuery.
- * @const {{BigQuery:!BigQuery}}
- */
-exports.bigquery = require('./bigquery.js');
