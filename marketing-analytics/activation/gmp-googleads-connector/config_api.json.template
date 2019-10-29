@@ -10,7 +10,7 @@
           "quantity": 1
         },
         "customVariables": [
-          "U2"
+          "[YOUR-U-VARIABLES-NAME-1]", "[YOUR-U-VARIABLES-NAME-2]"
         ],
         "encryptionInfo": {
           "encryptionEntityId": "[YOUR-ENCRYPTION-ID]",
@@ -63,6 +63,25 @@
         },
         "delimiter": ","
       }
+    }
+  },
+  "SA": {
+    "bar": {
+      "saConfig": {
+        "currencyCode": "[YOUR-CURRENCY-CODE]",
+        "type": "TRANSACTION",
+        "segmentationType": "FLOODLIGHT",
+        "segmentationId": "[YOUR-SEGMENTATION-ID]",
+        "state": "ACTIVE"
+      },
+      "availabilities": [
+        {
+          "agencyId": "[YOUR-AGENCY-ID]",
+          "advertiserId": "[YOUR-ADVERTISER-ID]",
+          "segmentationType": "FLOODLIGHT",
+          "segmentationId": "[YOUR-SEGMENTATION-ID]"
+        }
+      ]
     }
   }
 }

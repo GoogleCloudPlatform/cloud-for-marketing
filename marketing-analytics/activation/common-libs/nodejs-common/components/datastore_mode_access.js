@@ -110,10 +110,19 @@ class DatastoreModeAccess {
   }
 
   /** @override */
-  getAll() {
-    const query = this.datastore.createQuery(this.namespace, this.kind);
+  queryObjects(filters, order, limit, offset) {
+    let query = this.datastore.createQuery(this.namespace, this.kind);
+    if (filters) {
+      filters.forEach((filter) => {
+        query =
+            query.filter(filter.property, filter.operator || '=', filter.value);
+      });
+    }
+    if (order) query = query.order(order.name, {descending: order.desc});
+    if (limit) query = query.limit(limit);
+    if (offset) query = query.offset(offset);
     const promise = new Promise((resolve, reject) => {
-      const result = {};
+      const result = [];
       this.datastore.runQueryStream(query)
           .on('error',
               (error) => {
@@ -123,11 +132,11 @@ class DatastoreModeAccess {
           .on('data',
               (entity) => {
                 const key = entity[this.datastore.KEY];
-                result[key.path[1]] = entity;
+                result.push({id: key.path[1], entity: entity});
               })
           .on('info',
               (info) => {
-                console.log(`Info event: ${info}`);
+                console.log(`Info event: ${JSON.stringify(info)}`);
               })
           .on('end', () => {
             resolve(result);

@@ -19,6 +19,7 @@
 'use strict';
 
 exports.api = require('./apis/index.js');
+exports.base = require('./base/base_dao.js');
 exports.CloudFunctionsUtils = require('./components/cloudfunctions_utils.js');
 exports.FirestoreAccessBase = require('./components/firestore_access_base.js');
 exports.DatastoreModeAccess = require('./components/datastore_mode_access.js');

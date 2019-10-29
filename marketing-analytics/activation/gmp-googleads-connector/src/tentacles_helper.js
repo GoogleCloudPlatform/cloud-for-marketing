@@ -20,7 +20,6 @@
 
 const path = require('path');
 const {
-  api: {CloudPlatformApis: {CloudPlatformApis}},
   PubSubUtils,
   StorageUtils,
   FirestoreAccessBase: {DataSource, isNativeMode},
@@ -52,26 +51,6 @@ exports.fixKeyFilePath = () => {
     }
     console.log(`API_SERVICE_ACCOUNT: ${process.env['API_SERVICE_ACCOUNT']}`);
   }
-};
-
-/**
- * Checks whether the permissions are granted for current authentication. Exits
- * with status code 1 if any permission is not granted to current operator.
- * @param {!Array<string>} permissions Array of permissions to check.
- * @return {!Promise<void>}
- */
-exports.checkPermissions = (permissions) => {
-  const cloudPlatformApis = new CloudPlatformApis();
-  return cloudPlatformApis.testIamPermissions(permissions)
-      .then((grantedPermissions) => {
-        if (grantedPermissions.length < permissions.length) {
-          const missedPermissions = permissions.filter((permission) => {
-            return grantedPermissions.indexOf(permission) === -1;
-          });
-          console.error(`[MISSED] ${missedPermissions.join(',')}.`);
-          process.exit(1);
-        }
-      });
 };
 
 /**
@@ -183,7 +162,7 @@ exports.localApiRequester = (file, bucket = undefined) => {
   console.log(`Test file [${file}] has attributes:`, attributes);
   const getMessageData = new Promise((resolve, reject) => {
     if (attributes.gcs === 'true') {
-      console.log(`API[${attributes.api} is GCS based...`);
+      console.log(`API[${attributes.api}] is GCS based...`);
       if (bucket) {
         console.log(`... and this test is set on GCS file`);
         const storageUtils = new StorageUtils(bucket, file);

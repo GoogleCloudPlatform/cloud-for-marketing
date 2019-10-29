@@ -59,3 +59,18 @@ exports.CloudPlatformApis = require('./cloud_platform_apis.js');
  * }}
  */
 exports.Spreadsheets = require('./spreadsheets.js');
+
+/**
+ * APIs integration class for DoubleClick Search Ads.
+ * @const {{
+ *   InsertConversionsConfig:!InsertConversionsConfig,
+ *   DoubleClickSearch:!DoubleClickSearch,
+ * }}
+ */
+exports.doubleclicksearch = require('./doubleclick_search.js');
+
+/**
+ * APIs integration class for BigQuery.
+ * @const {{BigQuery:!BigQuery}}
+ */
+exports.bigquery = require('./bigquery.js');

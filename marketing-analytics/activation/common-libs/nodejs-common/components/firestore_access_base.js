@@ -41,6 +41,22 @@ let Transaction;
 exports.Transaction = Transaction;
 
 /**
+ * Query filter definition. Though the default operator is 'equals', Firestore
+ * and Datastore have different operation symbols and requests. Check the
+ * documents for details:
+ * Datastore see:
+ * https://cloud.google.com/nodejs/docs/reference/datastore/2.0.x/Query#filter
+ * Firestore see: https://cloud.google.com/firestore/docs/query-data/get-data
+ * @typedef {{
+ *   property:string,
+ *   value:!object,
+ *   operator:(string|undefined),
+ * }}
+ */
+let Filter;
+exports.Filter = Filter;
+
+/**
  * Types of data source.
  * @enum {string}
  */
@@ -99,10 +115,19 @@ class FirestoreAccessBase {
   deleteObject(id) {}
 
   /**
-   * Returns all documents under the collection or entities of this kind.
-   * @return {!Promise<{string:!Entity}>} The documents or entitis.
+   * Returns all matched document/entity with the given filter conditions.
+   * @param {!Array<!Filter>|undefined} filters Conditions to filter the list.
+   * @param {{name:string, desc:(boolean|undefined)}|undefined} order Sort the
+   * results by a property name in ascending or descending order. By default, an
+   * ascending sort order will be used which is the Datastore's client library's
+   * default behavior. See:
+   * https://googleapis.dev/nodejs/datastore/latest/Query.html#order
+   * @param {number|undefined} limit A limit on a query.
+   * @param {number|undefined} offset An offset on a query.
+   * @return {!Array<{id:(string|number),entity:!Entity}>} The documents or
+   *     entities.
    */
-  getAll() {}
+  queryObjects(filters, order, limit, offset) {}
 
   /**
    * Run the given function within a transaction. The given function needs to

@@ -59,6 +59,18 @@ class StorageUtils {
   }
 
   /**
+   * Lists the files with the given prefix.
+   * @param {string=} prefix The file name prefix.
+   * @return {!Promise<!Array<string>>}
+   */
+  listFiles(prefix = this.fileName) {
+    const options = {prefix: prefix, delimiter: '/'};
+    return this.bucket.getFiles(options).then(
+        ([files]) => files.map((file) => file.name)
+    );
+  }
+
+  /**
    * Loads the content of GCS file with given start and end positions.
    *
    * @param {number=} start Start position, default 0.

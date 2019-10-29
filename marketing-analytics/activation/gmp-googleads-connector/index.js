@@ -21,8 +21,10 @@
 
 'use strict';
 
-const {FirestoreAccessBase: {DataSource, isNativeMode}} =
-    require('nodejs-common');
+const {
+  FirestoreAccessBase: {DataSource, isNativeMode},
+  utils: {checkPermissions},
+} = require('nodejs-common');
 const {Tentacles, getAttributes, TransportResult} =
     require('./src/tentacles.js');
 const {fixKeyFilePath} = require('./src/tentacles_helper.js');
@@ -34,6 +36,7 @@ Object.assign(exports, require('./src/tentacles_helper.js'));
 Object.assign(exports, {
   Tentacles: Tentacles,
   getAttributes: getAttributes,
+  checkPermissions: checkPermissions,
 });
 
 /** Fixes the service key file location's value in environment variable. */
@@ -46,18 +49,15 @@ fixKeyFilePath();
  */
 const getTentacles = () => {
   if (!process.env['TENTACLES_TOPIC_PREFIX']) {
-    return Promise.reject('Fail to find ENV variables TENTACLES_TOPIC_PREFIX');
+    console.warn(
+        'Fail to find ENV variables TENTACLES_TOPIC_PREFIX, will set as `tentacles`');
   }
-  if (!process.env['TENTACLES_OUTBOUND']) {
-    return Promise.reject('Fail to find ENV variables TENTACLES_OUTBOUND');
-  }
+  const topicPrefix = process.env['TENTACLES_TOPIC_PREFIX'] || 'tentacles';
   return isNativeMode()
-      .then((nativeMode) => {
-        return (nativeMode) ? DataSource.FIRESTORE : DataSource.DATASTORE;
-      })
       .then(
-          (datasource) =>
-              new Tentacles(process.env['TENTACLES_TOPIC_PREFIX'], datasource));
+          (nativeMode) =>
+              (nativeMode) ? DataSource.FIRESTORE : DataSource.DATASTORE)
+      .then((datasource) => new Tentacles(topicPrefix, datasource));
 };
 
 /**
@@ -70,9 +70,14 @@ const getTentacles = () => {
  *     'transport'.
  */
 exports.initiate = (...arg) => {
+  if (!process.env['TENTACLES_OUTBOUND']) {
+    console.warn(
+        'Fail to find ENV variables TENTACLES_OUTBOUND, will set as `outbound/`');
+  }
+  const monitorFolder = process.env['TENTACLES_OUTBOUND'] || 'outbound/';
   const tentaclesRequest = getTentacles();
   return tentaclesRequest.then((tentacles) => {
-    const initiator = tentacles.getInitiator(process.env['TENTACLES_OUTBOUND']);
+    const initiator = tentacles.getInitiator(monitorFolder);
     return initiator(...arg);
   });
 };

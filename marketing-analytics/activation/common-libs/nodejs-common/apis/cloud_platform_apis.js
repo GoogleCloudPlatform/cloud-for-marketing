@@ -52,8 +52,7 @@ class CloudPlatformApis {
         version: 'v1',
         auth: auth,
       });
-      const projectId = (auth.projectId) ? auth.projectId :
-                                           process.env['GOOGLE_CLOUD_PROJECT'];
+      const projectId = auth.projectId || process.env['GCP_PROJECT'];
       const request = {
         resource_: projectId,
         resource: {permissions: permissions},
@@ -75,8 +74,7 @@ class CloudPlatformApis {
         version: 'v1',
         auth: auth,
       });
-      const projectId = (auth.projectId) ? auth.projectId :
-                                           process.env['GOOGLE_CLOUD_PROJECT'];
+      const projectId = auth.projectId || process.env['GCP_PROJECT'];
       const request = {name: `projects/${projectId}`};
       return cloudfunctions.projects.locations.list(request).then(
           (response) => {
