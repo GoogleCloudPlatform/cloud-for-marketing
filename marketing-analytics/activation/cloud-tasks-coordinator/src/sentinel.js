@@ -30,7 +30,8 @@ const {
 } = require('nodejs-common');
 const {TaskConfigDao, TaskType, BigQueryTableConfig} = require(
     './dao/task_config_dao.js');
-const {TaskLogDao, TaskLogStatus} = require('./dao/task_log_dao.js');
+const {TaskLogStatus} = require('./task_log_impl/task_log_dao.js');
+const {getTaskLogDao} = require('./task_log.js');
 const {LoadTask} = require('./tasks/load_task.js');
 const {QueryTask} = require('./tasks/query_task.js');
 const {PredictTask} = require('./tasks/predict_task.js');
@@ -57,7 +58,8 @@ class Sentinel {
     /** @const {!Logger} */
     this.logger = getLogger('S.MAIN');
     this.taskConfigDao = new TaskConfigDao();
-    this.taskLogDao = new TaskLogDao();
+    const dataSource = process.env['FIRESTORE_TYPE'];
+    this.taskLogDao = getTaskLogDao(dataSource);
   }
 
   getStorageMonitor(inbound) {
@@ -291,27 +293,33 @@ class Sentinel {
    */
   completeTaskJob(taskLog, taskLogId) {
     this.logger.debug(`Start to finish task ${taskLogId}`);
-    return this.taskLogDao.merge({
+    const mergedTaskLog = Object.assign({}, taskLog, {
       finishTime: new Date(),
       status: TaskLogStatus.FINISHED,
-    }, taskLogId).then(() => {
-      return this.taskConfigDao.load(taskLog.taskId).then((taskConfig) => {
-        if (taskConfig.next) {
-          const nextTasks = (typeof taskConfig.next === 'string') ?
-              taskConfig.next.split(',') : taskConfig.next;
-          return Promise.all(nextTasks.map((taskId) => {
-            const attributes = {
-              taskId: taskId.trim(),
-              previousJobId: taskLogId,
-            };
-            const parameters = taskLog.parameters || "{}";
-            console.log(`Trigger next: ${taskId}`);
-            return publish(this.getStartTopicName_(), parameters,
-                attributes);
-          }));
-        }
-      });
     });
+    return this.taskLogDao.finishTask(taskLogId, mergedTaskLog).then(
+        (finishResult) => {
+          if (!finishResult) {
+            console.log(`Fail to finish the taskLog [${taskLogId}]. Quit.`);
+            return;
+          }
+          return this.taskConfigDao.load(taskLog.taskId).then((taskConfig) => {
+            if (taskConfig.next) {
+              const nextTasks = (typeof taskConfig.next === 'string') ?
+                  taskConfig.next.split(',') : taskConfig.next;
+              return Promise.all(nextTasks.map((taskId) => {
+                const attributes = {
+                  taskId: taskId.trim(),
+                  previousJobId: taskLogId,
+                };
+                const parameters = taskLog.parameters || "{}";
+                console.log(`Trigger next: ${taskId}`);
+                return publish(this.getStartTopicName_(), parameters,
+                    attributes);
+              }));
+            }
+          });
+        });
   }
 
   /**
@@ -334,34 +342,32 @@ class Sentinel {
         console.log('Get init parameters: ', parametersStr);
       }
       const parameters = parametersStr ? JSON.parse(parametersStr) : {};
-      return this.taskLogDao.load(messageId).then((taskLog) => {
-        if (taskLog) {
-          console.warn(`Task Log ${messageId} exists. Duplicated? Quit.`);
+      const newTaskLog = Object.assign({
+        createTime: new Date(),
+        status: TaskLogStatus.INITIAL,
+        parameters: parametersStr,
+      }, attributes);
+      const newTaskId = messageId;
+      return this.taskLogDao.startTask(newTaskId, newTaskLog).then((started) => {
+        if (!started) {
+          console.warn(`Task Log ${newTaskId} exists. Duplicated? Quit.`);
           return;
         }
-        const newTaskLog = Object.assign({
-          createTime: new Date(),
-          status: TaskLogStatus.INITIAL,
-          parameters: parametersStr,
-        }, attributes);
-        return this.taskLogDao.update(newTaskLog, messageId).then(
-            (taskLogId) => {
-              console.log('start task job', taskLogId);
-              return this.startJobForTask(attributes.taskId, parameters).then(
-                  (jobId) => {
-                    return this.taskLogDao.merge({
-                      jobId: jobId,
-                      startTime: new Date(),
-                      status: TaskLogStatus.STARTED,
-                    }, taskLogId);
-                  }).catch((error) => {
-                return this.taskLogDao.merge({
-                  finishTime: new Date(),
-                  status: TaskLogStatus.ERROR,
-                  error: error.message,
-                }, taskLogId);
-              });
-            });
+        return this.startJobForTask(attributes.taskId, parameters).then(
+            (jobId) => {
+              console.log(`Job ID: ${jobId}`);
+              return this.taskLogDao.merge({
+                jobId: jobId,
+                startTime: new Date(),
+                status: TaskLogStatus.STARTED,
+              }, newTaskId);
+            }).catch((error) => {
+          return this.taskLogDao.merge({
+            finishTime: new Date(),
+            status: TaskLogStatus.ERROR,
+            error: error.message,
+          }, newTaskId);
+        });
       }).catch((error) => {
         console.log(error);
       });

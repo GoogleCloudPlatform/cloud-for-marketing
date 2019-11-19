@@ -90,8 +90,8 @@ emulate_cloud_shell() {
       if [[ -f "${CONFIG_FILE}" ]]; then
         target_project=$(get_value_from_json_file "${CONFIG_FILE}" 'PROJECT_ID')
       else
-        printf '%s' "Can't find ${CONFIG_FILE}, please input Cloud Project ID: \
-[${current_project}] "
+        printf '%s' "Can't find ${CONFIG_FILE}. Enter your Google Cloud \
+project ID: [${current_project}]"
         local project
         read -r project
         project=${project:-"${current_project}"}
@@ -99,7 +99,7 @@ emulate_cloud_shell() {
       fi
       if [[ -n ${current_project} && \
 ${current_project} != "${target_project}" ]];then
-        printf '%s' "Set the GCP to [${target_project}].... "
+        printf '%s' "Setting the Google Cloud project to [${target_project}]..."
         gcloud config set project "${target_project}"
         if [[ $? -gt 0 ]]; then
           continue
@@ -130,30 +130,10 @@ EOF
 check_authentication() {
   local permissions=("datastore.databases.get" "datastore.entities.create")
   node -e "require('./index.js').checkPermissions(process.argv.slice(1))" \
-"${permissions[@]}" 1>/dev/null
+"${permissions[@]}"  > /dev/null 2>&1
   if [[ $? -gt 0 ]]; then
-    printf '%s\n' "  Current auth doesn't have enough permissions."
-    if [[ -f "./tests/keys/${GCP_PROJECT}.key.json" ]];then
-      printf '%s' "  Find default ADC key file and try again..."
-      export GOOGLE_APPLICATION_CREDENTIALS=\
-"./tests/keys/${GCP_PROJECT}.key.json"
-      node -e "require('./index.js').checkPermissions(process.argv.slice(1))" \
-"${permissions[@]}" 1>/dev/null
-      if [[ $? -eq 0 ]]; then
-        printf '%s\n' "succeeded!"
-        return 0
-      else
-        printf '%s\n' "failed."
-      fi
-    fi
-    cat <<EOF
-Current shell is not in a Cloud Shell and there is no available key file.
-  Note: In local mode, 'GOOGLE_APPLICATION_CREDENTIALS' is expected in \
-environment variables. Also, make sure the service account related has enough \
-permissions.
-
-Quit now.
-EOF
+    echo "  As the current user, you don't have enough permissions to update \
+Firestore. After you're granted the 'Cloud Datastore User' role, try again."
     return 1
   fi
   return 0
@@ -171,9 +151,10 @@ EOF
 ##   None
 ########################################
 load_config() {
-  printf '%s\n' "Project name suffix '${PROJECT_NAME}'"
+  printf '%s\n' "Project name suffix is '${PROJECT_NAME}'."
   if [[ -f "${CONFIG_FILE}" ]]; then
-    printf '%s\n' "Find configuration file '${CONFIG_FILE}', loading ..."
+    printf '%s\n' "Found configuration file '${CONFIG_FILE}'. Loading the \
+file..."
     local i value key
     for i in "${!CONFIG_ITEMS[@]}"; do
       value=$(get_value_from_json_file "${CONFIG_FILE}" "${CONFIG_ITEMS[$i]}")
@@ -181,13 +162,14 @@ load_config() {
       declare -g "${key}=${value}"
       printf '%s\n' "  ${key} = ${!key}"
     done
-    printf '%s\n\n' "Note: values can be changed during installation process."
+    printf '%s\n\n' "Configuration values can be changed during the \
+installation process."
   fi
 	export GCP_PROJECT=$(gcloud config get-value project)
 }
 
 #######################################
-# Check the environment is in Cloud Shell environment or not.
+# Check whether the environment is in Cloud Shell.
 # Globals:
 #   CLOUD_SHELL
 # Arguments:
@@ -197,18 +179,18 @@ load_config() {
 #######################################
 check_in_cloud_shell() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Check the environment..."
+  printf '%s\n' "Step ${STEP}: Checking to see if you're using Cloud Shell..."
   cat <<EOF
-  Rational: The process will require lots of operation on Google Cloud Project.\
-Doing this in a Cloud Shell is easier by leveraging the ready tools and \
-avoiding authentication issues.
+  We require Cloud Shell for this installation because many Google Cloud \
+processes are part of this installation. Cloud Shell leverages current tools \
+and might avoid authorization issues.
 EOF
   if [[ ${CLOUD_SHELL} != 'true' ]];then
-    printf '%s\n' "[Failed] It looks like we are not in a Cloud Shell. For \
-more information, see: https://cloud.google.com/shell/"
+    printf '%s\n' "Check failed. Use Cloud Shell for this installation. See \
+https://cloud.google.com/shell/ for more information."
     return 1
   else
-    printf '%s\n' "[OK] Great. It looks like we are in a Cloud Shell."
+    printf '%s\n' "OK. You're using Cloud Shell."
     return 0
   fi
 }
@@ -224,7 +206,7 @@ more information, see: https://cloud.google.com/shell/"
 #######################################
 prepare_dependencies() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Prepare dependency libraries..."
+  printf '%s\n' "Step ${STEP}: Preparing dependency libraries..."
   mkdir -p libs
   npm run prepare -s
   local flag=$?
@@ -233,16 +215,18 @@ prepare_dependencies() {
   npm install -s
   flag=$(( $?+flag ))
   if [[ ${flag} -gt 0 ]];then
-    printf '%s\n' "[Failed] Fail to install dependencies."
+    echo "Failed to install dependencies. Try to run the script again. If you \
+still get errors, report the issue to \
+https://github.com/GoogleCloudPlatform/cloud-for-marketing/issues."
     return 1
   else
-    printf '%s\n' "[OK] Great. All dependencies are ready."
+    printf '%s\n' "OK. All dependencies are ready."
     return 0
   fi
 }
 
 #######################################
-# Confirm the Cloud Project
+# Confirm the Google Cloud project.
 # Globals:
 #   GCP_PROJECT
 # Arguments:
@@ -252,28 +236,28 @@ prepare_dependencies() {
 #######################################
 confirm_project() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Confirm Google Cloud Project (GCP) ..."
+  printf '%s\n' "Step ${STEP}: Confirming the Google Cloud project..."
   while :; do
-    printf '%s' "Input the Project ID of GCP that is going to install \
-[${GCP_PROJECT}]:"
+    printf '%s' "Enter the ID for the Google Cloud project where you want \
+Tentacles installed: [${GCP_PROJECT}]"
     local input result
     read -r input
     input=${input:-"${GCP_PROJECT}"}
     result=$(gcloud config set project "${input}" --user-output-enabled=false \
 2>&1)
     if [[ -z ${result} ]]; then
-      printf '%s\n' "[OK] Continue installation in [${input}]."
+      printf '%s\n' "OK. Continuing installation in [${input}]..."
       GCP_PROJECT="${input}"
 			export GCP_PROJECT=$(gcloud config get-value project)
       return 0
     else
-      printf '%s\n' "  [Failed] ${result}"
+      printf '%s\n' "  Installation failed. Reason: ${result}"
     fi
   done
 }
 
 #######################################
-# Confirm and set env variable for the Region for Cloud Functions.
+# Confirm and set env variable for the region for Cloud Functions.
 # Globals:
 #   PROJECT_NAME
 #   REGION
@@ -282,19 +266,21 @@ confirm_project() {
 #######################################
 confirm_region() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Select the region to deploy ${PROJECT_NAME}..."
+  printf '%s\n' "Step ${STEP}: Select the region to use for deploying \
+${PROJECT_NAME}."
   cat <<EOF
-This solution is based on Cloud Functions and Cloud Storage. Please select the \
-region to deploy based on your requirement. Same region is suggested here for \
-Cloud Functions and Cloud Storage for the interests of latency and pricing.
-For more information, see: https://cloud.google.com/functions/docs/locations
+This solution uses Cloud Functions and Cloud Storage. Based on your \
+requirements, select the region to use for deployment. Because of latency and \
+pricing considerations, we recommend you use the same region for Cloud \
+Functions and Cloud Storage. See \
+https://cloud.google.com/functions/docs/locations/ for more information.
 EOF
   set_region
-  printf '%s\n' "[ok] Will deploy to ${REGION}."
+  printf '%s\n' "OK. ${REGION} will be used for deployment."
 }
 
 #######################################
-# Set the env variable 'REGION' as the Cloud Functions deploy target.
+# Set the env variable 'REGION' as the deploy target for Cloud Functions.
 # Globals:
 #   PROJECT_NAME
 #   REGION
@@ -321,8 +307,8 @@ ${exist_region}."
       for i in "${!exist_functions[@]}"; do
         printf '  %s\n' "${exist_functions[$i]}"
       done
-      printf '%s' "Would you like to continue update those Cloud Functions in \
-region '${exist_region}'? [Y/n]:"
+      printf '%s' "Would you like to continue updating related Cloud Functions \
+in the region '${exist_region}'? [Y/n]: "
       local continue
       read -r continue
       continue=${continue:-"Y"}
@@ -330,8 +316,8 @@ region '${exist_region}'? [Y/n]:"
         region=${exist_region}
         break
       else
-        printf '%s' "If you want to deploy to other regions, current Cloud \
-Functions will be deleted, Confirm? [N/y]:"
+        printf '%s' "Deploying to other regions deletes existing Cloud \
+Functions for that region. Do you want to continue? [N/y]: "
         local confirm_delete
         read -r confirm_delete
         if [[ ${confirm_delete} = "Y" || ${confirm_delete} = "y" ]]; then
@@ -348,8 +334,8 @@ Functions will be deleted, Confirm? [N/y]:"
         fi
       fi
     else
-      printf '%s\n' "Following are available regions for Cloud Functions. \
-Please select the region to deploy:"
+      printf '%s\n' "Select from the following regions for deploying Cloud \
+Functions:"
       select region in "${locations[@]}"; do
         if [[ " ${locations[@]} " =~ " ${region} " ]]; then
           break 2
@@ -361,20 +347,21 @@ Please select the region to deploy:"
 }
 
 #######################################
-# Check whether current operator has enough permissions to install.
+# Check whether the current operator has enough permissions to complete the
+# installation.
 # Globals:
 #   GOOGLE_CLOUD_PERMISSIONS
 # Arguments:
 #   None
 # Returns:
-#   0 if all permissions are granted, 1 on not.
+#   0 if all permissions are granted, 1 if not.
 #######################################
 check_permissions() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Check current operator's access..."
+  printf '%s\n' "Step ${STEP}: Checking current user's access..."
   local role error
   for role in "${!GOOGLE_CLOUD_PERMISSIONS[@]}"; do
-    printf '%s'  "  Check permissions for ${role}... "
+    printf '%s'  "  Checking permissions for ${role}... "
     local permissions
     permissions=(${GOOGLE_CLOUD_PERMISSIONS[${role}]})
     node -e "require('./index.js').checkPermissions(process.argv.slice(1))" \
@@ -388,16 +375,17 @@ check_permissions() {
       printf '%s\n' " ${message}."
   done
   if [[ ${error} -gt 0 ]]; then
-    printf '%s\n' "[Failed] Failed to pass permission check."
+    printf '%s\n' "Permissions check failed."
     return 1
   else
-    printf '%s\n' "[OK] Passed permissions check for Project [${GCP_PROJECT}]."
+    echo "OK. Permissions check passed for Google Cloud project \
+[${GCP_PROJECT}]."
     return 0
   fi
 }
 
 #######################################
-# Enable Apis in Cloud project.
+# Enable APIs in Google Cloud project.
 # Globals:
 #   GOOGLE_CLOUD_APIS
 # Arguments:
@@ -407,10 +395,10 @@ check_permissions() {
 #######################################
 enable_apis() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Enable necessary components..."
+  printf '%s\n' "Step ${STEP}: Enabling necessary components..."
   local error=0 api single_api
   for api in "${!GOOGLE_CLOUD_APIS[@]}"; do
-    printf '%s' "Enable ${GOOGLE_CLOUD_APIS[${api}]}... "
+    printf '%s' "Enabling ${GOOGLE_CLOUD_APIS[${api}]}... "
     for single_api in ${api}; do
       gcloud services enable "${single_api}" 2>/dev/null
       if [[ $? -gt 0 ]]; then
@@ -423,16 +411,17 @@ enable_apis() {
     done
   done
   if [[ ${error} -gt 0 ]]; then
-    printf '%s\n' "[Failed] Failed to enable some APIs."
+    printf '%s\n' "Enabling some APIs failed."
     return 1
   else
-    printf '%s\n' "[OK] APIs are enabled for Project [${GCP_PROJECT}]."
+    printf '%s\n' "OK. APIs are enabled for Google Cloud project \
+[${GCP_PROJECT}]."
     return 0
   fi
 }
 
 #######################################
-# Confirm or create a Storage bucket for this project.
+# Confirm or create a Cloud Storage bucket for this project.
 # Globals:
 #   GCS_BUCKET
 #   GCP_PROJECT
@@ -444,13 +433,14 @@ enable_apis() {
 #######################################
 create_bucket() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Input a Storage Bucket name..."
+  printf '%s\n' "Step ${STEP}: Entering a Cloud Storage Bucket name..."
   cat <<EOF
-  Rationale: This solution will monitor the new files incoming to this Bucket. \
-This kind of event driven architecture can reduce the interval between \
-scheduled checks as well as simplify the solution.
-  For more, see https://cloud.google.com/functions/docs/calling/storage
-  You can use existent bucket or create a new one here.
+  This solution checks for new files added to this bucket. Event-driven \
+architecture like this reduces the interval between scheduled checks and \
+simplifies the solution. See \
+https://cloud.google.com/functions/docs/calling/storage for more information.
+
+You can use an existing bucket or create a new one here.
 EOF
 #  generate default Bucket name
   local default_bucket_name
@@ -460,34 +450,37 @@ EOF
   local all_buckets
   all_buckets="$(gsutil ls)";
   while :; do
-    printf '%s' "Please input the Cloud Storage Bucket Name[${GCS_BUCKET}]:"
+    printf '%s' "Enter the name of your existing Cloud Storage bucket \
+[${GCS_BUCKET}]: "
     local bucket
     read -r bucket
     bucket=${bucket:-$GCS_BUCKET}
     local bucket_str="gs://${bucket}/"
     if [[ ${all_buckets} == *"${bucket_str}"* ]]; then
-      printf '%s\n' "Great. The Bucket [${bucket}] exists in current \
-project[${GCP_PROJECT}]."
+      printf '%s\n' "OK. The bucket [${bucket}] exists in your current \
+project, [${GCP_PROJECT}]."
       GCS_BUCKET=${bucket}
       break
     fi
-    printf '%s' "  Check the existence of Bucket [$bucket]..."
+    printf '%s\n' "  Checking the existence of Cloud Storage bucket \
+[$bucket]..."
     local result
     result="$(gsutil ls -p "${GCP_PROJECT}" "${bucket_str}" 2>&1)"
     if [[ ${result} =~ .*(BucketNotFoundException: 404 ).* ]]; then
-      printf '%s\n' " not existent. Continue to create Bucket."
+      printf '%s\n' "  [$bucket] doesn't exist. Continuing to create the \
+bucket..."
       if [[ -n ${REGION} ]]; then
-        printf '%s' "Would you like to create the Storage Bucket at \
-'${REGION}'? [Y/n]:"
+        printf '%s' "Would you like to create the Cloud Storage bucket \
+[$bucket] at '${REGION}'? [Y/n]: "
         local user_region
         read -r user_region
         user_region=${user_region:-"Y"}
         if [[ ${user_region} = "Y" || ${user_region} = "y" ]]; then
-          printf '%s\n' "  Try to create the Bucket [${bucket}] at ${REGION}..."
+          printf '%s\n' "  Attempting to create the bucket [${bucket}] at \
+${REGION}..."
           gsutil mb -c REGIONAL -l "${REGION}" "${bucket_str}"
           if [[ $? -gt 0 ]]; then
-            printf '%s\n' "Fail to create Bucket named ${bucket}. Please try \
-again."
+            printf '%s\n' "Failed to create the bucket [${bucket}]. Try again."
             continue
           else
             GCS_BUCKET=${bucket}
@@ -495,7 +488,7 @@ again."
           fi
         fi
       fi
-      printf '%s\n' "Please select the Storage region:"
+      printf '%s\n' "Select the region for Cloud Storage:"
       local region class
       select region in "${STORAGE_REGIONS[@]}"; do
         if [[ -n "${region}" ]]; then
@@ -505,24 +498,24 @@ again."
             class="REGIONAL"
           fi
           cat <<EOF
-Selected region[${region}] class is ${class}. For more information of \
-Storage class, see https://cloud.google.com/storage/docs/storage-classes
+Selected region [${region}] class is ${class}. See \
+https://cloud.google.com/storage/docs/storage-classes for more information \
+about the storage classes that Cloud Storage offers.
 
-Continue to select the location for the Storage bucket (input 0 to return to \
-region selection):
-  For more information of Bucket locations, see \
-https://cloud.google.com/storage/docs/locations
+Continue to select the location for the Cloud Storage bucket. See \
+https://cloud.google.com/storage/docs/locations for more information about \
+bucket locations. Enter your selection, or enter 0 to return to region \
+selection:
 EOF
           declare -n options="${STORAGE_REGIONS_PARAMETER["$((REPLY-1))"]}"
           local location
           select location in "${options[@]}"; do
             if [[ -n "${location}" ]]; then
-              printf '%s\n' "  Try to create the Bucket [${bucket}] at \
+              printf '%s\n' "  Attempting to create the bucket [${bucket}] at \
 ${location}..."
               gsutil mb -c "${class}" -l "${location}" "${bucket_str}"
               if [[ $? -gt 0 ]]; then
-                printf '%s\n' "Fail to create Bucket named ${bucket}. Please \
-try again."
+                printf '%s\n' "Failed to create bucket [${bucket}]. Try again."
                 break 2
               else
                 GCS_BUCKET=${bucket}
@@ -531,27 +524,26 @@ try again."
             elif [[ ${REPLY} = 0 ]]; then
               break
             else
-              printf '%s\n' "Please select the location (input 0 to return to \
-region selection):"
+              printf '%s\n' "Select the location or enter 0 to return to \
+region selection:"
             fi
           done
         fi
-        printf '%s\n' "Please select the Storage region (press ENTER to \
-refresh the list):"
+        printf '%s\n' "Select the Cloud Storage region or press Enter to \
+refresh the list:"
       done
     elif [[ ${result} =~ .*(AccessDeniedException: 403 ).* ]]; then
-      printf '%s\n' "  The Bucket [${bucket}] exists and current account \
-doesn't have the access."
+      printf '%s\n' "  The bucket [${bucket}] exists, and the current account \
+cannot access it."
       GCS_BUCKET="${default_bucket_name}"
     else
-      printf '%s\n' "  The Bucket [${bucket}] exists in other project, so it \
+      printf '%s\n' "  The bucket [${bucket}] exists in another project, so it \
 can't be the trigger source here."
       GCS_BUCKET="${default_bucket_name}"
     fi
-    printf '%s\n' "Please try another one."
+    printf '%s\n' "Please try another bucket name."
   done
-  printf '%s\n\n' "[OK] ${PROJECT_NAME} will monitor the Bucket named \
-[${GCS_BUCKET}]."
+  printf '%s\n\n' "OK. ${PROJECT_NAME} will monitor the bucket [${GCS_BUCKET}]."
 }
 
 #######################################
@@ -563,7 +555,7 @@ can't be the trigger source here."
 #######################################
 confirm_folder() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Confirm ${CONFIG_FOLDER_NAME} folder..."
+  printf '%s\n' "Step ${STEP}: Confirming ${CONFIG_FOLDER_NAME} folder..."
   local loaded_value="${!CONFIG_FOLDER_NAME}"
   local default_value
   default_value=$(printf '%s' "${CONFIG_FOLDER_NAME}" | \
@@ -571,14 +563,12 @@ tr '[:upper:]' '[:lower:]')
 
   local folder=${loaded_value:-${default_value}}
   cat <<EOF
-  Rationale: Since Cloud Storage events are bound to Bucket, in order to \
-prevent this Cloud Functions occupying the bucket exclusively, an explicit \
-folder is required here. This solution will only take the files that under \
-that folder.
-  Note: Cloud Functions will move files to folder 'processed/' after takes the \
-files.
+  Cloud Storage events are bound to a bucket. To prevent a Cloud Function from \
+occupying a bucket exclusively, you must provide a folder name. This solution \
+only takes the files under that folder. After it takes the files, Cloud \
+Functions moves the files to the folder 'processed/'.
 EOF
-  printf '%s' "Input the ${CONFIG_FOLDER_NAME} folder name [${folder}]: "
+  printf '%s' "Enter the ${CONFIG_FOLDER_NAME} folder name [${folder}]: "
   local input
   read -r input
   folder=${input:-"${folder}"}
@@ -586,11 +576,11 @@ EOF
     folder="${folder}/"
   fi
   declare -g "${CONFIG_FOLDER_NAME}=${folder}"
-  printf '%s\n\n' "[OK] Continue with monitored folder as [${folder}]."
+  printf '%s\n\n' "OK. Continue with monitored folder [${folder}]."
 }
 
 #######################################
-# Confirm the prefix of Cloud Pub/Sub topics and subscriptions.
+# Confirm the prefix of Pub/Sub topics and subscriptions.
 # Globals:
 #   PS_TOPIC
 #   PROJECT_NAME
@@ -599,17 +589,17 @@ EOF
 #######################################
 confirm_topic() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Confirm Topic prefix for Pub/Sub..."
+  printf '%s\n' "Step ${STEP}: Confirming topic prefix for Pub/Sub..."
   PS_TOPIC=${PS_TOPIC:-"${PROJECT_NAME}"}
   cat <<EOF
-  Rationale: To avoid potential conflicts with other application for using \
-Pub/Sub topics, a unified prefix for Topics and Subscriptions will be used.
+  To avoid potential conflicts with other application that use Pub/Sub topics, \
+a unified prefix for topics and subscriptions will be used.
 EOF
-  printf '%s' "Input the prefix for Topics [${PS_TOPIC}]: "
+  printf '%s' "Enter the prefix for Pub/Sub topics [${PS_TOPIC}]: "
   local topic
   read -r topic
   PS_TOPIC=${topic:-"${PS_TOPIC}"}
-  printf '%s\n' "[OK] Continue with Topic prefix as [${PS_TOPIC}]"
+  printf '%s\n' "OK. Continue with Pub/Sub topic prefix as [${PS_TOPIC}]."
 }
 
 #######################################
@@ -623,7 +613,7 @@ EOF
 #######################################
 save_config() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Save the configuration..."
+  printf '%s\n' "Step ${STEP}: Saving the configuration..."
 
   local config_items_str="  \"PROJECT_ID\": \"${GCP_PROJECT}\""
   local i
@@ -633,22 +623,22 @@ save_config() {
   done
   local json_str=$'{\n'"${config_items_str}"$'\n}'$'\n'
   printf '%s\n%s' "  Will save" "${json_str}"
-  printf '%s' "  to '${CONFIG_FILE}'. Confirm? [Y/n]"
+  printf '%s' "  to '${CONFIG_FILE}'. Confirm? [Y/n]: "
   local input
   read -r input
   if [[ -z ${input} || ${input} = 'y' || ${input} = 'Y' ]];then
     printf '%s' "${json_str}" > "${CONFIG_FILE}"
-    printf '%s\n' "[OK] Save to ${CONFIG_FILE}"
+    printf '%s\n' "OK. Saved to ${CONFIG_FILE}."
     return 0
   else
-    printf '%s\n' "[User cancelled]";
+    printf '%s\n' "User cancelled.";
     return 1
   fi
 }
 
 #######################################
-# Run default function if there is no parameters; otherwise run the specific
-# function.
+# Run the default Function if there are no parameters; otherwise, run the
+# specific function.
 # Globals:
 #   MAIN_FUNCTION
 # Arguments:
@@ -658,10 +648,9 @@ run_default_function() {
   if [[ -z "$1" ]]; then
     "${MAIN_FUNCTION}"
   else
-    printf '%s\n\n' "Running single task [$*], need to set variables..."
+    printf '%s\n\n' "Running the single task [$*], setting variables..."
     emulate_cloud_shell
     load_config
-    check_authentication
     "$@"
   fi
 }
@@ -686,8 +675,8 @@ get_value_from_json_file() {
 }
 
 #######################################
-# Generate a default bucket name based on the given string. If there is a colon
-# in the string, will just use the part before colon.
+# Generate a default Cloud Storage name based on the given string. If there is
+# a colon in the string, use only the part before the colon.
 # Globals:
 #   None
 # Arguments:
@@ -701,7 +690,7 @@ sed  -r 's/^([^:]*:)?(.*)$/\2/')"
 }
 
 #######################################
-# Generate a domain name for the email of current project's service account.
+# Generate a domain name for the email of the current project's service account.
 # Globals:
 #   None
 # Arguments:
@@ -719,7 +708,7 @@ sed  -r 's/^([^:]*):(.*)$/\2.\1/').iam.gserviceaccount.com"
 }
 
 #######################################
-# Make sure there is a Firestore or Datastore in current project.
+# Make sure Firestore or Datastore is in the current project.
 # Globals:
 #   GCP_PROJECT
 # Arguments:
@@ -744,7 +733,7 @@ EOF
 }
 
 #######################################
-# Check the last execution status. Quit current process if there is an error.
+# Check the last execution status. Quit the current process if there's an error.
 # Globals:
 #   None
 # Arguments:

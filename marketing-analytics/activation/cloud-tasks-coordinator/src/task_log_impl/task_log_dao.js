@@ -57,6 +57,27 @@ class TaskLogDao extends BaseDao {
   constructor() {
     super('TaskLog', 'sentinel');
   }
+
+  /**
+   * Create a new TaskLog entity in database. In a database with no transaction
+   * supported, it just creates the object, however in a transaction available
+   * database, it should use transaction to prevent create duplicated task for
+   * the same taskLogId.
+   * @param {(string|number)} taskLogId
+   * @param {!Entity} taskLogEntity
+   * @return {!Promise<boolean>}
+   */
+  startTask(taskLogId, taskLogEntity) {
+    console.log(`[Dummy TaskLog] start: [${taskLogId}]: OK.`);
+    return this.update(taskLogEntity, taskLogId).then(() => true);
+  }
+
+  finishTask(taskLogId) {
+    return this.merge({
+      finishTime: new Date(),
+      status: TaskLogStatus.FINISHED,
+    }, taskLogId).then(() => true);
+  }
 }
 
 exports.TaskLogDao = TaskLogDao;

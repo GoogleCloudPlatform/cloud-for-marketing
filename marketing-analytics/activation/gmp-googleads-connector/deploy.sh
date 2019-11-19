@@ -17,15 +17,15 @@
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${BASE_DIR}/../common-libs/install-script-library/install_functions.sh"
 
-# Default project name is 'tentacles'. It will be used as prefix of Cloud
-# Functions, PubSub, etc. You can change it here (only lowercase letters,
-# numbers and dashes(-) are suggested).
+# Default project name is 'Tentacles'. It will be used as prefix of Cloud
+# Functions, Pub/Sub, etc. You can change it here (only lowercase letters,
+# numbers and hyphens (-) are suggested).
 PROJECT_NAME="${PROJECT_NAME:=tentacles}"
 
 # Project configuration file.
 CONFIG_FILE="./config.json"
 
-# This parameter name is used by functions to load/save config.
+# Parameter name used by functions to load and save config.
 CONFIG_FOLDER_NAME="OUTBOUND"
 CONFIG_ITEMS=("GCS_BUCKET" "${CONFIG_FOLDER_NAME}" "PS_TOPIC")
 
@@ -35,21 +35,21 @@ SA_KEY_FILE="./keys/service-account.key.json"
 # Default service account user name.
 DEFAULT_SERVICE_ACCOUNT="${PROJECT_NAME}-api"
 
-# Whether or not service account is required for this installation based on the
-# selection of APIs.
+# Whether service account is required for this installation based on the
+# selected APIs.
 NEED_SERVICE_ACCOUNT="false"
 
-# To create topics/subscriptions.
+# Creation of topics and subscriptions.
 ENABLED_INTEGRATED_APIS=()
 
-# The APIs that will be enabled.
+# APIs to be enabled.
 declare -A GOOGLE_CLOUD_APIS
 GOOGLE_CLOUD_APIS=(
-  ["iam.googleapis.com"]="Identity and Access Management (IAM) API"
-  ["cloudresourcemanager.googleapis.com"]="Cloud Resource Manager API"
-  ["firestore.googleapis.com"]="Google Cloud Firestore API"
-  ["cloudfunctions"]="Cloud Functions API"
-  ["pubsub"]="Cloud Pub/Sub API"
+  ["iam.googleapis.com"]="Cloud Identity and Access Management API"
+  ["cloudresourcemanager.googleapis.com"]="Resource Manager API"
+  ["firestore.googleapis.com"]="Cloud Firestore API"
+  ["cloudfunctions.googleapis.com"]="Cloud Functions API"
+  ["pubsub.googleapis.com"]="Cloud Pub/Sub API"
 )
 
 # Description of external APIs.
@@ -58,9 +58,9 @@ INTEGRATION_APIS_DESCRIPTION=(
   "Google Analytics Data Import"
   "Campaign Manager Conversions Upload"
   "SFTP Upload"
-  "Google Ads conversions scheduled uploads based on Google Sheets"
+  "Google Sheets API for Google Ads conversions scheduled uploads based on \
+Google Sheets"
   "Search Ads 360 Conversions Upload"
-#  "Google Ads"
 )
 
 # All build-in external APIs.
@@ -71,10 +71,9 @@ INTEGRATION_APIS=(
   "N/A"
   "sheets.googleapis.com"
   "doubleclicksearch"
-  "googleads"
 )
 
-# Code of external APIs. Used to create different Cloud Pub/Sub topics and
+# Code of external APIs. Used to create different Pub/Sub topics and
 # subscriptions for different APIs.
 INTEGRATION_APIS_CODE=(
   "MP"
@@ -85,7 +84,7 @@ INTEGRATION_APIS_CODE=(
   "SA"
 )
 
-# Common permissions to install Tentacles
+# Common permissions to install Tentacles.
 # https://cloud.google.com/service-usage/docs/access-control
 # https://cloud.google.com/storage/docs/access-control/iam-roles
 # https://cloud.google.com/pubsub/docs/access-control
@@ -125,10 +124,10 @@ EOF
 }
 
 #######################################
-# Confirm the APIs that this instance will support. Based on the selection of
-# APIs, it may involve: 1) enable new APIs in Cloud Project; 2) usage of an
-# service account key file. Based on the second one, it will update the
-# permissions array to be checked.
+# Confirm the APIs that this instance supports. Based on the APIs selected, you
+# might need to do the following: 1) Enable new APIs in your Google Cloud
+# project; 2) use a service account key file. If the second case, the
+# permissions array will be updated to be checked.
 # Globals:
 #   INTEGRATION_APIS_DESCRIPTION
 #   INTEGRATION_APIS
@@ -143,12 +142,12 @@ EOF
 #######################################
 confirm_apis() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Select the APIs that will be integrated:"
+  printf '%s\n' "Step ${STEP}: Select the APIs that will be integrated: "
   local api
   for api in "${!INTEGRATION_APIS_DESCRIPTION[@]}"; do
     printf "%s) %s\n" "${api}" "${INTEGRATION_APIS_DESCRIPTION[$api]}"
   done
-  printf '%s' "Use comma to separate APIs or * for all: [*]"
+  printf '%s' "Use a comma to separate APIs or enter * for all: [*]"
   local input=()
   IFS=', ' read -r -a input
 
@@ -166,7 +165,7 @@ confirm_apis() {
       GOOGLE_CLOUD_APIS[${INTEGRATION_APIS["${index}"]}]=\
 "${INTEGRATION_APIS_DESCRIPTION["${index}"]}"
       printf '%s\n' "  Add ${INTEGRATION_APIS_DESCRIPTION["${index}"]} to \
-enable APIs list."
+enable API list."
     fi
   done
   if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
@@ -179,7 +178,7 @@ enable APIs list."
 }
 
 #######################################
-# Create Cloud Pub/Sub topics and subscriptions based on the selected APIs.
+# Create Pub/Sub topics and subscriptions based on the selected APIs.
 # Globals:
 #   PS_TOPIC
 #   ENABLED_INTEGRATED_APIS
@@ -191,18 +190,17 @@ enable APIs list."
 create_subscriptions() {
   (( STEP += 1 ))
   cat <<EOF
-STEP[${STEP}] Create Topics and Subscriptions for Pub/Sub...
-  Rationale: Cloud Pub/sub subscription won't get the message published before \
-its creation. So we create topics and subscriptions before real data comes.
+Step ${STEP}: Creating topics and subscriptions for Pub/Sub...
+  Pub/Sub subscribers will not receive messages until subscriptions are created.
 EOF
 
   node -e "require('./index.js').initPubsub(process.argv[1], \
 process.argv.slice(2))" "${PS_TOPIC}"  "${ENABLED_INTEGRATED_APIS[@]}"
   if [[ $? -gt 0 ]]; then
-    printf '%s\n' "[Failed] Failed to create Topics or Subscriptions."
+    echo "Failed to create Pub/Sub topics or subscriptions."
     return 1
   else
-    printf '%s\n' "[OK] Successfully create Topics and Subscriptions."
+    echo "OK. Successfully created Pub/Sub topics and subscriptions."
     return 0
   fi
 }
@@ -220,7 +218,8 @@ process.argv.slice(2))" "${PS_TOPIC}"  "${ENABLED_INTEGRATED_APIS[@]}"
 #######################################
 download_service_account_key() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Download key file of the Service Account ..."
+  printf '%s\n' "Step ${STEP}: Downloading the key file for the service \
+account..."
   if [[ -z ${SA_NAME} ]];then
     confirm_service_account
   fi
@@ -228,14 +227,14 @@ download_service_account_key() {
   suffix=$(get_sa_domain_from_gcp_id "${GCP_PROJECT}")
   local email="${SA_NAME}@${suffix}"
   local prompt="Would you like to download the key file for [${email}] and \
-save it as ${SA_KEY_FILE}? [Y/n] "
+save it as ${SA_KEY_FILE}? [Y/n]: "
   local default_value="y"
   if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
     exist=$(get_value_from_json_file ${SA_KEY_FILE} 'client_email' 2>&1)
     if [[ ${exist} =~ .*("@${suffix}") ]]; then
-      prompt="There is already a key file for [${exist}] with the id '\
-$(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id')'. Would you like to\
- create a new key to overwrite it? [N/y] "
+      prompt="A key file for [${exist}] with the key ID '\
+$(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id') already exists'. \
+Would you like to create a new key to overwrite it? [N/y]: "
       default_value="n"
     fi
   fi
@@ -244,25 +243,26 @@ $(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id')'. Would you like to\
   read -r input
   input=${input:-"${default_value}"}
   if [[ ${input} = 'y' || ${input} = 'Y' ]];then
-    printf '%s\n' "Start to download a new key file for [${email}]..."
+    printf '%s\n' "Downloading a new key file for [${email}]..."
     gcloud iam service-accounts keys create "${SA_KEY_FILE}" --iam-account \
 "${email}"
     if [[ $? -gt 0 ]]; then
-      printf '%s\n' "[Failed] Failed to download new key files for [${email}]."
+      printf '%s\n' "Failed to download new key files for [${email}]."
       return 1
     else
-      printf '%s\n' "[OK] New key file is saved at [${SA_KEY_FILE}]."
+      printf '%s\n' "OK. New key file is saved at [${SA_KEY_FILE}]."
       return 0
     fi
   else
-    printf '%s\n' "[Skipped] To know more about service account key file, see: \
-https://cloud.google.com/iam/docs/creating-managing-service-account-keys";
+    printf '%s\n' "Skipped downloading new key file. See \
+https://cloud.google.com/iam/docs/creating-managing-service-account-keys \
+to learn more about service account key files."
     return 0
   fi
 }
 
 #######################################
-# Make sure a service account for integration exists and set the email of the
+# Make sure a service account for this integration and set the email of the
 # service account to the global variable `SA_NAME`.
 # Globals:
 #   GCP_PROJECT
@@ -274,10 +274,11 @@ https://cloud.google.com/iam/docs/creating-managing-service-account-keys";
 #######################################
 confirm_service_account() {
   cat <<EOF
-  Rationale: Some external APIs may require authentication based on OAuth or \
-JWT(service account). For example, Google Analytics Data Import or Campaign \
-Manager. In this step, we'll prepare the service account.
-  For more information, see: https://cloud.google.com/iam/docs/creating-managing-service-accounts
+  Some external APIs might require authentication based on OAuth or \
+JWT(service account), for example, Google Analytics Data Import or Campaign \
+Manager. In this step, you prepare the service account. See \
+https://cloud.google.com/iam/docs/creating-managing-service-accounts for more \
+information.
 EOF
 
   local suffix
@@ -286,12 +287,12 @@ EOF
   if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
     email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
     if [[ ${email} =~ .*("@${suffix}") ]]; then
-      printf '%s' "There is already a key file with service account[${email}]. \
-Would you like to create a new one? [N/y]"
+      printf '%s' "A key file for service account [${email}] already exists. \
+Would you like to create a new service account? [N/y]: "
       local input
       read -r input
       if [[ ${input} != 'y' && ${input} != 'Y' ]]; then
-        printf '%s\n' "[OK] Will use exist service account [${email}]"
+        printf '%s\n' "OK. Will use existing service account [${email}]."
         SA_NAME=$(printf "${email}" | cut -d@ -f1)
         return 0
       fi
@@ -300,34 +301,37 @@ Would you like to create a new one? [N/y]"
 
   SA_NAME="${SA_NAME:-"${DEFAULT_SERVICE_ACCOUNT}"}"
   while :; do
-    printf '%s' "Input the name of service account [${SA_NAME}]: "
+    printf '%s' "Enter the name of service account [${SA_NAME}]: "
     local input sa_elements=() sa
     read -r input
     input=${input:-"${SA_NAME}"}
     IFS='@' read -a sa_elements <<< "${input}"
     if [[ ${#sa_elements[@]} = 1 ]]; then
-      echo "  Appended default suffix to service account name and get: ${email}"
+      echo "  Append default suffix to service account name and get: ${email}"
       sa="${input}"
       email="${sa}@${suffix}"
     else
       if [[ ${sa_elements[1]} != "${suffix}" ]]; then
-        printf '%s\n' "  [Error] Service account domain name ${sa_elements[1]} \
-doesn't belong to current project. Should be: ${suffix}."
+        printf '%s\n' "  Error: Service account domain name ${sa_elements[1]} \
+doesn't belong to the current project. Service account domain name for the \
+current project should be: ${suffix}."
         continue
       fi
       sa="${sa_elements[0]}"
       email="${input}"
     fi
 
-    printf 'Checking the existence of the service account...'
+    printf '%s\n' "Checking the existence of the service account [${email}]..."
     if ! result=$(gcloud iam service-accounts describe "${email}" 2>&1); then
-      printf '  not exist. Try to create...\n'
+      printf '%s\n' "  Service account [${email}] does not exist. Trying to \
+create..."
       gcloud iam service-accounts create "${sa}" --display-name \
 "Tentacles API requester"
       if [[ $? -gt 0 ]]; then
-        printf 'Failed. Please try again...\n'
+        printf '%s\n' 'Creating the service account [${email}] failed. Please \
+try again...'
       else
-        printf 'Create successfully.\n'
+        printf '%s\n' 'The service account [${email}] was successfully created.'
         SA_NAME=${sa}
         break
       fi
@@ -337,11 +341,11 @@ doesn't belong to current project. Should be: ${suffix}."
       break
     fi
   done
-  printf '%s\n' "[OK] Service Account [${SA_NAME}] is ready."
+  printf '%s\n' "OK. Service account [${SA_NAME}] is ready."
 }
 
 #######################################
-# Deploy 3 Cloud Functions of Tentacles.
+# Deploy three Cloud Functions for Tentacles.
 # Globals:
 #   REGION
 #   CF_RUNTIME
@@ -353,31 +357,31 @@ doesn't belong to current project. Should be: ${suffix}."
 # Arguments:
 #   None
 # Returns:
-#   0 if all cloud functions deployed, non-zero on error.
+#   0 if all Cloud Functions deployed, non-zero on error.
 #######################################
 deploy_tentacles() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Start to deploy Tentacles..."
-  printf '%s\n' "Tentacles is combined of three Cloud Functions."
+  printf '%s\n' "Step ${STEP}: Starting to deploy Tentacles..."
+  printf '%s\n' "Tentacles is composed of three Cloud Functions."
   while [[ -z ${REGION} ]]; do
     set_region
   done
-  printf '%s\n' "[ok] Will deploy Cloud Functions to ${REGION}."
+  printf '%s\n' "OK. Cloud Functions will be deployed to ${REGION}."
 
   local cf_flag=()
   cf_flag+=(--region="${REGION}")
   cf_flag+=(--timeout=540 --memory=2048MB --runtime="${CF_RUNTIME}")
   cf_flag+=(--set-env-vars=TENTACLES_TOPIC_PREFIX="${PS_TOPIC}")
 
-  printf '%s\n' " 1. '${PROJECT_NAME}_init' based on Cloud Storage \
-bucket[${GCS_BUCKET}]."
+  printf '%s\n' " 1. '${PROJECT_NAME}_init' is triggered by new files from \
+Cloud Storage bucket [${GCS_BUCKET}]."
   gcloud functions deploy "${PROJECT_NAME}"_init --entry-point initiate \
 --trigger-bucket "${GCS_BUCKET}" "${cf_flag[@]}" \
 --set-env-vars=TENTACLES_OUTBOUND="${!CONFIG_FOLDER_NAME}"
   quit_if_failed $?
 
-  printf '%s\n' " 2. '${PROJECT_NAME}_tran' based on Pub/Sub \
-topic[${PS_TOPIC}-trigger]."
+  printf '%s\n' " 2. '${PROJECT_NAME}_tran' is triggered by new messages from \
+Pub/Sub topic [${PS_TOPIC}-trigger]."
   gcloud functions deploy "${PROJECT_NAME}"_tran --entry-point transport \
 --trigger-topic "${PS_TOPIC}"-trigger "${cf_flag[@]}"
   quit_if_failed $?
@@ -385,8 +389,8 @@ topic[${PS_TOPIC}-trigger]."
   if [[ -f "${SA_KEY_FILE}" ]]; then
     cf_flag+=(--set-env-vars=API_SERVICE_ACCOUNT="${SA_KEY_FILE}")
   fi
-  printf '%s\n' " 3. '${PROJECT_NAME}_api' based on Pub/Sub \
-topic[${PS_TOPIC}-push]."
+  printf '%s\n' " 3. '${PROJECT_NAME}_api' is triggered by new messages from \
+Pub/Sub topic [${PS_TOPIC}-push]."
   gcloud functions deploy "${PROJECT_NAME}"_api --entry-point requestApi \
 --trigger-topic "${PS_TOPIC}"-push "${cf_flag[@]}"
   quit_if_failed $?
@@ -407,27 +411,30 @@ topic[${PS_TOPIC}-push]."
 #######################################
 post_installation() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Post installation."
+  printf '%s\n' "Step ${STEP}: Post-installation checks..."
   check_firestore_existence
-  printf '%s\n' "[ok] Firestore/Datastore is ready."
+  printf '%s\n' "OK. Firestore/Datastore is ready."
   if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
     local exist
     exist=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
     cat <<EOF
-Some enabled APIs require service account. This requires extra steps to grant \
-access to the service account's email in external systems, e.g. Google \
+Some enabled APIs require a service account. Extra steps are required to grant \
+access to the service account's email in external systems, for example, Google \
 Analytics or Campaign Manager.
-This should be done before use Tentacles to send out data to them.
-  1. For Google Analytics Data Import
-   * Set up Data set for Data Import, see: \
+You need to grant access to the service account's email before Tentacles can \
+send out data to the target APIs.
+
+  1. Google Analytics Data Import:
+   * Set up dataset for Data Import, see: \
 https://support.google.com/analytics/answer/3191417?hl=en
    * Grant the 'Edit' access to [${exist}]
-  2. For Campaign Manager
+  2. Campaign Manager:
    * DCM/DFA Reporting and Trafficking API's Conversions service, see: \
 https://developers.google.com/doubleclick-advertisers/guides/conversions_overview
    * Create User Profile for [${exist}] and grant the access to 'Insert \
 offline conversions'
-  3. For Google Ads conversions scheduled uploads based on Google Sheets
+  3. Google Sheets API for Google Ads conversions scheduled uploads based on \
+Google Sheets:
    * Import conversions from ad clicks into Google Ads, see: \
 https://support.google.com/google-ads/answer/7014069
    * Add [${exist}] as an Editor of the Google Spreadsheet that Google Ads \
@@ -436,12 +443,14 @@ EOF
   fi
   cat <<EOF
 
-Finally, follow the document (https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md#4-api-details)\
- to create configuration of the integration.
-Save the configuration to a JSON file, e.g. './config_api.json' and run:
+Follow the document \
+https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md#4-api-details\
+ to create a configuration of the integration.
+Save the configuration to a JSON file, for example, './config_api.json', and \
+then run the following command:
   ./deploy.sh update_api_config
-to update the configuration to Firestore/Datastore before Tentacles can use \
-them.
+This command updates the configuration of Firestore/Datastore before Tentacles \
+can use them.
 EOF
 }
 
@@ -454,7 +463,7 @@ EOF
 }
 
 #######################################
-# Start the automatic process to install Tentalces.
+# Start the automatic process to install Tentacles.
 # Globals:
 #   NEED_SERVICE_ACCOUNT
 # Arguments:
@@ -489,7 +498,7 @@ install_tentacles() {
 }
 
 #######################################
-# Print email of service account.
+# Print the email address of the service account.
 # Globals:
 #   SA_KEY_FILE
 # Arguments:
@@ -499,12 +508,12 @@ print_service_account(){
   printf '%s\n' "=========================="
   local email
   email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
-  printf '%s\n' "The email of current service account is: ${email}"
+  printf '%s\n' "The email address of the current service account is ${email}."
 }
 
 #######################################
-# Upload API configuration in local JSON file to Cloud Firestore or Datastore.
-# It will adapt to Firestore or Datastore automatically.
+# Upload API configuration in local JSON file to Firestore or Datastore.
+# The uploading process adapts to Firestore or Datastore automatically.
 # Globals:
 #   None
 # Arguments:
@@ -512,13 +521,13 @@ print_service_account(){
 #######################################
 update_api_config(){
   printf '%s\n' "=========================="
-  printf '%s\n' "Update API configurations in into Firestore/Datastore."
+  printf '%s\n' "Update API configurations in Firestore/Datastore."
   check_authentication
   quit_if_failed $?
   check_firestore_existence
 
   local default_config_file='./config_api.json'
-  printf '%s' "Please input the configuration file [${default_config_file}]:"
+  printf '%s' "Enter the configuration file [${default_config_file}]: "
   local api_config
   read -r api_config
   api_config=${api_config:-"${default_config_file}"}
@@ -528,9 +537,9 @@ update_api_config(){
 }
 
 #######################################
-# Invoke API requester cloud function directly based on a local file.
-# Please note: the API configuration is still expected to be on Cloud. You need
-# to update API config first if you modified any.
+# Invoke the Cloud Function 'API requester' directly based on a local file.
+# Note: The API configuration is still expected to be on Google Cloud. You need
+# to update API configuration first if you made any modifications.
 # Globals:
 #   SA_KEY_FILE
 # Arguments:
@@ -539,10 +548,9 @@ update_api_config(){
 run_test_locally(){
   printf '%s\n' "=========================="
   cat <<EOF
-Invoke API requester cloud function directly based on a local file.
-Please note: the API configuration is still expected to be on Cloud. You need \
-to update API config first if you modified any.
-
+Invoke the Cloud Function 'API requester' directly based on a local file.
+Note: The API configuration is still expected to be on Google Cloud. You need \
+to update API configuration first if you made any modifications.
 EOF
   if [[ -f "${SA_KEY_FILE}" ]]; then
     API_SERVICE_ACCOUNT="$(pwd)/${SA_KEY_FILE}"
@@ -555,8 +563,8 @@ node -e "require('./index.js').localApiRequester(process.argv[1])" "$@"
 
 #######################################
 # Start process by copying a file to target folder.
-# Please note: the API configuration is still expected to be on Cloud. You need
-# to update API config first if you modified any.
+# Note: The API configuration is still expected to be on Google Cloud. You need
+# to update API configuration first if you made any modifications.
 # Globals:
 #   CONFIG_FILE
 #   CONFIG_FOLDER_NAME
@@ -573,7 +581,7 @@ copy_file_to_gcs(){
   echo "Copy local file to target folder in Cloud Storage to start process."
   printf '%s\n' "  Source: $1"
   printf '%s\n' "  Target: ${target}"
-  printf '%s' "Confirm? [Y/n]"
+  printf '%s' "Confirm? [Y/n]:"
   local input
   read -n1 -s input
   printf '%s\n' "${input}"
