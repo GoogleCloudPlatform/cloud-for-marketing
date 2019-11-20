@@ -18,22 +18,21 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${BASE_DIR}/../common-libs/install-script-library/install_functions.sh"
 
 # Default project name is 'sentinel'. It will be used as prefix of Cloud
-# Functions, PubSub, etc. You can change it here (only lowercase letters,
+# Functions, Pub/Sub, etc. You can change it here (only lowercase letters,
 # numbers and dashes(-) are suggested).
 PROJECT_NAME="${PROJECT_NAME:=sentinel}"
 
 # Project configuration file.
 CONFIG_FILE="./config.json"
 
-# This parameter name is used by functions to load/save config.
+# Parameter name used by functions to load and save config.
 CONFIG_FOLDER_NAME="INBOUND"
 CONFIG_ITEMS=("GCS_BUCKET" "${CONFIG_FOLDER_NAME}" "PS_TOPIC")
 
-# Whether or not this installation will use storage monitor
+# Whether or not this installation will use storage monitor.
 NEED_STORAGE_MONITOR="false"
 
-#TODO change this
-# Common permissions to install Sentinel
+# Common permissions to install Sentinel.
 # https://cloud.google.com/service-usage/docs/access-control
 # https://cloud.google.com/storage/docs/access-control/iam-roles
 # https://cloud.google.com/pubsub/docs/access-control
@@ -58,12 +57,23 @@ GOOGLE_CLOUD_PERMISSIONS=(
 # The APIs that will be used in Sentinel.
 declare -A GOOGLE_CLOUD_APIS
 GOOGLE_CLOUD_APIS=(
-  ["iam.googleapis.com"]="Identity and Access Management (IAM) API"
-  ["cloudresourcemanager.googleapis.com"]="Cloud Refolder Manager API"
-  ["firestore.googleapis.com"]="Google Cloud Firestore API"
-  ["cloudfunctions"]="Cloud Functions API"
-  ["pubsub"]="Cloud Pub/Sub API"
+  ["iam.googleapis.com"]="Identity and Access Management API"
+  ["cloudresourcemanager.googleapis.com"]="Resource Manager API"
+  ["firestore.googleapis.com"]="Cloud Firestore API"
+  ["cloudfunctions.googleapis.com"]="Cloud Functions API"
+  ["pubsub.googleapis.com"]="Cloud Pub/Sub API"
 )
+
+print_welcome() {
+  cat <<EOF
+###########################################################
+##                                                       ##
+##            Start installation of Sentinel             ##
+##                                                       ##
+###########################################################
+
+EOF
+}
 
 #######################################
 # Create Log Export to capture BigQuery events and granted the permission to
@@ -78,24 +88,23 @@ GOOGLE_CLOUD_APIS=(
 #######################################
 create_sink() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Create Logging Export (Sink)..."
-  printf '%s\n' "  Rationale: Sentinel leverages Logging Export to monitor \
-when tasks are finished and trigger next ones."
-
+  printf '%s\n' "Step ${STEP}: Creating Logging Export (Sink)..."
+  printf '%s\n' "  Sentinel leverages Logging Export to monitor the finish \
+events of tasks and trigger next ones."
   node -e "require('./index.js').installSink(process.argv[1])" "${PS_TOPIC}"
   local service_account
   service_account=$(gcloud logging sinks describe "${PS_TOPIC}"-monitor \
     | grep writerIdentity \
     | cut -d\  -f2)
-  printf '%s\n'  "Grant pubsub.publisher access to this Sink's service \
-account: ${service_account}"
+  printf '%s\n'  "Granting pubsub.publisher access to this Sink's service \
+account: ${service_account}."
   gcloud -q projects add-iam-policy-binding ${GCP_PROJECT} --member \
 "${service_account}" --role roles/pubsub.publisher
   if [[ $? -gt 0 ]]; then
-    printf '%s\n' "[Failed] Failed to create Logging Export."
+    printf '%s\n' "Failed to create Logging Export."
     return 1
   else
-    printf '%s\n' "[OK] Successfully create Logging Export."
+    printf '%s\n' "OK. Successfully created Logging Export."
     return 0
   fi
 }
@@ -109,23 +118,22 @@ account: ${service_account}"
 #######################################
 confirm_monitor_bucket() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Confirm the usage of Cloud Storage monitor..."
+  printf '%s\n' "Step ${STEP}: Confirm the usage of Cloud Storage monitor..."
   cat <<EOF
-  Rationale: Sentinel can also monitor a Cloud Storage Bucket to fulfil a \
-'Load' task which will automatically load incoming files to BigQuery. To \
-enable that, you need to create/select a Cloud Storage Bucket and confirm a \
-monitor folder.
+  This solution can also monitor a Cloud Storage Bucket to fulfil a 'Load' \
+task which will automatically load incoming files to BigQuery. To enable that, \
+a Cloud Storage Bucket and a folder in it are required.
 EOF
-  printf '\n%s' "Are you going to enable 'Load' task? [Y/n]:"
+  printf '\n%s' "Are you going to enable 'Load' task? [Y/n]: "
   local continue
   read -r continue
   continue=${continue:-"Y"}
   if [[ ${continue} = "Y" || ${continue} = "y" ]]; then
     NEED_STORAGE_MONITOR="true"
-    printf '%s\n\n' "[OK] Will install Storage monitor."
+    printf '%s\n\n' "OK. Cloud Storage monitor selected."
   else
     NEED_STORAGE_MONITOR="false"
-    printf '%s\n\n' "[Skipped] to use Storage monitor."
+    printf '%s\n\n' "Skipped to create Cloud Storage monitor."
   fi
 }
 
@@ -145,33 +153,33 @@ EOF
 #######################################
 deploy_sentinel() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Start to deploy Sentinel..."
-  printf '%s\n' "Sentinel is combined of three Cloud Functions."
+  printf '%s\n' "Step ${STEP}: Starting to deploy Sentinel..."
+  printf '%s\n' "Sentinel is composed of Cloud Functions."
   while [[ -z ${REGION} ]]; do
     set_region
   done
-  printf '%s\n' "[ok] Will deploy Cloud Functions to ${REGION}."
+  printf '%s\n' "OK. Cloud Functions will be deployed to ${REGION}."
 
   local cf_flag=()
   cf_flag+=(--region="${REGION}")
   cf_flag+=(--timeout=540 --memory=2048MB --runtime="${CF_RUNTIME}")
   cf_flag+=(--set-env-vars=SENTINEL_TOPIC_PREFIX="${PS_TOPIC}")
 
-  printf '%s\n' " 1. '${PROJECT_NAME}_bq' based on Cloud Pub/Sub \
-topic[${PS_TOPIC}-monitor]."
+  printf '%s\n' " 1. '${PROJECT_NAME}_bq' is triggered by new messages from \
+Pub/Sub topic [${PS_TOPIC}-monitor]."
   gcloud functions deploy "${PROJECT_NAME}_bq" --entry-point monitorBigQuery \
 --trigger-topic "${PS_TOPIC}"-monitor "${cf_flag[@]}"
   quit_if_failed $?
 
-  printf '%s\n' " 2. '${PROJECT_NAME}_start' based on Cloud Pub/Sub \
-topic[${PS_TOPIC}-start]."
+  printf '%s\n' " 2. '${PROJECT_NAME}_start' is triggered by new messages from\
+Pub/Sub topic [${PS_TOPIC}-start]."
   gcloud functions deploy "${PROJECT_NAME}"_start --entry-point startTask \
 --trigger-topic "${PS_TOPIC}"-start "${cf_flag[@]}"
   quit_if_failed $?
 
   if [[ ${NEED_STORAGE_MONITOR} = 'true' ]]; then
-    printf '%s\n' " 3. '${PROJECT_NAME}_gcs' based on Cloud Storage \
-  bucket[${GCS_BUCKET}]."
+    printf '%s\n' " 3. '${PROJECT_NAME}_gcs' is triggered by new files from \
+Cloud Storage bucket [${GCS_BUCKET}]."
     cf_flag+=(--set-env-vars=SENTINEL_INBOUND="${!CONFIG_FOLDER_NAME}")
     gcloud functions deploy "${PROJECT_NAME}_gcs" --entry-point monitorStorage \
   --trigger-bucket "${GCS_BUCKET}" "${cf_flag[@]}"
@@ -179,20 +187,9 @@ topic[${PS_TOPIC}-start]."
   fi
 }
 
-print_welcome() {
-  cat <<EOF
-###########################################################
-##                                                       ##
-##            Start installation of Sentinel             ##
-##                                                       ##
-###########################################################
-
-EOF
-}
-
 post_installation() {
   (( STEP += 1 ))
-  printf '%s\n' "STEP[${STEP}] Post installation."
+  printf '%s\n' "Step ${STEP}: Post installation."
   check_firestore_existence
   printf '%s\n' "[ok] Firestore/Datastore is ready."
   #TODO update the link here
@@ -258,7 +255,7 @@ install_sentinel() {
 #######################################
 update_task_config() {
   printf '%s\n' "=========================="
-  printf '%s\n' "Update Task configurations in into Firestore."
+  printf '%s\n' "Update Task configurations in into Firestore/Datastore."
   check_authentication
   quit_if_failed $?
   check_firestore_existence

@@ -17,7 +17,7 @@
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${BASE_DIR}/../common-libs/install-script-library/install_functions.sh"
 
-# Default project name is 'Tentacles'. It will be used as prefix of Cloud
+# Default project name is 'tentacles'. It will be used as prefix of Cloud
 # Functions, Pub/Sub, etc. You can change it here (only lowercase letters,
 # numbers and hyphens (-) are suggested).
 PROJECT_NAME="${PROJECT_NAME:=tentacles}"
@@ -262,8 +262,8 @@ to learn more about service account key files."
 }
 
 #######################################
-# Make sure a service account for this integration and set the email of the
-# service account to the global variable `SA_NAME`.
+# Make sure a service account for this integration exists and set the email of
+# the service account to the global variable `SA_NAME`.
 # Globals:
 #   GCP_PROJECT
 #   SA_KEY_FILE
@@ -313,7 +313,7 @@ Would you like to create a new service account? [N/y]: "
     else
       if [[ ${sa_elements[1]} != "${suffix}" ]]; then
         printf '%s\n' "  Error: Service account domain name ${sa_elements[1]} \
-doesn't belong to the current project. Service account domain name for the \
+doesn't belong to the current project. The service account domain name for the \
 current project should be: ${suffix}."
         continue
       fi
@@ -539,7 +539,7 @@ update_api_config(){
 #######################################
 # Invoke the Cloud Function 'API requester' directly based on a local file.
 # Note: The API configuration is still expected to be on Google Cloud. You need
-# to update API configuration first if you made any modifications.
+# to update the API configuration first if you made any modifications.
 # Globals:
 #   SA_KEY_FILE
 # Arguments:
@@ -550,7 +550,7 @@ run_test_locally(){
   cat <<EOF
 Invoke the Cloud Function 'API requester' directly based on a local file.
 Note: The API configuration is still expected to be on Google Cloud. You need \
-to update API configuration first if you made any modifications.
+to update the API configuration first if you made any modifications.
 EOF
   if [[ -f "${SA_KEY_FILE}" ]]; then
     API_SERVICE_ACCOUNT="$(pwd)/${SA_KEY_FILE}"
@@ -564,7 +564,7 @@ node -e "require('./index.js').localApiRequester(process.argv[1])" "$@"
 #######################################
 # Start process by copying a file to target folder.
 # Note: The API configuration is still expected to be on Google Cloud. You need
-# to update API configuration first if you made any modifications.
+# to update the API configuration first if you made any modifications.
 # Globals:
 #   CONFIG_FILE
 #   CONFIG_FOLDER_NAME
@@ -581,7 +581,7 @@ copy_file_to_gcs(){
   echo "Copy local file to target folder in Cloud Storage to start process."
   printf '%s\n' "  Source: $1"
   printf '%s\n' "  Target: ${target}"
-  printf '%s' "Confirm? [Y/n]:"
+  printf '%s' "Confirm? [Y/n]: "
   local input
   read -n1 -s input
   printf '%s\n' "${input}"
