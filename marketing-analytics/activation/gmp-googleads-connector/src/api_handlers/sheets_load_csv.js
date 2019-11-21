@@ -180,11 +180,11 @@ exports.sendData = (message, messageId, config) => {
       const sheetHeader = config.sheetHeader;
       if (sheetHeader) {
         promise = spreadsheets.loadData(sheetHeader, pasteDataRequest, 'header')
-            .then(() => {
-              return coordinate.rowIndex +
-                  sheetHeader.split('\n').length +
-                  (sheetHeader.endsWith('\n') ? -1 : 0);
-            });
+                      .then(() => {
+                        return coordinate.rowIndex +
+                            sheetHeader.split('\n').length +
+                            (sheetHeader.endsWith('\n') ? -1 : 0);
+                      });
       } else {
         promise = Promise.resolve(coordinate.rowIndex);
       }
