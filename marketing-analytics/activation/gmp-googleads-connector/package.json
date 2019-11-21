@@ -12,12 +12,12 @@
   ],
   "main": "index.js",
   "dependencies": {
-    "@google-cloud/storage": "^2.5.0",
+    "@google-cloud/storage": "^3.5.0",
     "nodejs-common": "file:libs/nodejs-common-0.0.1.tgz",
-    "ssh2-sftp-client": "^2.5.0"
+    "ssh2-sftp-client": "^2.5.2"
   },
   "devDependencies": {
-    "jasmine": "^3.3.1"
+    "jasmine": "^3.5.0"
   },
   "scripts": {
     "prepare": "mkdir -p libs; cd libs/; npm pack -s ../../common-libs/nodejs-common; cd ..; ",

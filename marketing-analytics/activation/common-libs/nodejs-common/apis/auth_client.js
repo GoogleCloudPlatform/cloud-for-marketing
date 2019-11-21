@@ -98,7 +98,7 @@ class AuthClient {
    * @return {!Promise<!Compute|!JWT>}
    */
   getApplicationDefaultCredentials() {
-    return new GoogleAuth({scopes: this.scopes}).getClient();
+    return Promise.resolve(new GoogleAuth({scopes: this.scopes}));
   }
 
   /**
@@ -122,10 +122,10 @@ class AuthClient {
    */
   getServiceAccount(keyFile = this.serviceAccountKeyFile) {
     console.log(`Get Service Account's key file: ${keyFile}`);
-    return new GoogleAuth().getClient({
+    return Promise.resolve(new GoogleAuth({
       keyFile: keyFile,
       scopes: this.scopes,
-    });
+    }));
   }
 }
 
