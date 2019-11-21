@@ -71,7 +71,7 @@ synchronize the configuration to Google Cloud Firestore/Datastore. Tentacles
 ```
 [measurement_protocol]:https://developers.google.com/analytics/devguides/collection/protocol/v1/parameters
 
-##File Format
+## File Format
 
 The file needs to be in JSONL for the Measurement Protocol. As we are sending
 data as an event for each user and we have already configured the structure
@@ -96,7 +96,7 @@ This file is then exported to the GCS outbound bucket that triggers the
 
 [custom_dimension]:https://support.google.com/analytics/answer/2709828?hl=en
 
-##Realtime Reporting
+## Realtime Reporting
 
 To verify that the hits are coming through correctly, check the realtime
 reporting in GA where you can see the data coming in there :
