@@ -113,14 +113,33 @@ class NativeModeAccess {
   }
 
   /** @override */
-  getAll() {
-    return this.collection.get().then((querySnapshot) => {
-      const results = {};
-      querySnapshot.forEach((documentSnapshot) => {
-        results[documentSnapshot.id] = documentSnapshot.data();
+  queryObjects(filters, order, limit, offset) {
+    let query = this.collection;
+    if (filters) {
+      filters.forEach((filter) => {
+        query =
+            query.where(filter.property, filter.operator || '==', filter.value);
       });
-      return results;
-    });
+    }
+    if (order) query = query.orderBy(order.name, order.desc ? 'desc' : 'asc');
+    if (limit) query = query.limit(limit);
+    if (offset) query = query.startAt(offset);
+    return query.get()
+        .then((snapshot) => {
+          const result = [];
+          if (snapshot.empty) {
+            console.log('No matching documents.');
+            return result;
+          }
+          snapshot.forEach((document) => {
+            result.push({id: document.id, entity: document.data()});
+          });
+          return result;
+        })
+        .catch((error) => {
+          console.log('Error getting documents', error);
+          throw error;
+        });
   }
 
   /** @override */
