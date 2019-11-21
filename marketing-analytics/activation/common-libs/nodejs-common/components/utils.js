@@ -19,6 +19,7 @@
 'use strict';
 
 const log4js = require('log4js');
+const {CloudPlatformApis} = require('../apis/cloud_platform_apis.js');
 
 /**
  * Function which sends a batch of data. Takes two parameters:
@@ -208,3 +209,59 @@ const wait = (time, value = '') => {
 };
 
 exports.wait = wait;
+
+/**
+ * Replaces a string with parameters in the pattern like `${key}`. Gets values
+ * from the parameters object. Nested keys are supported.
+ * @param {string} str Original string with parameters.
+ * @param {!Object<string, string>} parameters
+ * @return {string} Parameters replaced string.
+ */
+const replaceParameters = (str, parameters) => {
+  if (str.indexOf('${') === -1) return str;
+  const regex = /\${([^}]*)}/;
+  const matchResult = str.match(regex);
+  const splitNames = matchResult[1].split('.');
+  let value = parameters;
+  splitNames.forEach((namePiece) => {
+    if (!value) {
+      console.error(`Fail to find property ${matchResult[1]} in parameters: `,
+          parameters);
+      throw new Error(`Fail to find property ${matchResult[1]} in parameter.`);
+    }
+    value = value[namePiece];
+  });
+  const newStr = str.replace(matchResult[0], value);
+  return replaceParameters(newStr, parameters);
+};
+exports.replaceParameters = replaceParameters;
+
+/**
+ * Checks whether the permissions are granted for current authentication.
+ * This function will be invoked during the deployment of a specific solution,
+ * e.g. Tentacles, to make sure the operator has the proper permissions to
+ * carry on. If the operator doesn't have enough permissions, it will exit with
+ * status code 1 to let the invoker (the Bash installation script) know that it
+ * doesn't pass.
+ * @param {!Array<string>} permissions Array of permissions to check.
+ * @return {!Promise<undefined>}
+ */
+const checkPermissions = (permissions) => {
+  const cloudPlatformApis = new CloudPlatformApis();
+  return cloudPlatformApis.testIamPermissions(permissions)
+      .then((grantedPermissions) => {
+        grantedPermissions = grantedPermissions || [];
+        if (grantedPermissions.length < permissions.length) {
+          const missedPermissions = permissions.filter(
+              (permission) => grantedPermissions.indexOf(permission) === -1);
+          console.error(`[MISSED] ${missedPermissions.join(',')}.`);
+          process.exit(1);
+        }
+      })
+      .catch((error) => {
+        console.error(`[ERROR] ${error.message}.`);
+        process.exit(1);
+      });
+};
+
+exports.checkPermissions = checkPermissions;

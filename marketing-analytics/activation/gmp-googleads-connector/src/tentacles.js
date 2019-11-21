@@ -388,8 +388,8 @@ class Tentacles {
     };
 
     return getOrCreateSubscription(
-               sourceTopic, `${sourceTopic}-holder`,
-               {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}})
+        sourceTopic, `${sourceTopic}-holder`,
+        {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}})
         .then((subscription) => {
           this.logger.debug(`Get subscription ${subscription.name}.`);
           const subscriber = new Promise((resolver) => {
@@ -521,10 +521,10 @@ let FileAttributes;
 const getAttributes = (fileName) => {
   const attributes = {};
 
-  const api = /API\[(\w*)]/i.exec(fileName);
+  const api = /API\[([\w-]*)]/i.exec(fileName);
   if (api) attributes.api = api[1];
 
-  const config = /_config\[(\w*)]/i.exec(fileName);
+  const config = /_config\[([\w-]*)]/i.exec(fileName);
   if (config) attributes.config = config[1];
 
   const size = /_size\[(\d*)(MB?)?]/i.exec(fileName);
