@@ -4,4 +4,3 @@
 env/
 output/
 beam-temp-output*/
-input_*.csv
