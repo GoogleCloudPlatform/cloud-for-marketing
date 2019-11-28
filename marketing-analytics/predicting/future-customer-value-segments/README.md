@@ -1,6 +1,8 @@
 # Future-Customer-Value-Segments Dataflow pipeline
 
 ## Installation
+Note: This solution requires Python 3.4 or higher.
+
 * Open Cloud Shell inside the Google Cloud Platform
 * Set the project where to install the solution by running: `gcloud config set project [PROJECT_ID]`
 * Clone this repo and `cd` into the directory
