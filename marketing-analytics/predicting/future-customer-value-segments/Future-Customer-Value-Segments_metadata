@@ -1,0 +1,144 @@
+{
+  "description": "Future-Customer-Value-Segments Dataflow pipeline",
+  "name": "Future-Customer-Value-Segments",
+  "parameters": [
+    {
+      "regexes": [
+        "^gs:\\/\\/[^\\n\\r]+$"
+      ],
+      "name": "input_csv",
+      "label": "Input CSV file (containing transactions)",
+      "helpText": "Cloud Storage path of the input CSV file"
+    },
+    {
+      "regexes": [
+        "^gs:\\/\\/[^\\n\\r]+\\/$"
+      ],
+      "name": "output_folder",
+      "label": "Output folder (where results will be stored)",
+      "helpText": "Cloud Storage path where results will be stored. Put a '/' at the end of the path"
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "customer_id_column_position",
+      "label": "Customer ID column position",
+      "helpText": "Column position in the input CSV file containing the Customer ID"
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "transaction_date_column_position",
+      "label": "Transaction Date column position",
+      "helpText": "Column position in the input CSV file containing the Date of the Transaction"
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "sales_column_position",
+      "label": "Sales column position",
+      "helpText": "Column position in the input CSV file containing the Sales value (revenue or other $ amount)"
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "extra_dimension_column_position",
+      "label": "Extra Dimension column position",
+      "is_optional": true,
+      "helpText": "Column position in the input CSV file containing the Extra Dimension (Channel, Location, Category, etc)"
+    },
+    {
+      "regexes": [
+        "(YYYY-MM-DD|MM/DD/YY|MM/DD/YYYY|DD/MM/YY|DD/MM/YYYY|YYYYMMDD)"
+      ],
+      "name": "date_parsing_pattern",
+      "label": "Date Format",
+      "helpText": "One of \"YYYY-MM-DD\", \"MM/DD/YY\", \"MM/DD/YYYY\", \"DD/MM/YY\", \"DD/MM/YYYY\", \"YYYYMMDD\". If the date format in the CSV files does not appear here please reformat the file to match one of those formats."
+    },
+    {
+      "regexes": [
+        "(BGNBD|PNBD)"
+      ],
+      "name": "frequency_model_type",
+      "label": "Model Type",
+      "is_optional": true,
+      "helpText": "\"BGNBD\" or \"PNBD\". BG/NBD vs Pareto/NBD frequency models (default BG/NBD)"
+    },
+    {
+      "regexes": [
+        "(Daily|Weekly|Monthly)"
+      ],
+      "name": "model_time_granularity",
+      "label": "Model Time Granularity",
+      "is_optional": true,
+      "helpText": "One of \"Daily\", \"Weekly\", \"Monthly\". What time granularity to run the model with. Default is \"Weekly\". \"Daily\" is most frequently used for apps customers who have a very short period of time between repeat transactions."
+    },
+    {
+      "regexes": [
+        "^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
+      ],
+      "name": "calibration_start_date",
+      "label": "Calibration Start Date",
+      "is_optional": true,
+      "helpText": "Use YYYY-MM-DD format for this date. If empty it will be automatically calculated from the input data. If specified you must specify also the other dates corresponding to the calibration and holdout periods to be used for model validation."
+    },
+    {
+      "regexes": [
+        "^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
+      ],
+      "name": "calibration_end_date",
+      "label": "Calibration End Date",
+      "is_optional": true,
+      "helpText": "Use YYYY-MM-DD format for this date. If empty it will be automatically calculated from the input data. If specified you must specify also the other dates corresponding to the calibration and holdout periods to be used for model validation."
+    },
+    {
+      "regexes": [
+        "^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
+      ],
+      "name": "cohort_end_date",
+      "label": "Cohort End Date",
+      "is_optional": true,
+      "helpText": "Use YYYY-MM-DD format for this date. If empty it will be automatically calculated from the input data. If specified you must specify also the other dates corresponding to the calibration and holdout periods to be used for model validation."
+    },
+    {
+      "regexes": [
+        "^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
+      ],
+      "name": "holdout_end_date",
+      "label": "Holdout End Date",
+      "is_optional": true,
+      "helpText": "Use YYYY-MM-DD format for this date. If empty it will be automatically calculated from the input data. If specified you must specify also the other dates corresponding to the calibration and holdout periods to be used for model validation."
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "prediction_period",
+      "label": "Prediction Period",
+      "is_optional": true,
+      "helpText": "How far to predict out into the future (in whichever time granularity you chose, this is in [weeks] by default)."
+    },
+    {
+      "regexes": [
+        "^[0-9]+$"
+      ],
+      "name": "output_segments",
+      "label": "Output Segments",
+      "is_optional": true,
+      "helpText": "The number of segments for prediction summary (i.e. 4 for quartiles, 10 for deciles). Default set to 5."
+    },
+    {
+      "regexes": [
+        "^([0-9]*[.])?[0-9]+$"
+      ],
+      "name": "penalizer_coef",
+      "label": "Penalizer Coefficient",
+      "is_optional": true,
+      "helpText": "Penalizer Coefficient used by python lifetimes library. Default to 0.0. More info https://lifetimes.readthedocs.io/en/latest/Quickstart.html#basic-frequency-recency-analysis-using-the-bg-nbd-model"
+    }
+  ]
+}
