@@ -135,6 +135,10 @@ class DfaReporting {
                 };
               });
         }
+        // The revenue value of the conversion, in double type.
+        if (typeof record.value !== 'undefined') {
+          conversion.value = record.value;
+        }
         // A value used to control how conversions from the same device or user
         // on the same day are deduplicated.
         if (typeof record.ordinal !== 'undefined') {
