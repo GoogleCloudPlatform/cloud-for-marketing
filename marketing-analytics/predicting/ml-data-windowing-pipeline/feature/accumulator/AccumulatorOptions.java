@@ -19,8 +19,10 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Field;
 import java.io.Serializable;
-import org.apache.beam.sdk.values.KV;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Options used to setup {@link FeatureAccumulator} for feature generation. */
 @AutoValue
@@ -61,10 +63,26 @@ public abstract class AccumulatorOptions implements Serializable {
    * Creates a list of pair of feature column name and feature column type based on the
    * valueToFeatureName values.
    */
-  public ImmutableList<KV<String, String>> createFieldSchemas() {
+  public ImmutableList<Field> createFieldSchemas() {
+
+    Map<String, String> featureNameToDesc =
+        valueToFeatureName().entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    entry -> entry.getValue(),
+                    entry -> entry.getKey(),
+                    (fdesc1, fdesc2) -> fdesc2));
+
     return valueToFeatureName().values().stream()
         .distinct()
-        .map(featureName -> KV.of(featureName, schemaType()))
+        .map(
+            featureName ->
+                new Field(
+                    featureName,
+                    AccumulatorType.valueOf(type()).isSingleOutput()
+                        ? type() + " value of " + column()
+                        : type() + " of " + featureNameToDesc.get(featureName) + " as " + column(),
+                    schemaType()))
         .collect(toImmutableList());
   }
 }

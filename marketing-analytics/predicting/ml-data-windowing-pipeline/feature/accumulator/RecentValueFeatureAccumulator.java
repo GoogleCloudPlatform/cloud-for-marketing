@@ -32,7 +32,8 @@ public class RecentValueFeatureAccumulator extends FeatureAccumulator {
 
   @Override
   public void accumulate(String value) {
-    if (getValueToFeatureName().containsKey(value)) {
+    if (getValueToFeatureName().containsKey(getFactName())
+        || getValueToFeatureName().containsKey(value)) {
       this.value = value;
     } else if (!Strings.isNullOrEmpty(getDefaultValue())) {
       this.value = getDefaultValue();

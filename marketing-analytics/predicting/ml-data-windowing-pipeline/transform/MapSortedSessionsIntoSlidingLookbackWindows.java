@@ -26,8 +26,7 @@ import org.joda.time.Instant;
 /**
  * Outputs sliding-window LookbackWindows of Session data for the given user.
  * Each LookbackWindow has a fixed time period called windowTime.
- * The first possible LookbackWindow begins at startTimeInSeconds.
- * The next possible LookbackWindow begins at time startTimeInSeconds + slideTime.
+ * The first possible LookbackWindow ends at snapshotStartDate.
  * Each subsequent possible LookbackWindow occurs at the previous
  * LookbackWindow.startTime + slideTime.
  *
@@ -39,16 +38,16 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
     MapSortedSessionsIntoLookbackWindows {
   protected ValueProvider<Long> slideTimeInSecondsProvider;
   public MapSortedSessionsIntoSlidingLookbackWindows(
-      ValueProvider<String> startTime,
-      ValueProvider<String> endTime,
+      ValueProvider<String> snapshotStartDate,
+      ValueProvider<String> snapshotEndDate,
       ValueProvider<Long> lookbackGapInSeconds,
       ValueProvider<Long> windowTimeInSeconds,
       ValueProvider<Long> slideTimeInSeconds,
       ValueProvider<Long> minimumLookaheadTimeInSeconds,
       ValueProvider<Long> maximumLookaheadTimeInSeconds,
       ValueProvider<Boolean> stopOnFirstPositiveLabel) {
-    super(startTime,
-          endTime,
+    super(snapshotStartDate,
+          snapshotEndDate,
           lookbackGapInSeconds,
           windowTimeInSeconds,
           minimumLookaheadTimeInSeconds,
@@ -59,8 +58,9 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
 
   @ProcessElement
   public void processElement(ProcessContext context) {
-    Instant startTime = DateUtil.parseStartDateStringToInstant(startTimeProvider.get());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(endTimeProvider.get());
+    Instant snapshotStartDate = DateUtil.parseStartDateStringToInstant(
+        snapshotStartDateProvider.get());
+    Instant snapshotEndDate = DateUtil.parseEndDateStringToInstant(snapshotEndDateProvider.get());
     Duration lookbackGapDuration =
         Duration.standardSeconds(lookbackGapInSecondsProvider.get());
     Duration windowDuration = Duration.standardSeconds(windowTimeInSecondsProvider.get());
@@ -70,6 +70,7 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
     Duration maximumLookaheadDuration =
         Duration.standardSeconds(maximumLookaheadTimeInSecondsProvider.get());
     boolean stopOnFirstPositiveLabel = stopOnFirstPositiveLabelProvider.get();
+    Instant firstPositiveLabelInstant = null;
 
     KV<String, List<Session>> kv = context.element();
     String userId = kv.getKey();
@@ -78,7 +79,7 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
       return;
     }
     ArrayList<Instant> positiveLabelTimes =
-        SortedSessionsUtil.getPositiveLabelTimes(sessions, startTime, endTime);
+        SortedSessionsUtil.getPositiveLabelTimes(sessions, snapshotStartDate, snapshotEndDate);
 
     // Iterate over all possible LookbackWindows from startTime, moving forwards each time
     // by slideDuration.
@@ -86,9 +87,16 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
     // jumping over large gaps in Session times. This has minimal impact on runtime compared to
     // the overall IO bottlenecks.
     int sessionStartIndex = 0;
-    for (Instant windowStartTime = startTime;
-         windowStartTime.plus(windowDuration).plus(lookbackGapDuration).isBefore(endTime);
+    for (Instant windowStartTime =
+             snapshotStartDate.minus(lookbackGapDuration).minus(windowDuration);
+         !windowStartTime.plus(windowDuration).plus(lookbackGapDuration).isAfter(snapshotEndDate);
          windowStartTime = windowStartTime.plus(slideDuration)) {
+      Instant effectiveDate = windowStartTime.plus(windowDuration).plus(lookbackGapDuration);
+      if (stopOnFirstPositiveLabel
+          && firstPositiveLabelInstant != null
+          && firstPositiveLabelInstant.isBefore(effectiveDate.plus(minimumLookaheadDuration))) {
+        break;
+      }
       // Find the first Session to start in the LookbackWindow.
       while (sessionStartIndex < sessions.size()
              && windowStartTime.isAfter(sessions.get(sessionStartIndex).getVisitStartTime())) {
@@ -98,10 +106,9 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
       if (sessionStartIndex >= sessions.size()) {
         return;
       }
-      // Skip empty LookbackWindows until the first user activity is within the window duration plus
-      // lookbackGapDuration.
+      // Skip empty LookbackWindows until the first user activity is within the window duration.
       if (sessionStartIndex == 0 && sessions.get(sessionStartIndex).getLastHitTime().isAfter(
-              windowStartTime.plus(windowDuration).plus(lookbackGapDuration))) {
+              windowStartTime.plus(windowDuration))) {
         continue;
       }
       // Construct a LookbackWindow.
@@ -119,15 +126,15 @@ public class MapSortedSessionsIntoSlidingLookbackWindows extends
           window.addSession(session);
         }
       }
-      window.setPredictionLabel(SortedSessionsUtil.hasLabelInInterval(
+      Instant positiveLabelInstant = SortedSessionsUtil.getFirstInstantInInterval(
           positiveLabelTimes,
-          minimumLookaheadDuration,
-          maximumLookaheadDuration,
-          window.getEndTime()));
-      context.output(window);
-      if (stopOnFirstPositiveLabel && window.getPredictionLabel()) {
-        return;
+          effectiveDate.plus(minimumLookaheadDuration),
+          effectiveDate.plus(maximumLookaheadDuration));
+      if (firstPositiveLabelInstant == null) {
+        firstPositiveLabelInstant = positiveLabelInstant;
       }
+      window.setPredictionLabel(positiveLabelInstant != null);
+      context.output(window);
     }
   }
 }

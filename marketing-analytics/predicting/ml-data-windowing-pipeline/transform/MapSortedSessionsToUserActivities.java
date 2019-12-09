@@ -25,28 +25,29 @@ import org.joda.time.Duration;
 import org.joda.time.Instant;
 
 /**
- * For each day between the given startTime and endTime, outputs summary UserActivity of the user's
- * Sessions up to this point.
+ * Outputs snapshots that summarizes the user's activity up to the snapshot date.
+ * The first snapshot is at snapshotStartDate. Each subsequent snapshot date occurs
+ * slideTimeInSeconds after the previous one. The last possible snapshot occurs at snapshotEndDate.
  */
 public class MapSortedSessionsToUserActivities extends DoFn<
     KV<String, List<Session>>, UserActivity> {
 
-  protected ValueProvider<String> startTimeProvider;
-  protected ValueProvider<String> endTimeProvider;
+  protected ValueProvider<String> snapshotStartDateProvider;
+  protected ValueProvider<String> snapshotEndDateProvider;
   protected ValueProvider<Long> slideTimeInSecondsProvider;
   protected ValueProvider<Long> minimumLookaheadTimeInSecondsProvider;
   protected ValueProvider<Long> maximumLookaheadTimeInSecondsProvider;
   protected ValueProvider<Boolean> stopOnFirstPositiveLabelProvider;
 
   public MapSortedSessionsToUserActivities(
-      ValueProvider<String> startTime,
-      ValueProvider<String> endTime,
+      ValueProvider<String> snapshotStartDate,
+      ValueProvider<String> snapshotEndDate,
       ValueProvider<Long> slideTimeInSeconds,
       ValueProvider<Long> minimumLookaheadTimeInSeconds,
       ValueProvider<Long> maximumLookaheadTimeInSeconds,
       ValueProvider<Boolean> stopOnFirstPositiveLabel) {
-    startTimeProvider = startTime;
-    endTimeProvider = endTime;
+    snapshotStartDateProvider = snapshotStartDate;
+    snapshotEndDateProvider = snapshotEndDate;
     slideTimeInSecondsProvider = slideTimeInSeconds;
     minimumLookaheadTimeInSecondsProvider = minimumLookaheadTimeInSeconds;
     maximumLookaheadTimeInSecondsProvider = maximumLookaheadTimeInSeconds;
@@ -55,14 +56,17 @@ public class MapSortedSessionsToUserActivities extends DoFn<
 
   @ProcessElement
   public void processElement(ProcessContext context) {
-    Instant startTime = DateUtil.parseStartDateStringToInstant(startTimeProvider.get());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(endTimeProvider.get());
+    Instant snapshotStartDate = DateUtil.parseStartDateStringToInstant(
+        snapshotStartDateProvider.get());
+    Instant snapshotEndDate = DateUtil.parseEndDateStringToInstant(
+        snapshotEndDateProvider.get());
     Duration slideDuration = Duration.standardSeconds(slideTimeInSecondsProvider.get());
     Duration minimumLookaheadDuration =
         Duration.standardSeconds(minimumLookaheadTimeInSecondsProvider.get());
     Duration maximumLookaheadDuration =
         Duration.standardSeconds(maximumLookaheadTimeInSecondsProvider.get());
     Boolean stopOnFirstPositiveLabel = stopOnFirstPositiveLabelProvider.get();
+    Instant firstPositiveLabelInstant = null;
 
     KV<String, List<Session>> kv = context.element();
     String userId = kv.getKey();
@@ -71,18 +75,29 @@ public class MapSortedSessionsToUserActivities extends DoFn<
       return;
     }
     ArrayList<Instant> positiveLabelTimes = SortedSessionsUtil.getPositiveLabelTimes(
-        sessions, startTime, endTime);
+        sessions, snapshotStartDate, snapshotEndDate);
 
     int sessionIndex = 0;
     UserActivity userActivity = new UserActivity();
     userActivity.setUserId(userId);
-    for (Instant snapshotTime = startTime;
-         snapshotTime.isBefore(endTime);
+    for (Instant snapshotTime = snapshotStartDate;
+         !snapshotTime.isAfter(snapshotEndDate);
          snapshotTime = snapshotTime.plus(slideDuration)) {
+      if (stopOnFirstPositiveLabel
+          && firstPositiveLabelInstant != null
+          && firstPositiveLabelInstant.isBefore(snapshotTime.plus(minimumLookaheadDuration))) {
+        break;
+      }
       userActivity.setSnapshotTime(snapshotTime);
-      userActivity.setDurationSinceStartDate(new Duration(startTime, snapshotTime));
-      userActivity.setHasPositiveLabel(SortedSessionsUtil.hasLabelInInterval(
-          positiveLabelTimes, minimumLookaheadDuration, maximumLookaheadDuration, snapshotTime));
+      userActivity.setDurationSinceStartDate(new Duration(snapshotStartDate, snapshotTime));
+      Instant positiveLabelInstant = SortedSessionsUtil.getFirstInstantInInterval(
+          positiveLabelTimes,
+          snapshotTime.plus(minimumLookaheadDuration),
+          snapshotTime.plus(maximumLookaheadDuration));
+      userActivity.setHasPositiveLabel(positiveLabelInstant != null);
+      if (firstPositiveLabelInstant == null) {
+        firstPositiveLabelInstant = positiveLabelInstant;
+      }
       if (userActivity.getDurationSinceFirstActivity() != null) {
         userActivity.setDurationSinceFirstActivity(
             userActivity.getDurationSinceFirstActivity().plus(slideDuration));
@@ -103,10 +118,12 @@ public class MapSortedSessionsToUserActivities extends DoFn<
           userActivity.setDurationSinceFirstActivity(durationSinceSessionEnd);
         }
       }
-      context.output(userActivity);
-      if (stopOnFirstPositiveLabel && userActivity.getHasPositiveLabel()) {
-          break;
+      // Don't output a userActivity if there has been no activity, even if there is a positive
+      // label in the prediction window.
+      if (userActivity.getDurationSinceFirstActivity() == null) {
+        continue;
       }
+      context.output(userActivity);
     }
   }
 }

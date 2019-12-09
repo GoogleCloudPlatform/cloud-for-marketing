@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature;
+package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline;
 
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
@@ -60,9 +60,9 @@ public interface GenerateFeaturesPipelineOptions extends PipelineOptions {
   @Description("Sum value from variables in facts table in lookback window.")
   @Validation.Required
   @Default.String("")
-  ValueProvider<String> getSumFromVariables();
+  ValueProvider<String> getSumValueFromVariables();
 
-  void setSumFromVariables(ValueProvider<String> value);
+  void setSumValueFromVariables(ValueProvider<String> value);
 
   @Description("Count value from variables in facts table in lookback window.")
   @Validation.Required
@@ -82,4 +82,46 @@ public interface GenerateFeaturesPipelineOptions extends PipelineOptions {
   @Validation.Required
   ValueProvider<String> getFeatureDestinationTable();
   void setFeatureDestinationTable(ValueProvider<String> featureDestinationTable);
+
+  @Description("Set true to include predictionLabel in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getTrainMode();
+
+  void setTrainMode(ValueProvider<Boolean> trainMode);
+
+  @Description("Set true to include effectiveDate in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getShowEffectiveDate();
+
+  void setShowEffectiveDate(ValueProvider<Boolean> showEffectiveDate);
+
+  @Description("Set true to include startTime in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getShowStartTime();
+
+  void setShowStartTime(ValueProvider<Boolean> showStartTime);
+
+  @Description("Set true to include endTime in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getShowEndTime();
+
+  void setShowEndTime(ValueProvider<Boolean> showEndTime);
+
+  @Description("Set true to include effectiveDateWeekOfYear in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getShowEffectiveDateWeekOfYear();
+
+  void setShowEffectiveDateWeekOfYear(ValueProvider<Boolean> showEffectiveDateWeekOfYear);
+
+  @Description("Set true to include effectiveDateMonthOfYear in the output.")
+  @Default.Boolean(true)
+  @Validation.Required
+  ValueProvider<Boolean> getShowEffectiveDateMonthOfYear();
+
+  void setShowEffectiveDateMonthOfYear(ValueProvider<Boolean> showEffectiveDateMonthOfYear);
 }

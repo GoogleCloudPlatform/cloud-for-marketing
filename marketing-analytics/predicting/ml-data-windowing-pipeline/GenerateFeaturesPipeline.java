@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature;
+package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -22,6 +22,7 @@ import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.transform.CreateAccumulatorOptionsFn;
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.transform.CreateTableSchemaFn;
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.feature.transform.ExtractFeatureFn;
+import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Field;
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.LookbackWindow;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +84,7 @@ public class GenerateFeaturesPipeline {
             .apply(
                 "Create feature bq column names",
                 ParDo.of(
-                    new DoFn<KV<String, AccumulatorOptions>, Iterable<KV<String, String>>>() {
+                    new DoFn<KV<String, AccumulatorOptions>, Iterable<Field>>() {
                       @ProcessElement
                       public void processElement(ProcessContext c) {
                         KV<String, AccumulatorOptions> e = c.element();
@@ -93,55 +94,58 @@ public class GenerateFeaturesPipeline {
             .apply(
                 "Combine feature bq column names",
                 Combine.globally(
-                    new CombineFn<
-                        Iterable<KV<String, String>>,
-                        List<KV<String, String>>,
-                        Iterable<KV<String, String>>>() {
+                    new CombineFn<Iterable<Field>, List<Field>, Iterable<Field>>() {
 
                       @Override
-                      public List<KV<String, String>> createAccumulator() {
+                      public List<Field> createAccumulator() {
                         return Lists.newArrayList();
                       }
 
                       @Override
-                      public List<KV<String, String>> addInput(
-                          List<KV<String, String>> schemas, Iterable<KV<String, String>> input) {
+                      public List<Field> addInput(List<Field> schemas, Iterable<Field> input) {
                         input.forEach(schemas::add);
                         return schemas;
                       }
 
                       @Override
-                      public List<KV<String, String>> mergeAccumulators(
-                          Iterable<List<KV<String, String>>> lists) {
+                      public List<Field> mergeAccumulators(Iterable<List<Field>> lists) {
                         return Lists.newArrayList(Iterables.concat(lists));
                       }
 
                       @Override
-                      public Iterable<KV<String, String>> extractOutput(
-                          List<KV<String, String>> schemas) {
-                        schemas.add(KV.of("userId", STRING));
-                        schemas.add(KV.of("startTime", INTEGER));
-                        schemas.add(KV.of("endTime", INTEGER));
-                        schemas.add(KV.of("effectiveDate", "DATETIME"));
-                        schemas.add(KV.of("effectiveDateWeekOfYear", STRING));
-                        schemas.add(KV.of("effectiveDateMonthOfYear", STRING));
-                        schemas.add(KV.of("predictionLabel", BOOL));
+                      public Iterable<Field> extractOutput(List<Field> schemas) {
                         return schemas;
                       }
                     }))
             .apply(
                 "Create table schema",
-                ParDo.of(new CreateTableSchemaFn(options.getFeatureDestinationTable())))
+                ParDo.of(
+                    new CreateTableSchemaFn(
+                        options.getFeatureDestinationTable(),
+                        options.getTrainMode(),
+                        options.getShowEffectiveDate(),
+                        options.getShowStartTime(),
+                        options.getShowEndTime(),
+                        options.getShowEffectiveDateWeekOfYear(),
+                        options.getShowEffectiveDateMonthOfYear())))
             .apply("Create table schema view", View.asSingleton());
 
     pipeline
         .apply(
             "Read Windowed Avro Facts",
-            AvroIO.read(LookbackWindow.class)
-                .from(options.getWindowedAvroLocation()))
+            AvroIO.read(LookbackWindow.class).from(options.getWindowedAvroLocation()))
         .apply(
             "Extract Features",
-            ParDo.of(new ExtractFeatureFn(factory, accumulatorOptionsView))
+            ParDo.of(
+                    new ExtractFeatureFn(
+                        factory,
+                        accumulatorOptionsView,
+                        options.getTrainMode(),
+                        options.getShowEffectiveDate(),
+                        options.getShowStartTime(),
+                        options.getShowEndTime(),
+                        options.getShowEffectiveDateWeekOfYear(),
+                        options.getShowEffectiveDateMonthOfYear()))
                 .withSideInputs(accumulatorOptionsView))
         .apply(
             BigQueryIO.writeTableRows()
@@ -178,7 +182,7 @@ public class GenerateFeaturesPipeline {
             pipeline,
             factory,
             "Retrieve sum value from variables",
-            options.getSumFromVariables(),
+            options.getSumValueFromVariables(),
             "Create sum accumulator options",
             AccumulatorType.SUM);
     PCollection<KV<String, AccumulatorOptions>> average =

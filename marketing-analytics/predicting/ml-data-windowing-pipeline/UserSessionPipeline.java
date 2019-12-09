@@ -16,6 +16,7 @@ package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipelin
 
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Session;
 import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.transform.MapGATableRowToSession;
+import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.transform.ValidateGATableRow;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.AvroIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
@@ -34,8 +35,11 @@ public class UserSessionPipeline {
         .apply("Read BigQuery GA Table",
             BigQueryIO.readTableRows().withTemplateCompatibility().fromQuery(
                 options.getInputBigQuerySQL()).usingStandardSql().withoutValidation())
+        .apply("ValidateGATableRow", ParDo.of(new ValidateGATableRow()))
         .apply("MapGATableRowToSession", ParDo.of(new MapGATableRowToSession(
-            options.getPredictionFactName(), options.getPredictionFactValues())))
+                options.getFactsToExtract(),
+                options.getPredictionFactName(),
+                options.getPredictionFactValues())))
         .apply(AvroIO.write(Session.class).to(
             options.getOutputSessionsAvroPrefix()).withSuffix(".avro"));
     pipeline.run();

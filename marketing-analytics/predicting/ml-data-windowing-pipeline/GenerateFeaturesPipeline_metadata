@@ -8,7 +8,7 @@
     "is_optional": false
   },
   {
-    "name": "sumFromVariables",
+    "name": "sumValueFromVariables",
     "label": "Sum value from variables in facts table in lookback window.",
     "help_text": "This feature calculates the total sum of all numeric values within the lookback window. The input expects the column name containing values to sum. e.g totals.hits:[]:[]",
     "is_optional": true
@@ -54,5 +54,41 @@
     "label": "Feature BigQuery Destination.",
     "help_text": "The location of the BigQuery Features table (Note: Ensure the pipeline has write access to this). e.g myproject:mydataset.ga_features_table",
     "is_optional": false
+  },
+  {
+    "name": "trainMode",
+    "label": "Set false to exclude predictionLabel from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
+  },
+  {
+    "name": "showEffectiveDate",
+    "label": "Set false to exclude effectiveDate from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
+  },
+  {
+    "name": "showStartTime",
+    "label": "Set false to exclude startTime from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
+  },
+  {
+    "name": "showEndTime",
+    "label": "Set false to exclude endTime from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
+  },
+  {
+    "name": "showEffectiveDateWeekOfYear",
+    "label": "Set false to exclude effectiveDateWeekOfYear from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
+  },
+  {
+    "name": "showEffectiveDateMonthOfYear",
+    "label": "Set false to exclude effectiveDateMonthOfYear from the pipeline output.",
+    "help_text": "Default value is true.",
+    "is_optional": true
   }]
 }

@@ -26,8 +26,8 @@ import org.apache.beam.sdk.values.KV;
  */
 public class MapSortedSessionsIntoLookbackWindows extends DoFn<
     KV<String, List<Session>>, LookbackWindow> {
-  protected ValueProvider<String> startTimeProvider;
-  protected ValueProvider<String> endTimeProvider;
+  protected ValueProvider<String> snapshotStartDateProvider;
+  protected ValueProvider<String> snapshotEndDateProvider;
   protected ValueProvider<Long> lookbackGapInSecondsProvider;
   protected ValueProvider<Long> windowTimeInSecondsProvider;
   protected ValueProvider<Long> minimumLookaheadTimeInSecondsProvider;
@@ -35,15 +35,15 @@ public class MapSortedSessionsIntoLookbackWindows extends DoFn<
   protected ValueProvider<Boolean> stopOnFirstPositiveLabelProvider;
 
   public MapSortedSessionsIntoLookbackWindows(
-      ValueProvider<String> startTime,
-      ValueProvider<String> endTime,
+      ValueProvider<String> snapshotStartDate,
+      ValueProvider<String> snapshotEndDate,
       ValueProvider<Long> lookbackGapInSeconds,
       ValueProvider<Long> windowTimeInSeconds,
       ValueProvider<Long> minimumLookaheadTimeInSeconds,
       ValueProvider<Long> maximumLookaheadTimeInSeconds,
       ValueProvider<Boolean> stopOnFirstPositiveLabel) {
-    startTimeProvider = startTime;
-    endTimeProvider = endTime;
+    snapshotStartDateProvider = snapshotStartDate;
+    snapshotEndDateProvider = snapshotEndDate;
     lookbackGapInSecondsProvider = lookbackGapInSeconds;
     windowTimeInSecondsProvider = windowTimeInSeconds;
     minimumLookaheadTimeInSecondsProvider = minimumLookaheadTimeInSeconds;

@@ -45,23 +45,19 @@ public class SortedSessionsUtil {
     return positiveLabelTimes;
   }
 
-  // Return true if there is a positiveLabelTime in the interval between
-  // [time + minimumLookaheadTimeInSeconds, time + maximumLookaheadTimeInSeconds].
-  // Assumes positiveInstants in sorted order.
-  public static boolean hasLabelInInterval(
-      ArrayList<Instant> positiveLabelTimes,
-      Duration minimumLookaheadDuration,
-      Duration maximumLookaheadDuration,
-      Instant time) {
-    for (Instant positiveLabelTime : positiveLabelTimes) {
-      if (positiveLabelTime.compareTo(time.plus(maximumLookaheadDuration)) > 0) {
+  // Returns the first Instant in the collection between the start and end time inclusive.
+  // Assumes the given instants collection is in sorted order.
+  public static Instant getFirstInstantInInterval(
+      ArrayList<Instant> instants, Instant start, Instant finish) {
+    for (Instant instant : instants) {
+      if (instant.isAfter(finish)) {
         break;
       }
-      if (positiveLabelTime.compareTo(time.plus(minimumLookaheadDuration)) >= 0) {
-        return true;
+      if (!instant.isBefore(start)) {
+        return instant;
       }
     }
-    return false;
+    return null;
   }
 
   // Returns the day offset from Epoch for the given instant.
