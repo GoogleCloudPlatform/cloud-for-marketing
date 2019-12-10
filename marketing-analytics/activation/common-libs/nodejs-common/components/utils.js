@@ -237,6 +237,23 @@ const replaceParameters = (str, parameters) => {
 exports.replaceParameters = replaceParameters;
 
 /**
+ * Gets a function that will pick existent properties from the given object.
+ * @param {Array<string>} properties
+ */
+const getFilterFunction = (properties) => {
+  return ((obj) => {
+    const result = {};
+    properties.forEach((property) => {
+      if (typeof obj[property] !== 'undefined') {
+        result[property] = obj[property];
+      }
+    });
+    return result;
+  });
+};
+exports.getFilterFunction = getFilterFunction;
+
+/**
  * Checks whether the permissions are granted for current authentication.
  * This function will be invoked during the deployment of a specific solution,
  * e.g. Tentacles, to make sure the operator has the proper permissions to
