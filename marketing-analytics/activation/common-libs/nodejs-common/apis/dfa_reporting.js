@@ -21,7 +21,7 @@
 
 const {google} = require('googleapis');
 const AuthClient = require('./auth_client.js');
-const {getLogger} = require('../components/utils.js');
+const {getLogger, getFilterFunction} = require('../components/utils.js');
 
 const CAMPAIGN_MANAGER_API_SCOPES = [
   'https://www.googleapis.com/auth/ddmconversions',
@@ -54,6 +54,19 @@ const CAMPAIGN_MANAGER_API_SCOPES = [
  * }}
  */
 let InsertConversionsConfig;
+
+/**
+ * List of properties that will be take from the data file as elements of a
+ * conversion.
+ * See https://developers.google.com/doubleclick-advertisers/v3.3/conversions
+ * @type {Array<string>}
+ */
+const PICKED_PROPERTIES = [
+  'ordinal',
+  'timestampMicros',
+  'value',
+  'quantity',
+];
 
 /**
  * Google DfaReport API v3.0 stub.
@@ -114,6 +127,8 @@ class DfaReporting {
      * @return {!Promise<boolean>}
      */
     const sendRequest = (lines, batchId) => {
+      /** @type {function} Gets the conversion elements from the data object. */
+      const filterObject = getFilterFunction(PICKED_PROPERTIES);
       const time = new Date().getTime();
       const conversions = lines.map((line) => {
         const record = JSON.parse(line);
@@ -123,7 +138,7 @@ class DfaReporting {
               ordinal: time,
               timestampMicros: time * 1000,
             },
-            config.conversion);
+            config.conversion, filterObject(record));
         conversion[config.idType] = record[config.idType];
         // Custom Variables
         if (typeof config.customVariables !== 'undefined') {
@@ -134,16 +149,6 @@ class DfaReporting {
                   'value': record[variable],
                 };
               });
-        }
-        // A value used to control how conversions from the same device or user
-        // on the same day are deduplicated.
-        if (typeof record.ordinal !== 'undefined') {
-          conversion.ordinal = record.ordinal;
-        }
-        // The timestamp of the conversion, in microseconds since the Unix
-        // epoch.
-        if (typeof record.timestampMicros !== 'undefined') {
-          conversion.timestampMicros = record.timestampMicros;
         }
         return conversion;
       });
