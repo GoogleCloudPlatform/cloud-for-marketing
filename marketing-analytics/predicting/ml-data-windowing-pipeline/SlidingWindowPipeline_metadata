@@ -1,23 +1,23 @@
 {
-  "name": "WindowingPipeline",
+  "name": "SlidingWindowingPipeline",
   "description": "Step 3. Using the AVRO files from Step 1 build snapshots of effective dates sliding at set intervals, windowing the data based on a specified lookback and prediction window.",
   "parameters": [{
     "name": "inputAvroSessionsLocation",
     "label": "Location of the input user Sessions in AVRO format.",
-    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/",
+    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/*.avro",
     "is_optional": false
   },
   {
-    "name": "startDate",
-    "label": "Start date in dd/mm/yyyy format.",
+    "name": "snapshotStartDate",
+    "label": "Date of the first snapshot in dd/mm/yyyy format.",
     "help_text": "",
-    "is_optional": true
+    "is_optional": false
   },
   {
-    "name": "endDate",
-    "label": "End date (not inclusive) in dd/mm/yyyy format.",
+    "name": "snapshotEndDate",
+    "label": "Date of the last snapshot (inclusive) in dd/mm/yyyy format.",
     "help_text": "",
-    "is_optional": true
+    "is_optional": false
   },
   {
     "name": "slideTimeInSeconds",
@@ -59,12 +59,6 @@
     "name": "outputSlidingWindowAvroPrefix",
     "label": "Location prefix to write the sliding lookback windows.",
     "help_text": "The location on Google Cloud Storage to output the AVRO files to, for windowed data at date intervals based on the sliding amount specified. e.g gs://yourbucket/windowing-output/",
-    "is_optional": false
-  },
-  {
-    "name": "outputSessionBasedWindowAvroPrefix",
-    "label": "Location prefix to write the session-based lookback windows.",
-    "help_text": "The location on Google Cloud Storage to output the AVRO files to, for windowed data at date intervals based on Google Analytics sessions. e.g gs://yourbucket/windowing-session-output/",
     "is_optional": false
   }]
 }

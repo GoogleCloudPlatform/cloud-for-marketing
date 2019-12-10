@@ -10,7 +10,8 @@
           "-D_MAIN_CLASS=UserSessionPipeline",
           "-D_PROJECT_ID=$PROJECT_ID",
           "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
-          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates/source",
+          "-Ddataflow.use-public-ips=false"
         ],
       "id": "build-user-pipeline",
       "waitFor": ["-"]
@@ -25,7 +26,8 @@
           "-D_MAIN_CLASS=DataVisualizationPipeline",
           "-D_PROJECT_ID=$PROJECT_ID",
           "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
-          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates/source",
+          "-Ddataflow.use-public-ips=false"
         ],
       "id": "build-visualization-pipeline",
       "waitFor": ["-"]
@@ -37,12 +39,13 @@
           "-Pdataflow-runner",
           "compile",
           "exec:java",
-          "-D_MAIN_CLASS=WindowingPipeline",
+          "-D_MAIN_CLASS=SlidingWindowPipeline",
           "-D_PROJECT_ID=$PROJECT_ID",
           "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
-          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates/source",
+          "-Ddataflow.use-public-ips=false"
         ],
-      "id": "build-windowing-pipeline",
+      "id": "build-slidingwindowing-pipeline",
       "waitFor": ["-"]
     },
     {
@@ -52,10 +55,27 @@
           "-Pdataflow-runner",
           "compile",
           "exec:java",
-          "-D_MAIN_CLASS=feature.GenerateFeaturesPipeline",
+          "-D_MAIN_CLASS=SessionBasedWindowPipeline",
           "-D_PROJECT_ID=$PROJECT_ID",
           "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
-          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/temp/mlwp_templates"
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates/source",
+          "-Ddataflow.use-public-ips=false"
+        ],
+      "id": "build-sessionwindowing-pipeline",
+      "waitFor": ["-"]
+    },
+    {
+      "name": "gcr.io/cloud-builders/mvn",
+      "args":
+        [
+          "-Pdataflow-runner",
+          "compile",
+          "exec:java",
+          "-D_MAIN_CLASS=GenerateFeaturesPipeline",
+          "-D_PROJECT_ID=$PROJECT_ID",
+          "-D_OUTPUT_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates",
+          "-D_TEMP_LOCATION=gs://${_BUCKET_NAME}/mlwp_templates/source",
+          "-Ddataflow.use-public-ips=false"
         ],
       "id": "build-features-pipeline",
       "waitFor": ["-"]
@@ -65,8 +85,7 @@
         "objects": {
             "location": "gs://${_BUCKET_NAME}/mlwp_templates",
             "paths": [
-              "*_metadata",
-              "feature/*_metadata"
+              "*_metadata"
             ]
         }
     }

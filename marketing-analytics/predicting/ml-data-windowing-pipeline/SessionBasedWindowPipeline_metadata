@@ -1,10 +1,10 @@
 {
-  "name": "DataVisualizationPipeline",
-  "description": "Step 2. This is an optional - but recommended - step in the pipeline to output data from Step 1 into BigQuery for exploration before processing it further.",
+  "name": "SessionBasedWindowPipeline",
+  "description": "Step 3. Using the AVRO files from Step 1 build snapshots of effective dates sliding at set intervals, windowing the data based on a specified lookback and prediction window.",
   "parameters": [{
     "name": "inputAvroSessionsLocation",
     "label": "Location of the input user Sessions in AVRO format.",
-    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/",
+    "help_text": "The location of the AVRO files from Step 1. e.g gs://yourbucket/usersession-output/*.avro",
     "is_optional": false
   },
   {
@@ -17,12 +17,6 @@
     "name": "snapshotEndDate",
     "label": "Date of the last snapshot (inclusive) in dd/mm/yyyy format.",
     "help_text": "",
-    "is_optional": false
-  },
-  {
-    "name": "slideTimeInSeconds",
-    "label": "Slide Length (seconds).",
-    "help_text": "The time interval - in seconds - to slide snapshot dates by. e.g 604800 (for 7 days)",
     "is_optional": false
   },
   {
@@ -44,15 +38,21 @@
     "is_optional": false
   },
   {
-    "name": "outputBigQueryFactsTable",
-    "label": "Location to write the BigQuery Facts table.",
-    "help_text": "The location of the BigQuery Facts table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_facts_table",
+    "name": "lookbackGapInSeconds",
+    "label": "Lookback gap (seconds). Sessions within the lookback gap before an effective date are not added to a LookbackWindow.",
+    "help_text": "Gap - in seconds - to add between the current date and the lookback window, typically this is 1 day to simulate a real life scoring scenario. e.g 86400 (for 1 day)",
     "is_optional": false
   },
   {
-    "name": "outputBigQueryUserActivityTable",
-    "label": "Location to write the BigQuery UserActivity table.",
-    "help_text": "The location of the BigQuery Instance table (Note: Ensure the pipeline has write access to this). e.g myproject.mydataset.ga_instance_table",
+    "name": "windowTimeInSeconds",
+    "label": "Window Length (seconds).",
+    "help_text": "The size - in seconds - of the lookback window. e.g 7776000 (for 90 days)",
+    "is_optional": false
+  },
+  {
+    "name": "outputSessionBasedWindowAvroPrefix",
+    "label": "Location prefix to write the session-based lookback windows.",
+    "help_text": "The location on Google Cloud Storage to output the AVRO files to, for windowed data at date intervals based on Google Analytics sessions. e.g gs://yourbucket/windowing-session-output/",
     "is_optional": false
   }]
 }

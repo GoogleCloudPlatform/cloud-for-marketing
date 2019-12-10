@@ -30,15 +30,15 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     MapSortedSessionsIntoLookbackWindows {
 
   public MapSortedSessionsIntoSessionLookbackWindows(
-      ValueProvider<String> startTime,
-      ValueProvider<String> endTime,
+      ValueProvider<String> snapshotStartDate,
+      ValueProvider<String> snapshotEndDate,
       ValueProvider<Long> lookbackGapInSeconds,
       ValueProvider<Long> windowTimeInSeconds,
       ValueProvider<Long> minimumLookaheadTimeInSeconds,
       ValueProvider<Long> maximumLookaheadTimeInSeconds,
       ValueProvider<Boolean> stopOnFirstPositiveLabel) {
-    super(startTime,
-          endTime,
+    super(snapshotStartDate,
+          snapshotEndDate,
           lookbackGapInSeconds,
           windowTimeInSeconds,
           minimumLookaheadTimeInSeconds,
@@ -48,8 +48,9 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
 
   @ProcessElement
   public void processElement(ProcessContext context) {
-    Instant startTime = DateUtil.parseStartDateStringToInstant(startTimeProvider.get());
-    Instant endTime = DateUtil.parseEndDateStringToInstant(endTimeProvider.get());
+    Instant snapshotStartDate = DateUtil.parseStartDateStringToInstant(
+        snapshotStartDateProvider.get());
+    Instant snapshotEndDate = DateUtil.parseEndDateStringToInstant(snapshotEndDateProvider.get());
     Duration lookbackGapDuration =
         Duration.standardSeconds(lookbackGapInSecondsProvider.get());
     Duration windowDuration = Duration.standardSeconds(windowTimeInSecondsProvider.get());
@@ -58,6 +59,7 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     Duration maximumLookaheadDuration =
         Duration.standardSeconds(maximumLookaheadTimeInSecondsProvider.get());
     boolean stopOnFirstPositiveLabel = stopOnFirstPositiveLabelProvider.get();
+    Instant firstPositiveLabelInstant = null;
 
     KV<String, List<Session>> kv = context.element();
     String userId = kv.getKey();
@@ -66,7 +68,7 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
       return;
     }
     ArrayList<Instant> positiveLabelTimes =
-        SortedSessionsUtil.getPositiveLabelTimes(sessions, startTime, endTime);
+        SortedSessionsUtil.getPositiveLabelTimes(sessions, snapshotStartDate, snapshotEndDate);
 
     /*
      * For each Session, outputs one LookbackWindow with the given Session as the last in the
@@ -79,11 +81,20 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
     int firstSessionIndex = 0;
     for (int lastSessionIndex = 0; lastSessionIndex < sessions.size(); lastSessionIndex++) {
       Session lastSession = sessions.get(lastSessionIndex);
-      if (!lastSession.getLastHitTime().isBefore(endTime)) {
+      Instant effectiveDate = lastSession.getLastHitTime();
+      if (stopOnFirstPositiveLabel
+          && firstPositiveLabelInstant != null
+          && firstPositiveLabelInstant.isBefore(effectiveDate.plus(minimumLookaheadDuration))) {
+        break;
+      }
+      if (effectiveDate.isBefore(snapshotStartDate)) {
+        continue;
+      }
+      if (effectiveDate.isAfter(snapshotEndDate)) {
         break;
       }
       Session firstSession = sessions.get(firstSessionIndex);
-      while (lastSession.getLastHitTime()
+      while (effectiveDate
                  .minus(lookbackGapDuration).minus(windowDuration)
                  .isAfter(firstSession.getVisitStartTime()))  {
         firstSessionIndex++;
@@ -92,9 +103,9 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
       LookbackWindow window = new LookbackWindow();
       window.setUserId(userId);
       window.setFirstActivityTime(sessions.get(0).getVisitStartTime());
-      window.setStartTime(lastSession.getLastHitTime().minus(lookbackGapDuration).minus(windowDuration));
+      window.setStartTime(effectiveDate.minus(lookbackGapDuration).minus(windowDuration));
       window.setEndTime(window.getStartTime().plus(windowDuration));
-      window.setEffectiveDate(lastSession.getLastHitTime());
+      window.setEffectiveDate(effectiveDate);
       for (int i = firstSessionIndex; i <= lastSessionIndex; i++) {
         Session session = sessions.get(i);
         if (!session.getVisitStartTime().isBefore(window.getStartTime())
@@ -102,14 +113,15 @@ public class MapSortedSessionsIntoSessionLookbackWindows extends
           window.addSession(session);
         }
       }
-      window.setPredictionLabel(SortedSessionsUtil.hasLabelInInterval(
+      Instant positiveLabelInstant = SortedSessionsUtil.getFirstInstantInInterval(
           positiveLabelTimes,
-          minimumLookaheadDuration, maximumLookaheadDuration,
-          window.getEndTime()));
-      context.output(window);
-      if (stopOnFirstPositiveLabel && window.getPredictionLabel()) {
-        return;
+          effectiveDate.plus(minimumLookaheadDuration),
+          effectiveDate.plus(maximumLookaheadDuration));
+      if (firstPositiveLabelInstant == null) {
+        firstPositiveLabelInstant = positiveLabelInstant;
       }
+      window.setPredictionLabel(positiveLabelInstant != null);
+      context.output(window);
     }
   }
 }

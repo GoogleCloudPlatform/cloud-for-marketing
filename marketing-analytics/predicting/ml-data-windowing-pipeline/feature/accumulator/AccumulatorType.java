@@ -17,13 +17,12 @@ package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipelin
 /** Accumulator types for generating features in {@code GenerateFeaturesPipeline}. */
 public enum AccumulatorType {
   PROPORTION(true),
-  MOST_FREQUENT(true, true),
-  SUM(false),
-  AVERAGE(false),
+  MOST_FREQUENT(false, true),
+  SUM(false, true),
+  AVERAGE(false, true),
   COUNT(false),
-  AVERAGE_BY_TENURE(
-      false /* valueListRequired */, false /* singleOutput */, true /* windowBased */),
-  RECENT(true, true);
+  AVERAGE_BY_TENURE(false /* valueListRequired */, true /* singleOutput */, true /* windowBased */),
+  RECENT(false, true);
 
   private final boolean valueListRequired;
   private final boolean singleOutput;

@@ -31,7 +31,7 @@ public class UserActivity {
   private String userId;
   // True if the user has a positive label Fact within the prediction window following this day.
   private boolean hasPositiveLabel;
-  // Duration between the global start date until this activty summary.
+  // Duration between the global snapshot start date until this activty summary.
   @Nullable private Duration durationSinceStartDate;
   // Duration between the userId's first Session until this activity summary.
   // Null if the userId has had no Sessions.

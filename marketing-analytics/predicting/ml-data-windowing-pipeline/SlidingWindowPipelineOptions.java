@@ -21,9 +21,9 @@ import org.apache.beam.sdk.options.Validation;
 import org.apache.beam.sdk.options.ValueProvider;
 
 /**
- * The options used to setup a UserSessionPipeline.
+ * The options used to setup a SlidingWindowPipeline.
  */
-public interface DataVisualizationPipelineOptions extends PipelineOptions {
+public interface SlidingWindowPipelineOptions extends PipelineOptions {
 
   @Description("Location of the input user Sessions in AVRO format.")
   @Validation.Required
@@ -40,12 +40,6 @@ public interface DataVisualizationPipelineOptions extends PipelineOptions {
   ValueProvider<String> getSnapshotEndDate();
   void setSnapshotEndDate (ValueProvider<String> snapshotEndDate);
 
-  @Description("Slide Length (seconds)")
-  @Default.Long(86400L)
-  @Validation.Required
-  ValueProvider<Long> getSlideTimeInSeconds();
-  void setSlideTimeInSeconds(ValueProvider<Long> slideTimeInSeconds);
-
   @Description("Minimum lookahead time (seconds)")
   @Default.Long(86400L)
   @Validation.Required
@@ -58,19 +52,33 @@ public interface DataVisualizationPipelineOptions extends PipelineOptions {
   ValueProvider<Long> getMaximumLookaheadTimeInSeconds();
   void setMaximumLookaheadTimeInSeconds(ValueProvider<Long> maximumLookaheadTimeInSeconds);
 
+  @Description("Lookback gap (seconds). Sessions within the lookback gap before an effective "
+               + "date are not added to a LookbackWindow.")
+  @Default.Long(86400L)
+  @Validation.Required
+  ValueProvider<Long> getLookbackGapInSeconds();
+  void setLookbackGapInSeconds(ValueProvider<Long> lookbackGapInSeconds);
+
+  @Description("Window Length (seconds)")
+  @Default.Long(2592000L)
+  @Validation.Required
+  ValueProvider<Long> getWindowTimeInSeconds();
+  void setWindowTimeInSeconds(ValueProvider<Long> windowTimeInSeconds);
+
+  @Description("Slide Length (seconds)")
+  @Default.Long(86400L)
+  @Validation.Required
+  ValueProvider<Long> getSlideTimeInSeconds();
+  void setSlideTimeInSeconds(ValueProvider<Long> slideTimeInSeconds);
+
   @Description("Set true to stop window generation after the first positive label per user.")
   @Default.Boolean(true)
   @Validation.Required
   ValueProvider<Boolean> getStopOnFirstPositiveLabel();
   void setStopOnFirstPositiveLabel(ValueProvider<Boolean> stopOnFirstPositiveLabel);
 
-  @Description("Location to write the BigQuery Facts table.")
+  @Description("Location prefix to write the sliding lookback windows.")
   @Validation.Required
-  ValueProvider<String> getOutputBigQueryFactsTable();
-  void setOutputBigQueryFactsTable(ValueProvider<String> outputBigQueryFactsTable);
-
-  @Description("Location to write the BigQuery UserActivity table.")
-  @Validation.Required
-  ValueProvider<String> getOutputBigQueryUserActivityTable();
-  void setOutputBigQueryUserActivityTable(ValueProvider<String> outputBigQueryUserActivityTable);
+  ValueProvider<String> getOutputSlidingWindowAvroPrefix();
+  void setOutputSlidingWindowAvroPrefix(ValueProvider<String> outputSlidingWindowAvroPrefix);
 }

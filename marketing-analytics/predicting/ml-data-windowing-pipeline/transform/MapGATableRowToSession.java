@@ -31,6 +31,12 @@ import org.joda.time.Instant;
  * Converts BigQuery TableRows from Google Analytics to Sessions.
  */
 public class MapGATableRowToSession extends DoFn<TableRow, Session> {
+
+  public static final String CUSTOM_DIMENSIONS = "customDimensions";
+  public static final String CUSTOM_DIMENSION_VALUE = "value";
+  public static final String CUSTOM_DIMENSION_INDEX = "index";
+  private final ValueProvider<String> factsToExtractProvider;
+  private HashSet<String> factsToExtract;
   // Fact name of the label that we are trying to predict.
   private final ValueProvider<String> labelFactNameProvider;
   private String labelFactName;
@@ -39,10 +45,12 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
   private final ValueProvider<String> positiveLabelFactValuesProvider;
   private HashSet<String> positiveLabelFactValues;
 
-  public MapGATableRowToSession(ValueProvider<String> labelFactName,
-                                ValueProvider<String> positiveLabelFactValues) {
-    labelFactNameProvider = labelFactName;
-    positiveLabelFactValuesProvider = positiveLabelFactValues;
+  public MapGATableRowToSession(ValueProvider<String> factsToExtractProvider,
+                                ValueProvider<String> labelFactNameProvider,
+                                ValueProvider<String> positiveLabelFactValuesProvider) {
+    this.factsToExtractProvider = factsToExtractProvider;
+    this.labelFactNameProvider = labelFactNameProvider;
+    this.positiveLabelFactValuesProvider = positiveLabelFactValuesProvider;
   }
 
   // Returns given url with the trailing forward slash removed if present and otherwise non-empty.
@@ -54,8 +62,11 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
   }
 
   // Labels the given factName and factValue if positive, and also adds it to the given session.
-  private void addFactToSession(
-      String factName, String factValue, Instant time, Session session) {
+  // If a factsToExtract filter is given and the factName is not in the filter, it is not added.
+  private void addFactToSession(String factName, String factValue, Instant time, Session session) {
+    if (!factsToExtractProvider.get().isEmpty() && !factsToExtract.contains(factName)) {
+      return;
+    }
     boolean label = factName.equals(labelFactName) && positiveLabelFactValues.contains(factValue);
     session.addFact(
         new Fact(session.getId(), session.getUserId(), time, factName, factValue, label));
@@ -73,6 +84,15 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
         addFactToSession(
             "dayOfWeekOfHit", String.valueOf(dateTime.getDayOfWeek()), childTime, session);
         addFactToSession("hourOfHit", String.valueOf(dateTime.getHourOfDay()), childTime, session);
+      }
+
+      if (factNamePrefix.contains(CUSTOM_DIMENSIONS)) {
+        addFactsToSession(
+            session,
+            childTime,
+            factNamePrefix + ".index." + tablerow.get(CUSTOM_DIMENSION_INDEX),
+            tablerow.get(CUSTOM_DIMENSION_VALUE));
+        return;
       }
 
       for (Map.Entry<String, Object> entry : tablerow.entrySet()) {
@@ -113,17 +133,20 @@ public class MapGATableRowToSession extends DoFn<TableRow, Session> {
       timeOfDay = "night";
     }
     addFactToSession("visitStartTimeOfDay", timeOfDay, startTime, session);
-    addFactToSession(
-        "visitStartDayOfWeek", dateTime.dayOfWeek().getAsText(), startTime, session);
+    addFactToSession("visitStartDayOfWeek", dateTime.dayOfWeek().getAsText(), startTime, session);
   }
 
   // Converts BigQuery TableRows from Google Analytics to Sessions.
   @ProcessElement
   public void processElement(ProcessContext context) {
+    factsToExtract = new HashSet<String>(
+        Arrays.asList(factsToExtractProvider.get().split("\\s*,\\s*")));
+    factsToExtract.add("fullVisitorId");
+    factsToExtract.add("visitId");
+    factsToExtract.add("visitStartTime");
     labelFactName = labelFactNameProvider.get();
     positiveLabelFactValues =
         new HashSet<>(Arrays.asList(positiveLabelFactValuesProvider.get().split(",")));
-
     TableRow tablerow = context.element();
      Session session = new Session();
     session.setId(String.format("%s/%s", tablerow.get("fullVisitorId"), tablerow.get("visitId")));

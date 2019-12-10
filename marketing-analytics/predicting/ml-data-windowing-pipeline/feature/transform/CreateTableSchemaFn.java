@@ -17,6 +17,7 @@ package com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipelin
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.common.collect.ImmutableMap;
+import com.google.corp.gtech.ads.datacatalyst.components.mldatawindowingpipeline.model.Field;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,32 +25,74 @@ import java.util.Map;
 import org.apache.beam.sdk.extensions.gcp.util.Transport;
 import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.values.KV;
 
 /** Function to create a schema json string based on the map of feature column name and type. */
-public class CreateTableSchemaFn extends DoFn<Iterable<KV<String, String>>, Map<String, String>> {
+public class CreateTableSchemaFn extends DoFn<Iterable<Field>, Map<String, String>> {
 
   public static final String NULLABLE = "NULLABLE";
-  private final ValueProvider<String> tableOutput;
+  public static final String INTEGER = "INTEGER";
+  public static final String STRING = "STRING";
+  public static final String BOOL = "BOOL";
+  public static final String REQUIRED = "REQUIRED";
 
-  public CreateTableSchemaFn(ValueProvider<String> tableOutput) {
+  private final ValueProvider<String> tableOutput;
+  private final ValueProvider<Boolean> trainMode;
+  private final ValueProvider<Boolean> showEffectiveDate;
+  private final ValueProvider<Boolean> showStartTime;
+  private final ValueProvider<Boolean> showEndTime;
+  private final ValueProvider<Boolean> showEffectiveDateWeekOfYear;
+  private final ValueProvider<Boolean> showEffectiveDateMonthOfYear;
+
+  public CreateTableSchemaFn(
+      ValueProvider<String> tableOutput,
+      ValueProvider<Boolean> trainMode,
+      ValueProvider<Boolean> showEffectiveDate,
+      ValueProvider<Boolean> showStartTime,
+      ValueProvider<Boolean> showEndTime,
+      ValueProvider<Boolean> showEffectiveDateWeekOfYear,
+      ValueProvider<Boolean> showEffectiveDateMonthOfYear) {
     this.tableOutput = tableOutput;
+    this.trainMode = trainMode;
+    this.showEffectiveDate = showEffectiveDate;
+    this.showEffectiveDateMonthOfYear = showEffectiveDateMonthOfYear;
+    this.showEffectiveDateWeekOfYear = showEffectiveDateWeekOfYear;
+    this.showEndTime = showEndTime;
+    this.showStartTime = showStartTime;
   }
 
   @ProcessElement
   public void apply(ProcessContext context) {
     TableSchema tableSchema = new TableSchema();
 
-    Iterable<KV<String, String>> fieldKVs = context.element();
+    Iterable<Field> fields = context.element();
     List<TableFieldSchema> tableFields = new ArrayList<>();
-    fieldKVs.forEach(
+
+    fields.forEach(
         field -> {
           tableFields.add(
-              new TableFieldSchema()
-                  .setName(field.getKey())
-                  .setType(field.getValue())
-                  .setMode(NULLABLE));
+              createTableFieldSchema(field.getName(), field.getType(), field.getDescription()));
         });
+
+    tableFields.add(createTableFieldSchema("userId", STRING));
+    if (showStartTime.get()) {
+      tableFields.add(createTableFieldSchema("startTime", INTEGER));
+    }
+    if (showEndTime.get()) {
+      tableFields.add(createTableFieldSchema("endTime", INTEGER));
+    }
+    if (showEffectiveDate.get()) {
+      tableFields.add(createTableFieldSchema("effectiveDate", "DATETIME"));
+    }
+    if (showEffectiveDateWeekOfYear.get()) {
+      tableFields.add(createTableFieldSchema("effectiveDateWeekOfYear", STRING));
+    }
+    if (showEffectiveDateMonthOfYear.get()) {
+      tableFields.add(createTableFieldSchema("effectiveDateMonthOfYear", STRING));
+    }
+    if (trainMode.get()) {
+      tableFields.add(createTableFieldSchema("predictionLabel", BOOL));
+    }
+
     tableSchema.setFields(tableFields);
 
     String jsonSchema;
@@ -59,5 +102,19 @@ public class CreateTableSchemaFn extends DoFn<Iterable<KV<String, String>>, Map<
       throw new IllegalArgumentException("Error creating bq schema", e);
     }
     context.output(ImmutableMap.of(tableOutput.get(), jsonSchema));
+  }
+
+  private static TableFieldSchema createTableFieldSchema(String name, String type) {
+
+    return createTableFieldSchema(name, type, null);
+  }
+
+  private static TableFieldSchema createTableFieldSchema(
+      String name, String type, String description) {
+    return new TableFieldSchema()
+        .setName(name)
+        .setType(type)
+        .setMode(NULLABLE)
+        .setDescription(description);
   }
 }

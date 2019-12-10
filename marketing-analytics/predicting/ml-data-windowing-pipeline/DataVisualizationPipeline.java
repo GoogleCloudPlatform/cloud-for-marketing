@@ -63,8 +63,8 @@ public class DataVisualizationPipeline {
             "MapSortedSessionsToUserActivities",
             ParDo.of(
                 new MapSortedSessionsToUserActivities(
-                    options.getStartDate(),
-                    options.getEndDate(),
+                    options.getSnapshotStartDate(),
+                    options.getSnapshotEndDate(),
                     options.getSlideTimeInSeconds(),
                     options.getMinimumLookaheadTimeInSeconds(),
                     options.getMaximumLookaheadTimeInSeconds(),

@@ -21,22 +21,24 @@ import org.apache.beam.sdk.options.Validation;
 import org.apache.beam.sdk.options.ValueProvider;
 
 /**
- * The options used to setup a WindowingPipeline.
+ * The options used to setup a SessionBasedWindowPipeline.
  */
-public interface WindowingPipelineOptions extends PipelineOptions {
+public interface SessionBasedWindowPipelineOptions extends PipelineOptions {
 
   @Description("Location of the input user Sessions in AVRO format.")
   @Validation.Required
   ValueProvider<String> getInputAvroSessionsLocation();
   void setInputAvroSessionsLocation(ValueProvider<String> inputAvroSessionsLocation);
 
-  @Description("Start date in dd/mm/yyyy format.")
-  ValueProvider<String> getStartDate();
-  void setStartDate(ValueProvider<String> startDate);
+  @Description("Date of the first snapshot in dd/mm/yyyy format.")
+  @Validation.Required
+  ValueProvider<String> getSnapshotStartDate();
+  void setSnapshotStartDate(ValueProvider<String> snapshotStartDate);
 
-  @Description("End date in dd/mm/yyyy format.")
-  ValueProvider<String> getEndDate();
-  void setEndDate(ValueProvider<String> endDate);
+  @Description("Date of the last possible snapshot (inclusive) in dd/mm/yyyy format.")
+  @Validation.Required
+  ValueProvider<String> getSnapshotEndDate();
+  void setSnapshotEndDate (ValueProvider<String> snapshotEndDate);
 
   @Description("Minimum lookahead time (seconds)")
   @Default.Long(86400L)
@@ -57,29 +59,17 @@ public interface WindowingPipelineOptions extends PipelineOptions {
   ValueProvider<Long> getLookbackGapInSeconds();
   void setLookbackGapInSeconds(ValueProvider<Long> lookbackGapInSeconds);
 
-
   @Description("Window Length (seconds)")
   @Default.Long(2592000L)
   @Validation.Required
   ValueProvider<Long> getWindowTimeInSeconds();
   void setWindowTimeInSeconds(ValueProvider<Long> windowTimeInSeconds);
 
-  @Description("Slide Length (seconds)")
-  @Default.Long(86400L)
-  @Validation.Required
-  ValueProvider<Long> getSlideTimeInSeconds();
-  void setSlideTimeInSeconds(ValueProvider<Long> slideTimeInSeconds);
-
   @Description("Set true to stop window generation after the first positive label per user.")
   @Default.Boolean(true)
   @Validation.Required
   ValueProvider<Boolean> getStopOnFirstPositiveLabel();
   void setStopOnFirstPositiveLabel(ValueProvider<Boolean> stopOnFirstPositiveLabel);
-
-  @Description("Location prefix to write the sliding lookback windows.")
-  @Validation.Required
-  ValueProvider<String> getOutputSlidingWindowAvroPrefix();
-  void setOutputSlidingWindowAvroPrefix(ValueProvider<String> outputSlidingWindowAvroPrefix);
 
   @Description("Location prefix to write the session-based lookback windows.")
   @Validation.Required

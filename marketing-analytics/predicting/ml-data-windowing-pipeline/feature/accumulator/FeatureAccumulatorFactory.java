@@ -21,7 +21,6 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -42,6 +41,7 @@ public class FeatureAccumulatorFactory implements Serializable {
       CharMatcher.inRange('0', '9')
           .or(CharMatcher.inRange('a', 'z'))
           .or(CharMatcher.inRange('A', 'Z'));
+  public static final String ALPHA_NUMERIC_PATTERN = "\\w+";
 
   // Pattern: factName:[comma-separated fact values]:[default value]
   // Examples:
@@ -50,10 +50,11 @@ public class FeatureAccumulatorFactory implements Serializable {
   // hits:[]:[]
   private static final Pattern FACT_MATCHER =
       Pattern.compile(
-          "([a-zA-Z0-9| |_|\\-|\\+|\\(|\\)|\\.|\\[|\\]|\\/]*):\\[(([a-zA-Z0-9|"
-              + " |_|\\-|\\+|\\(|\\)|\\.|\\[|\\]|\\/]+,?)*)\\]:\\[([a-zA-Z0-9]*)]");
+          "([\\w]+[a-zA-Z0-9|"
+              + " |_|\\-|\\+|\\(|\\)|\\.|\\[|\\]|\\/]*)(:\\[(([^\\[\\]]+,?)*)\\](:\\[([^\\[\\]]*)])?)?");
   public static final String UNDERSCORE = "_";
   public static final int BQ_COLUMN_NAME_MAX_LENGTH = 128;
+  public static final String VALUE_FEATURE_NAME_PREFIX = "VALUE_";
 
   /** Creates {@link FeatureAccumulator} based on an {@link AccumulatorOptions}. */
   public FeatureAccumulator createAccumulator(AccumulatorOptions opt) {
@@ -135,6 +136,13 @@ public class FeatureAccumulatorFactory implements Serializable {
     return paramValue;
   }
 
+  private static String getFeatureName(String value, int valueIndex) {
+    if (!value.matches(ALPHA_NUMERIC_PATTERN)) {
+      return VALUE_FEATURE_NAME_PREFIX + valueIndex;
+    }
+    return value;
+  }
+
   protected ImmutableMap<String, String> createValueToFeatureNameMap(
       AccumulatorType accumulatorType, List<String> values, String factName, String defaultValue) {
     String prefix = accumulatorType + UNDERSCORE + encodeValueName(factName);
@@ -145,12 +153,14 @@ public class FeatureAccumulatorFactory implements Serializable {
       values.add(defaultValue);
     }
 
-    for (String value : values) {
+    for (int valueIndex = 0; valueIndex < values.size(); valueIndex++) {
+      String value = values.get(valueIndex);
       if (accumulatorType.isSingleOutput()) {
         builder.put(value, truncateColumnNameIfNeeded(prefix));
       } else {
         builder.put(
-            value, truncateColumnNameIfNeeded(prefix + UNDERSCORE + encodeValueName(value)));
+            value,
+            truncateColumnNameIfNeeded(prefix + UNDERSCORE + getFeatureName(value, valueIndex)));
       }
     }
 
@@ -181,8 +191,7 @@ public class FeatureAccumulatorFactory implements Serializable {
     StringBuilder encodedValueName = new StringBuilder();
     for (Character c : s.toCharArray()) {
       if (!ALPHA_NUMERIC_MATCHER.matches(c)) {
-        int i = StandardCharsets.UTF_8.encode(c.toString()).get();
-        encodedValueName.append('_').append(i);
+        encodedValueName.append('_');
       } else {
         encodedValueName.append(c);
       }

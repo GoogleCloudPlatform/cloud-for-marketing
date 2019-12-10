@@ -40,7 +40,8 @@ public class MostFrequentValueFeatureAccumulator extends FeatureAccumulator {
 
   @Override
   public void accumulate(String value) {
-    if (getValueToFeatureName().containsKey(value)) {
+    if (getValueToFeatureName().containsKey(getFactName())
+        || getValueToFeatureName().containsKey(value)) {
       valueBag.add(value);
     } else if (!Strings.isNullOrEmpty(getDefaultValue())) {
       valueBag.add(getDefaultValue());

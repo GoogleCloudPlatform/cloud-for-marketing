@@ -9,6 +9,12 @@ the Analytics data into AVRO files.",
     "is_optional": false
   },
   {
+    "name": "factsToExtract",
+    "label": "Comma separated list of fact names to extract. If empty, all facts extracted.",
+    "help_text": "Comma separated fact names to extract: Example: channelGrouping,socialEngagementType,totals.visits,totals.hits,totals.pageviews,totals.timeOnSite,totals.bounces,totals.transactions,totals.transactionRevenue,totals.newVisits,totals.screenviews,totals.uniqueScreenviews,totals.timeOnScreen,totals.totalTransactionRevenue,totals.sessionQualityDim,trafficSource.source,trafficSource.medium,trafficSource.keyword,device.browser,device.operatingSystem,device.isMobile,device.mobileDeviceBranding,device.deviceCategory,geoNetwork.region,geoNetwork.metro,geoNetwork.city,hits.page.searchKeyword,hits.page.searchCategory,hits.page.pagePathLevel1,hits.page.pagePathLevel2,hits.page.pagePathLevel3,hits.page.pagePathLevel4",
+    "is_optional": true
+  },
+  {
     "name": "predictionFactName",
     "label": "Name of the Fact with the prediction target.",
     "help_text": "The name of the BigQuery column that contains the value we are trying to predict (can have multiple columns separated by commas). e.g hits.eventInfo.eventAction",
