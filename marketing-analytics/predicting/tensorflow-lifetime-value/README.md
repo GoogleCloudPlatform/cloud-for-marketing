@@ -11,3 +11,5 @@ The Github repository is a companion code to a four-part series that discusses h
 - [Part 2: Training the model](https://cloud.google.com/solutions/machine-learning/clv-prediction-with-offline-training-train). Discusses how to prepare the data and train the models.
 - [Part 3: Deploying to production](https://cloud.google.com/solutions/machine-learning/clv-prediction-with-offline-training-deploy). Describes how to deploy the models discussed in Part 2 to a production system.
 - [Part 4: Using AutoML Tables](https://cloud.google.com/solutions/machine-learning/clv-prediction-with-automl-tables). Shows how to use AutoML Tables to build and deploy a model.
+
+Disclaimer: This is not an official Google product.

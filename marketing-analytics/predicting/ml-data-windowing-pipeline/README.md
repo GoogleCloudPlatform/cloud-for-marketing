@@ -507,3 +507,6 @@ pipeline running.
 ## Reference
 
 * [Running Cloud Dataflow Templates](https://cloud.google.com/dataflow/docs/guides/templates/running-templates#custom-templates)
+
+
+Disclaimer: This is not an official Google product.
