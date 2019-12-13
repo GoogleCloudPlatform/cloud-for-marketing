@@ -455,10 +455,14 @@ class Tentacles {
           })
           .then(() => {
             if (attributes.topic) {
-              return this.apiLock.unlock(message.attributes.topic).then(() => {
-                return this.nudge(
-                    `Triggered by message[${messageId}]`,
-                    {topic: message.attributes.topic});
+              return this.releaseLockAndNotify(attributes.topic,
+                  messageId).catch((error) => {
+                // Re-do this when unknown external exceptions happens.
+                console.error('External exception happened: ', error);
+                return wait(10000).then(() => {
+                  console.log('Wait 10 second and retry...');
+                  return this.releaseLockAndNotify(attributes.topic, messageId);
+                });
               });
             }
             console.log(`There is no topic. In local file upload mode.`);
@@ -466,6 +470,20 @@ class Tentacles {
           });
     };
     return adaptNode6(sendApiData);
+  }
+
+  /**
+   * Releases the lock and sends notification message for next piece of data.
+   * @param {string} topic The topic name as well as the lock name.
+   * @param {string} messageId ID of current message.
+   * @return {!Promise<string>} ID of the 'nudge' message.
+   */
+  releaseLockAndNotify(topic, messageId) {
+    return this.apiLock.unlock(topic).then(() => {
+      return this.nudge(
+          `Triggered by message[${messageId}]`,
+          {topic: topic});
+    });
   }
 
   /**
@@ -524,10 +542,10 @@ const getAttributes = (fileName) => {
   const api = /API\[([\w-]*)]/i.exec(fileName);
   if (api) attributes.api = api[1];
 
-  const config = /_config\[([\w-]*)]/i.exec(fileName);
+  const config = /config\[([\w-]*)]/i.exec(fileName);
   if (config) attributes.config = config[1];
 
-  const size = /_size\[(\d*)(MB?)?]/i.exec(fileName);
+  const size = /size\[(\d*)(MB?)?]/i.exec(fileName);
   if (size) attributes.size = size[1].toString();
 
   attributes.dryRun = /dryrun/i.test(fileName).toString();
