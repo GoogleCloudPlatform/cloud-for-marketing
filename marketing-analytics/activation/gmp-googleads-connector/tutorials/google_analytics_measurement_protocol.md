@@ -71,7 +71,9 @@ synchronize the configuration to Google Cloud Firestore/Datastore. Tentacles
 ```
 [measurement_protocol]:https://developers.google.com/analytics/devguides/collection/protocol/v1/parameters
 
-## File Format
+## Preparing data files
+
+### File content type
 
 The file needs to be in JSONL for the Measurement Protocol. As we are sending
 data as an event for each user and we have already configured the structure
@@ -88,15 +90,18 @@ user belongs to. Below is an example of what this will look like :
 {"cid":"219421951.1530516965","cd5":"3"}
 {"cid":"171221710.1544538223","cd5":"2"}
 ```
-Cid is referring to the Google Analytics Client ID and CD5 is referring to
+`cid` is referring to the Google Analytics Client ID and `cd5` is referring to
 Custom Dimension with the index 5.
-
-This file is then exported to the GCS outbound bucket that triggers the
-`tentacles_init` function.
 
 [custom_dimension]:https://support.google.com/analytics/answer/2709828?hl=en
 
-## Realtime Reporting
+### File naming convention
+
+The name of this file should contain `API[MP]` and 
+`config[YOUR_CONFIGURATION_NAME]`. After it is exported to the Cloud Storage 
+bucket, it will trigger the `tentacles_init` function to start the process.
+
+## Validating results
 
 To verify that the hits are coming through correctly, check the realtime
 reporting in GA where you can see the data coming in there :
