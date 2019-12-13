@@ -106,3 +106,5 @@ properties, in JSON format, and under the name `serviceAccountKey`.
 
 Note: A sheet's script (and script properties) are visible and editable to
 anyone who can edit the sheet.
+
+Disclaimer: This is not an official Google product.
