@@ -13,4 +13,4 @@ advertising. Combined with creative performance data, the output from this
 pipeline can be used to explore correlations between advertising content and
 performance (e.g. creatives with a human model tend to perform better).
 
-**Oculi is available in its own repository at github.com/google/oculi.**
+**Oculi is available in its own repository at [github.com/google/oculi](github.com/google/oculi).**
