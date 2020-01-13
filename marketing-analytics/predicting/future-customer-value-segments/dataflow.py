@@ -43,7 +43,8 @@ date_formats = {
 
 
 def parse_date(date, options):
-    return datetime.strptime(date, date_formats[options['date_parsing_pattern']])
+    return datetime.strptime(date,
+                             date_formats[options['date_parsing_pattern']])
 
 
 def parse_date_yyyymmdd(date):
@@ -62,12 +63,15 @@ def time_granularity_params(granularity):
         return 7, 'weeks'
     if granularity == 'monthly':
         return 30, 'months'
-    raise ValueError('Model time granularity specified is not one of the following valid options: '
-                     '[daily, weekly, monthly]')
+    raise ValueError(
+        'Model time granularity specified is not one of the following '
+        'valid options: '
+        '[daily, weekly, monthly]')
 
 
 def set_extra_options(options):
-    options['extra_dimension_exists'] = bool(options['extra_dimension_column_position'])
+    options['extra_dimension_exists'] = bool(
+        options['extra_dimension_column_position'])
     return options
 
 
@@ -136,25 +140,35 @@ def min_max_dates_dict(min_max_dates):
 def limit_dates_dict(dates, options):
     if options['calibration_start_date']:
         limit_dates = {
-            'auto_date_selection': False,
-            'calibration_start_date': parse_date_yyyymmdd(options['calibration_start_date']),
-            'cohort_end_date': parse_date_yyyymmdd(options['cohort_end_date']),
-            'calibration_end_date': parse_date_yyyymmdd(options['calibration_end_date']),
-            'holdout_end_date': parse_date_yyyymmdd(options['holdout_end_date']),
+            'auto_date_selection':
+            False,
+            'calibration_start_date':
+            parse_date_yyyymmdd(options['calibration_start_date']),
+            'cohort_end_date':
+            parse_date_yyyymmdd(options['cohort_end_date']),
+            'calibration_end_date':
+            parse_date_yyyymmdd(options['calibration_end_date']),
+            'holdout_end_date':
+            parse_date_yyyymmdd(options['holdout_end_date']),
         }
     else:
         limit_dates = {
-            'auto_date_selection': True,
-            'calibration_start_date': dates['min_date'],
-            'cohort_end_date': dates['min_date'] + timedelta(days=dates['cohort_days']),
-            'calibration_end_date': dates['min_date'] + timedelta(days=dates['half_days']),
-            'holdout_end_date': dates['max_date'],
+            'auto_date_selection':
+            True,
+            'calibration_start_date':
+            dates['min_date'],
+            'cohort_end_date':
+            dates['min_date'] + timedelta(days=dates['cohort_days']),
+            'calibration_end_date':
+            dates['min_date'] + timedelta(days=dates['half_days']),
+            'holdout_end_date':
+            dates['max_date'],
         }
 
     limit_dates.update(
-        holdout_start_date=limit_dates['calibration_end_date'] + timedelta(days=1),
-        cohort_start_date=limit_dates['calibration_start_date']
-    )
+        holdout_start_date=limit_dates['calibration_end_date'] +
+        timedelta(days=1),
+        cohort_start_date=limit_dates['calibration_start_date'])
 
     return [limit_dates]
 
@@ -167,15 +181,18 @@ def customers_in_cohort(entry, dates):
 
 def count_customers(_, cohort_ids_count, all_customer_ids_count):
     return [{
-        'num_customers_cohort': cohort_ids_count,
-        'num_customers_total': all_customer_ids_count,
-        'perc_customers_cohort': round(100.0 * cohort_ids_count / all_customer_ids_count, 2),
+        'num_customers_cohort':
+        cohort_ids_count,
+        'num_customers_total':
+        all_customer_ids_count,
+        'perc_customers_cohort':
+        round(100.0 * cohort_ids_count / all_customer_ids_count, 2),
     }]
 
 
 def cohort_records_in_cal_hol(entry, cohort, dates):
-    if dates['calibration_start_date'] <= entry[2] <= dates['holdout_end_date'] and \
-            entry[0] in cohort:
+    if dates['calibration_start_date'] <= entry[2] <= \
+            dates['holdout_end_date'] and entry[0] in cohort:
         return [entry]
     return []
 
@@ -187,7 +204,8 @@ def records_in_cal_hol(entry, dates):
 
 
 def records_in_calibration(entry, dates):
-    if dates['calibration_start_date'] <= entry[2] <= dates['calibration_end_date']:
+    if dates['calibration_start_date'] <= entry[2] <= dates[
+            'calibration_end_date']:
         return [entry]
     return []
 
@@ -216,19 +234,15 @@ def create_cal_cbs(customer_records, options, dates):
             max_date = r[2]
 
     average_order_value = tot_sales / number_of_transactions
-    model_time_divisor, _ = time_granularity_params(options['model_time_granularity'])
+    model_time_divisor, _ = time_granularity_params(
+        options['model_time_granularity'])
     frequency = number_of_transactions - 1
     recency = (max_date - min_date).days / model_time_divisor
-    total_time_observed = ((dates['calibration_end_date'] - min_date).days + 1) / model_time_divisor
+    total_time_observed = ((dates['calibration_end_date'] - min_date).days +
+                           1) / model_time_divisor
 
-    return [(
-        customer_id,
-        number_of_transactions,
-        average_order_value,
-        frequency,
-        recency,
-        total_time_observed
-    )]
+    return [(customer_id, number_of_transactions, average_order_value,
+             frequency, recency, total_time_observed)]
 
 
 def create_fullcbs(customer_records, options, dates):
@@ -247,10 +261,12 @@ def create_fullcbs(customer_records, options, dates):
             max_date = r[2]
 
     historical_aov = tot_sales / number_of_transactions
-    model_time_divisor, _ = time_granularity_params(options['model_time_granularity'])
+    model_time_divisor, _ = time_granularity_params(
+        options['model_time_granularity'])
     frequency = number_of_transactions - 1
     recency = (max_date - min_date).days / model_time_divisor
-    total_time_observed = ((dates['max_date'] - min_date).days + 1) / model_time_divisor
+    total_time_observed = (
+        (dates['max_date'] - min_date).days + 1) / model_time_divisor
 
     return [(
         customer_id,
@@ -274,7 +290,8 @@ def create_extra_dimensions_stats(customer_records_by_extra_dim):
         if not max_dimension_date or r[2] > max_dimension_date:
             max_dimension_date = r[2]
 
-    return customer_id, extra_dimension, dimension_count, tot_sales, max_dimension_date
+    return customer_id, extra_dimension, dimension_count, tot_sales, \
+           max_dimension_date
 
 
 def extract_top_extra_dimension(customer_records):
@@ -286,7 +303,8 @@ def extract_top_extra_dimension(customer_records):
             continue
         if r[2] > top_record[2] or \
                 r[2] == top_record[2] and r[4] > top_record[4] or \
-                r[2] == top_record[2] and r[4] == top_record[4] and r[3] > top_record[3]:
+                r[2] == top_record[2] and r[4] == top_record[4] and \
+                r[3] > top_record[3]:
             # 2: dimension_count, 3: tot_sales, 4: max_dimension_date
             top_record = r
 
@@ -299,7 +317,7 @@ def add_top_extra_dimension_to_fullcbs(entry, options, customer_extra_dim):
 
     customer_id = entry[0]
     if customer_id in customer_extra_dim:
-        return [entry + (customer_extra_dim[customer_id],)]
+        return [entry + (customer_extra_dim[customer_id], )]
     return [entry]
 
 
@@ -310,17 +328,20 @@ def discard_if_no_extra_dimension(entry, options):
 
 
 def filter_first_transaction_date_records(entry, first_trans):
-    if entry[2] == first_trans.get(entry[0]):  # date == first_transaction[customer_id]
+    if entry[2] == first_trans.get(
+            entry[0]):  # date == first_transaction[customer_id]
         return []
     return [entry]
 
 
 def calculate_time_unit_numbers(entry, options, dates):
     csdp1 = dates['calibration_start_date'] + timedelta(days=1)
-    model_time_divisor, _ = time_granularity_params(options['model_time_granularity'])
+    model_time_divisor, _ = time_granularity_params(
+        options['model_time_granularity'])
 
     # (customer_id, date, time_unit_number)
-    return [(entry[0], entry[2], math.floor((entry[2] - csdp1).days / model_time_divisor) + 1)]
+    return [(entry[0], entry[2],
+             math.floor((entry[2] - csdp1).days / model_time_divisor) + 1)]
 
 
 def calculate_cumulative_repeat_transactions(_, repeats):
@@ -328,7 +349,8 @@ def calculate_cumulative_repeat_transactions(_, repeats):
     tot = 0
     for k, v in sorted_repeats:
         tot += v
-        yield k, v, tot  # (time_unit_number, repeat_transactions, repeat_transactions_cumulative)
+        yield k, v, tot  # (time_unit_number, repeat_transactions,
+        #  repeat_transactions_cumulative)
 
 
 def prediction_sharded(entry, options, use_exact_method):
@@ -374,8 +396,10 @@ def split_in_ntiles_exact(_, options, entries):
         current_segment += 1
 
 
-def expected_values_segment_limits(_, options, expected_values_count, num_customers):
-    sorted_expected_values_count = sorted(expected_values_count, key=itemgetter(0), reverse=True)
+def expected_values_segment_limits(_, options, expected_values_count,
+                                   num_customers):
+    sorted_expected_values_count = sorted(
+        expected_values_count, key=itemgetter(0), reverse=True)
     result = []
 
     output_segments = options['output_segments']
@@ -434,15 +458,10 @@ def generate_prediction_summary(segment_records):
     total_customer_value = round(expected_value_sum, 2)
     number_of_customers = count
 
-    return (
-        segment,
-        average_retention_probability,
-        average_predicted_customer_value,
-        average_predicted_order_value,
-        average_predicted_purchases,
-        total_customer_value,
-        number_of_customers
-    )
+    return (segment, average_retention_probability,
+            average_predicted_customer_value, average_predicted_order_value,
+            average_predicted_purchases, total_customer_value,
+            number_of_customers)
 
 
 def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity):
@@ -466,23 +485,19 @@ def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity):
     average_predicted_purchases = round(predicted_purchases_sum / count, 2)
     total_customer_value = round(expected_value_sum, 2)
     number_of_customers = count
-    perc_of_total_customer_value = str(round(100 * total_customer_value / tot_equity, 2)) + '%'
+    perc_of_total_customer_value = str(
+        round(100 * total_customer_value / tot_equity, 2)) + '%'
 
-    return [(
-        extra_dimension,
-        average_retention_probability,
-        average_predicted_customer_value,
-        average_predicted_order_value,
-        average_predicted_purchases,
-        total_customer_value,
-        number_of_customers,
-        perc_of_total_customer_value
-    )]
+    return [(extra_dimension, average_retention_probability,
+             average_predicted_customer_value, average_predicted_order_value,
+             average_predicted_purchases, total_customer_value,
+             number_of_customers, perc_of_total_customer_value)]
 
 
 def calculate_perc_of_total_customer_value(entry, tot_equity):
-    perc_of_total_customer_value = str(round(100 * entry[5] / tot_equity, 2)) + '%'
-    return [entry + (perc_of_total_customer_value,)]
+    perc_of_total_customer_value = str(round(100 * entry[5] / tot_equity,
+                                             2)) + '%'
+    return [entry + (perc_of_total_customer_value, )]
 
 
 def list_to_csv_line(data):
@@ -526,7 +541,7 @@ def pnbd_conditional_expected_transactions(model, p_alive, t, frequency, T):
     beta = params['beta']
 
     p1 = (r + frequency) * (beta + T) / ((alpha + T) * (s - 1))
-    p2 = (1 - ((beta + T) / (beta + T + t)) ** (s - 1))
+    p2 = (1 - ((beta + T) / (beta + T + t))**(s - 1))
     p3 = p_alive
 
     return p1 * p2 * p3
@@ -542,9 +557,11 @@ def extract_gamma_gamma_params(model):
     return params
 
 
-def calc_full_fit_period(calibration_start_date, holdout_end_date, time_divisor):
+def calc_full_fit_period(calibration_start_date, holdout_end_date,
+                         time_divisor):
     return int(
-        math.ceil((holdout_end_date - calibration_start_date).days / time_divisor)) + 3  # Just in case, doesn't hurt
+        math.ceil((holdout_end_date - calibration_start_date).days /
+                  time_divisor)) + 3  # Just in case, doesn't hurt
 
 
 def expected_cumulative_transactions(frequency_model, t_cal, t_tot):
@@ -574,23 +591,31 @@ def expected_cumulative_transactions(frequency_model, t_cal, t_tot):
 
 
 def predict_txs(frequency_model, t_cal, intervals):
-    expected_cumulative = expected_cumulative_transactions(frequency_model, t_cal, intervals)
+    expected_cumulative = expected_cumulative_transactions(
+        frequency_model, t_cal, intervals)
     expected_incremental = expected_cumulative - np.delete(
         np.hstack(([0], expected_cumulative)), expected_cumulative.size - 1)
 
     predicted = pd.DataFrame(
-        data=np.vstack((expected_incremental, expected_cumulative)).transpose(),
-        columns=['predicted_transactions', 'predicted_cumulative_transactions'])
+        data=np.vstack((expected_incremental,
+                        expected_cumulative)).transpose(),
+        columns=[
+            'predicted_transactions', 'predicted_cumulative_transactions'
+        ])
 
     predicted['time_unit_number'] = predicted.index.values + 1
     return predicted
 
 
-def calc_calibration_period(calibration_start_date, calibration_end_date, time_divisor):
-    return int(math.ceil(((calibration_end_date - calibration_start_date).days / time_divisor)))
+def calc_calibration_period(calibration_start_date, calibration_end_date,
+                            time_divisor):
+    return int(
+        math.ceil(((calibration_end_date - calibration_start_date).days /
+                   time_divisor)))
 
 
-def plot_repeat_transaction_over_time(data_frame, median, output_folder, time_label):
+def plot_repeat_transaction_over_time(data_frame, median, output_folder,
+                                      time_label):
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib import pyplot as plt
@@ -617,15 +642,14 @@ def plot_repeat_transaction_over_time(data_frame, median, output_folder, time_la
     plt.xlabel(time_label_short)
 
     # Save to file
-    save_to_file(
-        output_folder + 'repeat_transactions_over_time.png',
-        lambda f: plt.savefig(f, bbox_inches='tight')
-    )
+    save_to_file(output_folder + 'repeat_transactions_over_time.png',
+                 lambda f: plt.savefig(f, bbox_inches='tight'))
 
     return ax
 
 
-def plot_cumulative_repeat_transaction_over_time(data_frame, median, output_folder, time_label):
+def plot_cumulative_repeat_transaction_over_time(data_frame, median,
+                                                 output_folder, time_label):
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib import pyplot as plt
@@ -638,7 +662,8 @@ def plot_cumulative_repeat_transaction_over_time(data_frame, median, output_fold
         time_label_short = 'Week'
 
     txs = data_frame[[
-        'time_unit_number', 'repeat_transactions_cumulative', 'predicted_cumulative_transactions'
+        'time_unit_number', 'repeat_transactions_cumulative',
+        'predicted_cumulative_transactions'
     ]]
     txs.columns = [time_label_short, 'Actual', 'Model']
     ax = txs.plot(kind='line', x=time_label_short, style=['-', '--'])
@@ -654,8 +679,7 @@ def plot_cumulative_repeat_transaction_over_time(data_frame, median, output_fold
     # Save to file
     save_to_file(
         output_folder + 'repeat_cumulative_transactions_over_time.png',
-        lambda f: plt.savefig(f, bbox_inches='tight')
-    )
+        lambda f: plt.savefig(f, bbox_inches='tight'))
 
     return ax
 
@@ -685,9 +709,9 @@ def gamma_gamma_validation(cbs, penalizer_coef):
 
 def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
                                time_divisor, time_label, hold_end_date,
-                               repeat_tx, output_folder,
-                               num_customers_cohort, perc_customers_cohort,
-                               num_txns_val, perc_txns_val, penalizer_coef):
+                               repeat_tx, output_folder, num_customers_cohort,
+                               perc_customers_cohort, num_txns_val,
+                               perc_txns_val, penalizer_coef):
     # Fit the model
     if model_type == 'BGNBD':
         frequency_model = fit_bgnbd_model(cbs, penalizer_coef)
@@ -699,8 +723,10 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
         raise ValueError('Model type %s is not valid' % model_type)
 
     # Transactions by tiem unit predictions
-    intervals = calc_full_fit_period(cal_start_date, hold_end_date, time_divisor)
-    predicted = predict_txs(frequency_model, cbs['total_time_observed'].values, intervals)
+    intervals = calc_full_fit_period(cal_start_date, hold_end_date,
+                                     time_divisor)
+    predicted = predict_txs(frequency_model, cbs['total_time_observed'].values,
+                            intervals)
 
     # Actual transactions per time unit
     txs = repeat_tx
@@ -712,34 +738,36 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     txs = txs.drop(txs.index[len(txs) - 1])
 
     # Location of the median line for validation plots
-    median_line = calc_calibration_period(cal_start_date, cal_end_date, time_divisor)
+    median_line = calc_calibration_period(cal_start_date, cal_end_date,
+                                          time_divisor)
 
     # Plot creation
-    plot_repeat_transaction_over_time(txs, median_line, output_folder, time_label)
-    plot_cumulative_repeat_transaction_over_time(txs, median_line, output_folder, time_label)
+    plot_repeat_transaction_over_time(txs, median_line, output_folder,
+                                      time_label)
+    plot_cumulative_repeat_transaction_over_time(txs, median_line,
+                                                 output_folder, time_label)
 
     # Output customers in cohort and txns observed
-    model_params += ('Customers modeled for validation: ' +
-                     str(num_customers_cohort) +
-                     ' (' +
-                     str(perc_customers_cohort) + '% of total customers)')
-    model_params += ('\nTransactions observed for validation: ' +
-                     str(num_txns_val) +
-                     ' (' +
-                     str(perc_txns_val) +
-                     '% of total transactions)')
+    model_params += (
+        'Customers modeled for validation: ' + str(num_customers_cohort) + ' ('
+        + str(perc_customers_cohort) + '% of total customers)')
+    model_params += (
+        '\nTransactions observed for validation: ' + str(num_txns_val) + ' (' +
+        str(perc_txns_val) + '% of total transactions)')
     model_params += '\n\n'
 
     # Calculate MAPE (Mean Absolute Percent Error)
     error_by_time = (
-                            txs.iloc[median_line:, :]['repeat_transactions_cumulative'] -
-                            txs.iloc[median_line:, :]['predicted_cumulative_transactions']
-                    ) / txs.iloc[median_line:, :]['repeat_transactions_cumulative'] * 100
+        txs.iloc[median_line:, :]['repeat_transactions_cumulative'] -
+        txs.iloc[median_line:, :]['predicted_cumulative_transactions']
+    ) / txs.iloc[median_line:, :]['repeat_transactions_cumulative'] * 100
     mape = error_by_time.abs().mean()
 
-    model_params += ('Mean Absolute Percent Error (MAPE): ' + str(round(mape, 2)) + '%\n')
+    model_params += (
+        'Mean Absolute Percent Error (MAPE): ' + str(round(mape, 2)) + '%\n')
 
-    # return tuple that includes the MAPE, which wil be used for a threshold check
+    # return tuple that includes the MAPE, which will be used for a
+    # threshold check
     return model_params, round(mape, 2)
 
 
@@ -748,13 +776,26 @@ def raise_error_if_invalid_mape(validation_result):
         raise RuntimeError(validation_result['error_message'])
 
 
-def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx, num_customers, num_txns):
-    # calcbs = (customer_id, number_of_transactions, average_order_value, frequency, recency, total_time_observed)
-    # repeat_tx = (time_unit_number, repeat_transactions, repeat_transactions_cumulative)
-    cbs = pd.DataFrame(calcbs, columns=['customer_id', 'number_of_transactions', 'average_order_value',
-                                        'frequency', 'recency', 'total_time_observed'])
-    txs = pd.DataFrame(repeat_tx, columns=['time_unit_number', 'repeat_transactions', 'repeat_transactions_cumulative'])
-    model_time_divisor, _ = time_granularity_params(options['model_time_granularity'])
+def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
+                                   num_customers, num_txns):
+    # calcbs = (customer_id, number_of_transactions, average_order_value,
+    #           frequency, recency, total_time_observed)
+    # repeat_tx = (time_unit_number, repeat_transactions,
+    #              repeat_transactions_cumulative)
+    cbs = pd.DataFrame(
+        calcbs,
+        columns=[
+            'customer_id', 'number_of_transactions', 'average_order_value',
+            'frequency', 'recency', 'total_time_observed'
+        ])
+    txs = pd.DataFrame(
+        repeat_tx,
+        columns=[
+            'time_unit_number', 'repeat_transactions',
+            'repeat_transactions_cumulative'
+        ])
+    model_time_divisor, _ = time_granularity_params(
+        options['model_time_granularity'])
 
     model_params, mape = frequency_model_validation(
         model_type=options['frequency_model_type'],
@@ -778,18 +819,20 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx, num_cus
 
     # Write params to text file
     param_output = 'Modeling Dates'
-    param_output += '\nCalibration Start Date: ' + date_to_str(dates['calibration_start_date'])
-    param_output += '\nCalibration End Date: ' + date_to_str(dates['calibration_end_date'])
-    param_output += '\nCohort End Date: ' + date_to_str(dates['cohort_end_date'])
-    param_output += '\nHoldout End Date: ' + date_to_str(dates['holdout_end_date'])
+    param_output += '\nCalibration Start Date: ' + date_to_str(
+        dates['calibration_start_date'])
+    param_output += '\nCalibration End Date: ' + date_to_str(
+        dates['calibration_end_date'])
+    param_output += '\nCohort End Date: ' + date_to_str(
+        dates['cohort_end_date'])
+    param_output += '\nHoldout End Date: ' + date_to_str(
+        dates['holdout_end_date'])
     param_output += '\n\n'
     param_output += 'Model Time Granularity: ' + (
         options['model_time_granularity'].capitalize()) + '\n'
     param_output += (model_params + '\n')
-    save_to_file(
-        options['output_folder'] + 'validation_params.txt',
-        lambda f: f.write(bytes(param_output, 'utf8'))
-    )
+    save_to_file(options['output_folder'] + 'validation_params.txt',
+                 lambda f: f.write(bytes(param_output, 'utf8')))
 
     # Let's swap out the '\n' for '<br/>' and use the param_output
     # as a teaser for the model validation email.
@@ -813,7 +856,8 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx, num_cus
 
 
 def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
-    _, model_time_granularity_single = time_granularity_params(options['model_time_granularity'])
+    _, model_time_granularity_single = time_granularity_params(
+        options['model_time_granularity'])
     prediction_period = options['prediction_period']
 
     # Param output
@@ -823,13 +867,18 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
         options['model_time_granularity'].capitalize()) + '\n'
 
     # Output number of customers and transactions
-    param_output += ('\nCustomers modeled: ' + str(num_customers['num_customers_total']))
-    param_output += ('\nTransactions observed: ' + str(num_txns['num_txns_total']))
+    param_output += (
+        '\nCustomers modeled: ' + str(num_customers['num_customers_total']))
+    param_output += (
+        '\nTransactions observed: ' + str(num_txns['num_txns_total']))
     param_output += '\n\n'
 
     # Read in full CBS matrix
 
-    columns = ['customer_id', 'number_of_transactions', 'historical_aov', 'frequency', 'recency', 'total_time_observed']
+    columns = [
+        'customer_id', 'number_of_transactions', 'historical_aov', 'frequency',
+        'recency', 'total_time_observed'
+    ]
     if options['extra_dimension_exists']:
         columns.append('extra_dimension')
 
@@ -874,7 +923,8 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
                 data['recency'], data['total_time_observed'])
 
     # GammaGamma (Spend)
-    gamma_gamma_model = fit_gamma_gamma_model_prediction(data, options['penalizer_coef'])
+    gamma_gamma_model = fit_gamma_gamma_model_prediction(
+        data, options['penalizer_coef'])
     gamma_gamma_params = extract_gamma_gamma_params(gamma_gamma_model)
     param_output += '\nGamma-Gamma Parameters\n'
     for key, value in gamma_gamma_params.items():
@@ -891,8 +941,11 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
     data['recency'] = data['total_time_observed'] - data['recency']
 
     # Final output
-    columns = ['customer_id', 'p_alive', 'predicted_purchases', 'future_aov', 'historical_aov',
-               'expected_value', 'frequency', 'recency', 'total_time_observed']
+    columns = [
+        'customer_id', 'p_alive', 'predicted_purchases', 'future_aov',
+        'historical_aov', 'expected_value', 'frequency', 'recency',
+        'total_time_observed'
+    ]
     if options['extra_dimension_exists']:
         columns.append('extra_dimension')
     final_no_segments = data[columns]
@@ -914,10 +967,10 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
 
 
 class MinMaxDatesFn(beam.CombineFn):
-    def create_accumulator(self, *args, **kwargs):
+    def create_accumulator(self):
         return None, None
 
-    def add_input(self, acc, elem, *args, **kwargs):
+    def add_input(self, acc, elem):
         if not elem:
             return acc
 
@@ -929,7 +982,7 @@ class MinMaxDatesFn(beam.CombineFn):
 
         return min_date, max_date
 
-    def merge_accumulators(self, accs, *args, **kwargs):
+    def merge_accumulators(self, accs):
         min_date_g = None
         max_date_g = None
         for acc in accs:
@@ -944,7 +997,7 @@ class MinMaxDatesFn(beam.CombineFn):
                 max_date_g = max_date
         return min_date_g, max_date_g
 
-    def extract_output(self, acc, *args, **kwargs):
+    def extract_output(self, acc):
         return acc
 
 
@@ -953,21 +1006,30 @@ class RuntimeOptions(PipelineOptions):
     def _add_argparse_args(cls, parser):
         parser.add_value_provider_argument('--input_csv')
         parser.add_value_provider_argument('--output_folder')
-        parser.add_value_provider_argument('--customer_id_column_position', type=int)
-        parser.add_value_provider_argument('--transaction_date_column_position', type=int)
+        parser.add_value_provider_argument(
+            '--customer_id_column_position', type=int)
+        parser.add_value_provider_argument(
+            '--transaction_date_column_position', type=int)
         parser.add_value_provider_argument('--sales_column_position', type=int)
-        parser.add_value_provider_argument('--extra_dimension_column_position', type=int)
+        parser.add_value_provider_argument(
+            '--extra_dimension_column_position', type=int)
         parser.add_value_provider_argument('--date_parsing_pattern')
-        parser.add_value_provider_argument('--model_time_granularity', default='Weekly')
-        parser.add_value_provider_argument('--frequency_model_type', default='BGNBD')
+        parser.add_value_provider_argument(
+            '--model_time_granularity', default='Weekly')
+        parser.add_value_provider_argument(
+            '--frequency_model_type', default='BGNBD')
         parser.add_value_provider_argument('--calibration_start_date')
         parser.add_value_provider_argument('--calibration_end_date')
         parser.add_value_provider_argument('--cohort_end_date')
         parser.add_value_provider_argument('--holdout_end_date')
-        parser.add_value_provider_argument('--prediction_period', default=52, type=int)
-        parser.add_value_provider_argument('--output_segments', default=5, type=int)
-        parser.add_value_provider_argument('--transaction_frequency_threshold', default=15, type=int)
-        parser.add_value_provider_argument('--penalizer_coef', default=0.0, type=float)
+        parser.add_value_provider_argument(
+            '--prediction_period', default=52, type=int)
+        parser.add_value_provider_argument(
+            '--output_segments', default=5, type=int)
+        parser.add_value_provider_argument(
+            '--transaction_frequency_threshold', default=15, type=int)
+        parser.add_value_provider_argument(
+            '--penalizer_coef', default=0.0, type=float)
 
 
 def run(argv=None):
@@ -990,10 +1052,13 @@ def run(argv=None):
 
         full_elog = (
             pipeline
-            | beam.io.ReadFromText(runtime_options.input_csv, skip_header_lines=1)
+            | beam.io.ReadFromText(
+                runtime_options.input_csv, skip_header_lines=1)
             | beam.Map(lambda x: list(csv.reader([x]))[0])
-            | beam.FlatMap(csv_line_to_tuple, AsSingleton(options))  # (customer_id, date_str, date, sales,
-                                                                     #  extra_dimension?)
+            | beam.FlatMap(
+                csv_line_to_tuple,
+                AsSingleton(options))  # (customer_id, date_str, date, sales,
+            #  extra_dimension?)
         )
 
         full_elog_merged = (
@@ -1001,230 +1066,223 @@ def run(argv=None):
             | beam.Filter(lambda x: x[3] > 0)  # sales > 0
             | beam.Map(lambda x: ((x[0], x[1]), x))  # key: (customer_id, date)
             | 'Group full elog by customer and date' >> beam.GroupByKey()
-            | beam.Map(merge_full_elog_by_customer_and_date)  # (customer_id, date_str, date, sales)
+            | beam.Map(merge_full_elog_by_customer_and_date
+                       )  # (customer_id, date_str, date, sales)
         )
 
         min_max_dates = (
             full_elog_merged
             | beam.Map(lambda x: x[2])  # date
             | beam.CombineGlobally(MinMaxDatesFn())
-            | beam.Map(min_max_dates_dict)
-        )
+            | beam.Map(min_max_dates_dict))
 
-        limits_dates = (
-            min_max_dates
-            | beam.FlatMap(limit_dates_dict, AsSingleton(options))
-        )
+        limits_dates = (min_max_dates
+                        | beam.FlatMap(limit_dates_dict, AsSingleton(options)))
 
-        cohort = (
-            full_elog_merged
-            | beam.FlatMap(customers_in_cohort, AsSingleton(limits_dates))
-            | 'Distinct Customer IDs in Cohort' >> Distinct()
-        )
+        cohort = (full_elog_merged
+                  | beam.FlatMap(customers_in_cohort,
+                                 AsSingleton(limits_dates))
+                  | 'Distinct Customer IDs in Cohort' >> Distinct())
 
         cohort_count = (
             cohort
-            | 'Count cohort entries' >> beam.combiners.Count.Globally()
-        )
+            | 'Count cohort entries' >> beam.combiners.Count.Globally())
 
-        cohort_set = (
-            cohort
-            | beam.Map(lambda x: (x, 1))
-        )
+        cohort_set = (cohort | beam.Map(lambda x: (x, 1)))
 
         all_customer_ids = (
             full_elog_merged
             | beam.Map(lambda x: x[0])  # key: customer_id
-            | 'Distinct all Customer IDs' >> Distinct()
-        )
+            | 'Distinct all Customer IDs' >> Distinct())
 
         all_customer_ids_count = (
             all_customer_ids
-            | 'Count all customers' >> beam.combiners.Count.Globally()
-        )
+            | 'Count all customers' >> beam.combiners.Count.Globally())
 
-        num_customers = (
-            pipeline
-            | 'Create single elem Stream I' >> beam.Create([1])
-            | beam.FlatMap(count_customers,
-                           AsSingleton(cohort_count),
-                           AsSingleton(all_customer_ids_count))
-        )
+        num_customers = (pipeline
+                         | 'Create single elem Stream I' >> beam.Create([1])
+                         | beam.FlatMap(count_customers,
+                                        AsSingleton(cohort_count),
+                                        AsSingleton(all_customer_ids_count)))
 
-        cal_hol_elog = (
-            full_elog_merged
-            | beam.FlatMap(cohort_records_in_cal_hol, AsDict(cohort_set), AsSingleton(limits_dates))
-        )
+        cal_hol_elog = (full_elog_merged
+                        | beam.FlatMap(cohort_records_in_cal_hol,
+                                       AsDict(cohort_set),
+                                       AsSingleton(limits_dates)))
 
         cal_hol_elog_count = (
             cal_hol_elog
-            | 'Count cal hol elog entries' >> beam.combiners.Count.Globally()
-        )
+            | 'Count cal hol elog entries' >> beam.combiners.Count.Globally())
 
-        calibration = (
-            cal_hol_elog
-            | beam.FlatMap(records_in_calibration, AsSingleton(limits_dates))
-        )
+        calibration = (cal_hol_elog
+                       | beam.FlatMap(records_in_calibration,
+                                      AsSingleton(limits_dates)))
 
         num_txns_total = (
             full_elog_merged
             | beam.FlatMap(records_in_cal_hol, AsSingleton(limits_dates))
-            | 'Count num txns total' >> beam.combiners.Count.Globally()
-        )
+            | 'Count num txns total' >> beam.combiners.Count.Globally())
 
-        num_txns = (
-            pipeline
-            | 'Create single elem Stream II' >> beam.Create([1])
-            | beam.FlatMap(count_txns,
-                           AsSingleton(cal_hol_elog_count),
-                           AsSingleton(num_txns_total))
-        )
+        num_txns = (pipeline
+                    | 'Create single elem Stream II' >> beam.Create([1])
+                    | beam.FlatMap(count_txns, AsSingleton(cal_hol_elog_count),
+                                   AsSingleton(num_txns_total)))
 
         calcbs = (
             calibration
             | beam.Map(lambda x: (x[0], x))
             | 'Group calibration elog by customer id' >> beam.GroupByKey()
-            | beam.FlatMap(create_cal_cbs,
-                           AsSingleton(options),
-                           AsSingleton(limits_dates))  # (customer_id, number_of_transactions, average_order_value,
-                                                       #  frequency, recency, total_time_observed)
+            | beam.FlatMap(
+                create_cal_cbs, AsSingleton(options), AsSingleton(limits_dates)
+            )  # (customer_id, number_of_transactions, average_order_value,
+            #  frequency, recency, total_time_observed)
         )
 
         first_transaction_dates_by_customer = (
             cal_hol_elog
             | beam.Map(lambda x: (x[0], x))  # customer_id
             | 'Group cal hol elog by customer id' >> beam.GroupByKey()
-            | beam.Map(lambda x: (x[0], min(map(itemgetter(2), x[1]))))  # item 2 -> date
+            | beam.Map(lambda x: (x[0], min(map(itemgetter(2), x[1])))
+                       )  # item 2 -> date
         )
 
         cal_hol_elog_repeat = (
             cal_hol_elog
             | beam.FlatMap(filter_first_transaction_date_records,
                            AsDict(first_transaction_dates_by_customer))
-            | beam.FlatMap(calculate_time_unit_numbers,  # (customer_id, date, time_unit_number)
-                           AsSingleton(options),
-                           AsSingleton(limits_dates))
+            | beam.FlatMap(
+                calculate_time_unit_numbers,  # (customer_id, date,
+                #  time_unit_number)
+                AsSingleton(options),
+                AsSingleton(limits_dates))
             | beam.Map(lambda x: (x[2], 1))  # key: time_unit_number
-            | 'Group cal hol elog repeat by time unit number' >> beam.GroupByKey()
-            | beam.Map(lambda x: (x[0], sum(x[1])))  # (time_unit_number, occurrences)
+            | 'Group cal hol elog repeat by time unit number' >>
+            beam.GroupByKey()
+            | beam.Map(
+                lambda x: (x[0], sum(x[1])))  # (time_unit_number, occurrences)
         )
 
         repeat_tx = (
             pipeline
             | 'Create single elem Stream III' >> beam.Create([1])
             | beam.FlatMap(calculate_cumulative_repeat_transactions,
-                           AsIter(cal_hol_elog_repeat))  # (time_unit_number, repeat_transactions,
-                                                         #  repeat_transactions_cumulative)
+                           AsIter(cal_hol_elog_repeat)
+                           )  # (time_unit_number, repeat_transactions,
+            #  repeat_transactions_cumulative)
         )
 
-        (
-            pipeline
-            | 'Create single elem Stream IV' >> beam.Create([1])
-            | beam.FlatMap(calculate_model_fit_validation,
-                           AsSingleton(options),
-                           AsSingleton(limits_dates),
-                           AsIter(calcbs),
-                           AsIter(repeat_tx),
-                           AsSingleton(num_customers),
-                           AsSingleton(num_txns))
-            | beam.Map(raise_error_if_invalid_mape)
-        )
+        _ = (pipeline
+             | 'Create single elem Stream IV' >> beam.Create([1])
+             | beam.FlatMap(calculate_model_fit_validation,
+                            AsSingleton(options), AsSingleton(limits_dates),
+                            AsIter(calcbs), AsIter(repeat_tx),
+                            AsSingleton(num_customers), AsSingleton(num_txns))
+             | beam.Map(raise_error_if_invalid_mape))
 
         fullcbs_without_extra_dimension = (
             full_elog_merged
             | beam.Map(lambda x: (x[0], x))  # key: customer_id
             | 'Group full merged elog by customer id' >> beam.GroupByKey()
-            | beam.FlatMap(create_fullcbs,
-                           AsSingleton(options),
-                           AsSingleton(min_max_dates))  # (customer_id, number_of_transactions, historical_aov,
-                                                        #  frequency, recency, total_time_observed)
+            | beam.FlatMap(
+                create_fullcbs, AsSingleton(options),
+                AsSingleton(min_max_dates)
+            )  # (customer_id, number_of_transactions, historical_aov,
+            #  frequency, recency, total_time_observed)
         )
 
         full_elog_if_extra_dimension = (
             full_elog
-            | 'Discard records if no extra dimension' >> beam.FlatMap(discard_if_no_extra_dimension,
-                                                                      AsSingleton(options))
-        )
+            | 'Discard records if no extra dimension' >> beam.FlatMap(
+                discard_if_no_extra_dimension, AsSingleton(options)))
 
         extra_dimensions_stats = (
             full_elog_if_extra_dimension
-            | beam.Map(lambda x: ((x[0], x[4]), x))  # key: (customer_id, extra_dimension)
-            | 'Group full elog by customer id and extra dimension' >> beam.GroupByKey()
-            | beam.Map(create_extra_dimensions_stats)  # (customer_id, extra_dimension, dimension_count, tot_sales,
-                                                       #  max_dimension_date)
+            | beam.Map(lambda x: ((x[0], x[4]), x)
+                       )  # key: (customer_id, extra_dimension)
+            | 'Group full elog by customer id and extra dimension' >>
+            beam.GroupByKey()
+            | beam.Map(
+                create_extra_dimensions_stats
+            )  # (customer_id, extra_dimension, dimension_count, tot_sales,
+            #  max_dimension_date)
         )
 
         top_dimension_per_customer = (
             extra_dimensions_stats
             | beam.Map(lambda x: (x[0], x))  # customer_id
-            | 'Group extra dimension stats by customer id' >> beam.GroupByKey()
-            | beam.Map(extract_top_extra_dimension)  # (customer_id, extra_dimension, dimension_count, tot_sales,
-                                                     #  max_dimension_date)
+            |
+            'Group extra dimension stats by customer id' >> beam.GroupByKey()
+            | beam.Map(
+                extract_top_extra_dimension
+            )  # (customer_id, extra_dimension, dimension_count, tot_sales,
+            #  max_dimension_date)
         )
 
         customer_dimension_map = (
             top_dimension_per_customer
-            | beam.Map(lambda x: (x[0], x[1]))  # (customer_id, extra_dimension)
+            | beam.Map(
+                lambda x: (x[0], x[1]))  # (customer_id, extra_dimension)
         )
 
         fullcbs = (
             fullcbs_without_extra_dimension
-            | beam.FlatMap(add_top_extra_dimension_to_fullcbs,
-                           AsSingleton(options),
-                           AsDict(customer_dimension_map))  # (customer_id, number_of_transactions, historical_aov,
-                                                            #  frequency, recency, total_time_observed,
-                                                            #  extra_dimension?)
+            | beam.FlatMap(
+                add_top_extra_dimension_to_fullcbs, AsSingleton(options),
+                AsDict(customer_dimension_map)
+            )  # (customer_id, number_of_transactions, historical_aov,
+            #  frequency, recency, total_time_observed,
+            #  extra_dimension?)
         )
 
         prediction_by_customer_no_segments = (
             pipeline
             | 'Create single elem Stream V' >> beam.Create([1])
-            | beam.FlatMap(calculate_prediction,
-                           AsSingleton(options),
-                           AsIter(fullcbs),
-                           AsSingleton(num_customers),
-                           AsSingleton(num_txns))  # [customer_id, p_alive, predicted_purchases, future_aov,
-                                                   #  historical_aov, expected_value, frequency, recency,
-                                                   #  total_time_observed, extra_dimension?]
+            | beam.FlatMap(
+                calculate_prediction, AsSingleton(options), AsIter(fullcbs),
+                AsSingleton(num_customers), AsSingleton(num_txns)
+            )  # [customer_id, p_alive, predicted_purchases, future_aov,
+            #  historical_aov, expected_value, frequency, recency,
+            #  total_time_observed, extra_dimension?]
         )
 
-        num_rows = (
-            full_elog_merged
-            | 'Count num rows in full elog merged' >> beam.combiners.Count.Globally()
-        )
+        num_rows = (full_elog_merged
+                    | 'Count num rows in full elog merged' >>
+                    beam.combiners.Count.Globally())
 
         segment_prediction_threshold = 100000
 
         segment_predictions_exact = (
             pipeline
             | 'Create single elem Stream VII' >> beam.Create([1])
-            | beam.FlatMap(lambda _, rows_count: [True] if rows_count <= segment_prediction_threshold else [False],
+            | beam.FlatMap(lambda _, rows_count: [True]
+                 if rows_count <= segment_prediction_threshold
+                 else [False],
                            AsSingleton(num_rows))
         )
 
-        sharded_cust_predictions_no_segments_exact, sharded_cust_predictions_no_segments_hash = (
-            prediction_by_customer_no_segments
-            | beam.FlatMap(prediction_sharded,
-                           AsSingleton(options),
-                           AsSingleton(
-                               segment_predictions_exact))  # [customer_id, p_alive, predicted_purchases, future_aov,
-                                                            #  historical_aov, expected_value, frequency, recency,
-                                                            #  total_time_observed, extra_dimension?]
-            | beam.Partition(lambda x, _: 0 if x[1] else 1, 2)
-        )
+        sharded_cust_predictions_no_segments_exact, \
+            sharded_cust_predictions_no_segments_hash = (
+                prediction_by_customer_no_segments
+                | beam.FlatMap(
+                    prediction_sharded, AsSingleton(options),
+                    AsSingleton(segment_predictions_exact)
+                )  # [customer_id, p_alive, predicted_purchases, future_aov,
+                #  historical_aov, expected_value, frequency, recency,
+                #  total_time_observed, extra_dimension?]
+                | beam.Partition(lambda x, _: 0 if x[1] else 1, 2))
 
         # BEGIN of "exact" branch
         prediction_by_customer_exact = (
             pipeline
             | 'Create single elem Stream VIII' >> beam.Create([1])
-            | beam.FlatMap(split_in_ntiles_exact,
-                           AsSingleton(options),
-                           AsIter(sharded_cust_predictions_no_segments_exact))  # [customer_id, p_alive,
-                                                                                #  predicted_purchases, future_aov,
-                                                                                #  historical_aov, expected_value,
-                                                                                #  frequency, recency,
-                                                                                #  total_time_observed, segment,
-                                                                                #  extra_dimension?]
+            | beam.FlatMap(split_in_ntiles_exact, AsSingleton(options),
+                           AsIter(sharded_cust_predictions_no_segments_exact)
+                           )  # [customer_id, p_alive,
+            #  predicted_purchases, future_aov,
+            #  historical_aov, expected_value,
+            #  frequency, recency,
+            #  total_time_observed, segment,
+            #  extra_dimension?]
         )
         # END of "exact" branch
 
@@ -1232,8 +1290,10 @@ def run(argv=None):
         customer_count_by_expected_value = (
             sharded_cust_predictions_no_segments_hash
             | beam.Map(lambda x: (x[0][5], 1))  # (expected_value, 1)
-            | 'Group customer predictions by expected value' >> beam.GroupByKey()
-            | beam.Map(lambda x: (x[0], sum(x[1])))  # expected_value, customers_count
+            | 'Group customer predictions by expected value' >>
+            beam.GroupByKey()
+            | beam.Map(
+                lambda x: (x[0], sum(x[1])))  # expected_value, customers_count
         )
 
         hash_segment_limits = (
@@ -1242,35 +1302,38 @@ def run(argv=None):
             | beam.FlatMap(expected_values_segment_limits,
                            AsSingleton(options),
                            AsIter(customer_count_by_expected_value),
-                           AsSingleton(all_customer_ids_count))
-        )
+                           AsSingleton(all_customer_ids_count)))
 
         prediction_by_customer_hash = (
             sharded_cust_predictions_no_segments_hash
             | beam.Map(lambda x: x[0])
             | beam.FlatMap(split_in_ntiles_hash,
-                           AsSingleton(hash_segment_limits))  # [customer_id, p_alive, predicted_purchases,
-                                                              #  future_aov, historical_aov, expected_value,
-                                                              #  frequency, recency, total_time_observed,
-                                                              #  segment, extra_dimension?]
+                           AsSingleton(hash_segment_limits)
+                           )  # [customer_id, p_alive, predicted_purchases,
+            #  future_aov, historical_aov, expected_value,
+            #  frequency, recency, total_time_observed,
+            #  segment, extra_dimension?]
         )
         # END of "hash" branch
 
         prediction_by_customer = (
-            (prediction_by_customer_exact,
-             prediction_by_customer_hash)  # only one of these two streams will contains values
-            | beam.Flatten()
-        )
+            (prediction_by_customer_exact, prediction_by_customer_hash
+             )  # only one of these two streams will contains values
+            | beam.Flatten())
 
-        (
+        _ = (
             prediction_by_customer
-            | beam.FlatMap(lambda x, opts: [x + ['']] if not opts['extra_dimension_exists'] else [x],
+            | beam.FlatMap(lambda x, opts: [x + ['']]
+                            if not opts['extra_dimension_exists'] else [x],
                            AsSingleton(options))
             | 'prediction_by_customer to CSV line' >> beam.Map(list_to_csv_line)
             | 'Write prediction_by_customer' >>
             beam.io.WriteToText(runtime_options.output_folder,
-                                header='customer_id,p_alive,predicted_purchases,future_aov,historical_aov,'
-                                       'expected_value,frequency,recency,total_time_observed,segment,extra_dimension',
+                                header='customer_id,p_alive,predicted_purchases'
+                                       ',future_aov,historical_aov'
+                                       ',expected_value,frequency,recency'
+                                       ',total_time_observed,segment'
+                                       ',extra_dimension',
                                 shard_name_template='',
                                 num_shards=1,
                                 file_name_suffix='prediction_by_customer.csv')
@@ -1280,62 +1343,65 @@ def run(argv=None):
             prediction_by_customer
             | beam.Map(lambda x: (x[9], x))  # key: segment
             | 'Group customer predictions by segment' >> beam.GroupByKey()
-            | beam.Map(generate_prediction_summary)  # (segment, average_retention_probability,
-                                                     #  average_predicted_customer_value, average_predicted_order_value,
-                                                     #  average_predicted_purchases, total_customer_value,
-                                                     #  number_of_customers)
+            | beam.Map(generate_prediction_summary
+                       )  # (segment, average_retention_probability,
+            #  average_predicted_customer_value, average_predicted_order_value,
+            #  average_predicted_purchases, total_customer_value,
+            #  number_of_customers)
         )
 
         tot_equity = (
             prediction_summary_temp
             | beam.Map(lambda x: x[5])  # total_customer_value
-            | beam.CombineGlobally(sum)
-        )
+            | beam.CombineGlobally(sum))
 
         prediction_summary = (
             prediction_summary_temp
-            | beam.FlatMap(calculate_perc_of_total_customer_value,
-                           AsSingleton(tot_equity))  # (segment, average_retention_probability,
-                                                     #  average_predicted_customer_value, average_predicted_order_value,
-                                                     #  average_predicted_purchases, total_customer_value,
-                                                     #  number_of_customers, perc_of_total_customer_value)
+            | beam.FlatMap(
+                calculate_perc_of_total_customer_value, AsSingleton(
+                    tot_equity))  # (segment, average_retention_probability,
+            #  average_predicted_customer_value, average_predicted_order_value,
+            #  average_predicted_purchases, total_customer_value,
+            #  number_of_customers, perc_of_total_customer_value)
         )
 
-        (
-            prediction_summary
-            | 'prediction_summary to CSV line' >> beam.Map(list_to_csv_line)
-            | 'Write prediction_summary' >>
-            beam.io.WriteToText(runtime_options.output_folder,
-                                header='segment,average_retention_probability,average_predicted_customer_value,'
-                                       'average_predicted_order_value,average_predicted_purchases,total_customer_value,'
-                                       'number_of_customers,perc_of_total_customer_value',
-                                shard_name_template='',
-                                num_shards=1,
-                                file_name_suffix='prediction_summary.csv')
-        )
+        _ = (prediction_summary
+             | 'prediction_summary to CSV line' >> beam.Map(list_to_csv_line)
+             | 'Write prediction_summary' >> beam.io.WriteToText(
+                 runtime_options.output_folder,
+                 header='segment,average_retention_probability'
+                 ',average_predicted_customer_value'
+                 ',average_predicted_order_value,average_predicted_purchases'
+                 ',total_customer_value,number_of_customers'
+                 ',perc_of_total_customer_value',
+                 shard_name_template='',
+                 num_shards=1,
+                 file_name_suffix='prediction_summary.csv'))
 
         prediction_summary_extra_dimension = (
             prediction_by_customer
-            | 'Discard prediction if there is not extra dimension' >> beam.FlatMap(discard_if_no_extra_dimension,
-                                                                                   AsSingleton(options))
+            | 'Discard prediction if there is not extra dimension' >>
+            beam.FlatMap(discard_if_no_extra_dimension, AsSingleton(options))
             | beam.Map(lambda x: (x[10], x))  # extra dimension
-            | 'Group customer predictions by extra dimension' >> beam.GroupByKey()
+            | 'Group customer predictions by extra dimension' >>
+            beam.GroupByKey()
             | beam.FlatMap(generate_prediction_summary_extra_dimension,
-                           AsSingleton(tot_equity))
-        )
+                           AsSingleton(tot_equity)))
 
-        (
-            prediction_summary_extra_dimension
-            | 'prediction_summary_extra_dimension to CSV line' >> beam.Map(list_to_csv_line)
-            | 'Write prediction_summary_extra_dimension' >>
-            beam.io.WriteToText(runtime_options.output_folder,
-                                header='extra_dimension,average_retention_probability,average_predicted_customer_value,'
-                                       'average_predicted_order_value,average_predicted_purchases,total_customer_value,'
-                                       'number_of_customers,perc_of_total_customer_value',
-                                shard_name_template='',
-                                num_shards=1,
-                                file_name_suffix='prediction_summary_extra_dimension.csv')
-        )
+        _ = (prediction_summary_extra_dimension
+             | 'prediction_summary_extra_dimension to CSV line' >>
+             beam.Map(list_to_csv_line)
+             |
+             'Write prediction_summary_extra_dimension' >> beam.io.WriteToText(
+                 runtime_options.output_folder,
+                 header='extra_dimension,average_retention_probability'
+                 ',average_predicted_customer_value'
+                 ',average_predicted_order_value'
+                 ',average_predicted_purchases,total_customer_value'
+                 ',number_of_customers,perc_of_total_customer_value',
+                 shard_name_template='',
+                 num_shards=1,
+                 file_name_suffix='prediction_summary_extra_dimension.csv'))
 
 
 if __name__ == '__main__':
