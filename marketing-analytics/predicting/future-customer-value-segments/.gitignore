@@ -1,6 +1,0 @@
-.idea/
-**/*.egg-info/
-**/__pycache__/
-env/
-output/
-beam-temp-output*/
