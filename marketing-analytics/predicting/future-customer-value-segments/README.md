@@ -1,10 +1,14 @@
-# Future-Customer-Value-Segments Cloud Dataflow pipeline
+# Future-Customer-Value-Segments (FoCVS) Cloud Dataflow pipeline
 
 ## Overview
 
-Future-Customer-Value-Segments is a data-processing pipeline that helps understand users behavior by calculating Customer Lifetime Value and segmenting customers by total value.
+Future-Customer-Value-Segments (aka FoCVS) is a data-processing pipeline that helps understand users behavior by calculating Customer Lifetime Value and segmenting customers by total value.
 
 It runs on Google Cloud Dataflow and can be deployed to any GCP account.
+
+There are two different versions of the pipeline: 
+* CSV version (read input data and store output as CSV files in Cloud Storage)
+* BigQuery version (read input data and store output in BigQuery tables)
 
 ## Goals
 
@@ -13,17 +17,18 @@ It runs on Google Cloud Dataflow and can be deployed to any GCP account.
 
 ## How to use the solution
 
-The solution consists of a single Cloud Dataflow template that can be run using different runtime parameters to customize the execution of the pipeline.
+The solution consists of Cloud Dataflow templates that can be run using different runtime parameters to customize the execution of the pipeline.
 
 The following procedure explains how to install the Cloud Dataflow template in a Google Cloud Platform project.
 
-Alternatively the user can start the Cloud Dataflow pipeline (see Usage section) by referring to the publicly available deployment of the template:
+Alternatively the user can run the Cloud Dataflow pipeline (see Usage section) by referring to the publicly available templates:
 
-`gs://future-customer-value-segments/templates/Future-Customer-Value-Segments`
+* CSV version: `gs://future-customer-value-segments/templates/FoCVS-csv`
+* BigQuery version: `gs://future-customer-value-segments/templates/FoCVS-bq`
 
 ### Installation
 
-Note: This solution requires Python 3.4.
+Note: This solution requires Python 3.7.
 
 * Open Cloud Shell inside the Google Cloud Platform
 * Set the project where to install the solution by running: `gcloud config set project [PROJECT_ID]`
@@ -34,7 +39,7 @@ Note: This solution requires Python 3.4.
 * Create (if doesn't exist yet) a bucket where the dataflow template will be stored
 * Set an environment variable with the name of the bucket `export PIPELINE_BUCKET=bucket_to_store_template`
 * Generate the template by running `./generate_template.sh`
-* Move template metadata to the same folder of the template `gsutil cp Future-Customer-Value-Segments_metadata gs://${PIPELINE_BUCKET}/templates`
+* Move template metadata to the same folder of the template `gsutil cp FoCVS-*_metadata gs://${PIPELINE_BUCKET}/templates`
 * Deactivate the Python virtual env at the end `deactivate`
 * Close Cloud Shell
 
@@ -43,7 +48,7 @@ Note: This solution requires Python 3.4.
 * Go to the Cloud Dataflow page
 * Click `+ Create Job From Template`
 * Give the job a name and select `Custom Template` under `Cloud Dataflow template`
-* Insert the Template GCS path (`<your_pipeline_bucket_name>/templates/Future-Customer-Value-Segments` or the public template `gs://future-customer-value-segments/templates/Future-Customer-Value-Segments`)
+* Insert the GCS path of the pipeline template version to use (e.g. for BigQuery version `<your_pipeline_bucket_name>/templates/FoCVS-bq` or the public template `gs://future-customer-value-segments/templates/FoCVS-bq`)
 * Fill the Required Parameters
 * Expand the "Optional Parameters" section if needed
 
@@ -51,7 +56,7 @@ Note: This solution requires Python 3.4.
 
 ### Input Data
 
-The pipeline takes as input data a CSV file containing the transaction data for the customers (the file must contain a header describing the columns). It must contain the following fields:
+The pipeline takes as input data a CSV file (or BigQuery table) containing the transaction data for the customers (the file must contain a header describing the columns). It must contain the following fields:
 
 * **Customer ID** (an identifier for the customer, can be either a number or a string).
 * **Date of the transaction** (must be in one of the following formats: 'YYYY-MM-DD’, 'MM/DD/YY', 'MM/DD/YYYY’, 'DD/MM/YY', 'DD/MM/YYYY’, 'YYYYMMDD').
@@ -128,11 +133,11 @@ q: 3.6321332914686537
 v: 11.435020413203247
 ```
 
-***Prediction CSV Files***
+***Prediction CSV Files (or BigQuery tables)***
 
-* **prediction_summary.csv** &mdash; prediction grouped by segment (useful to understand who are those customers providing the best value)
-* **prediction_summary_extra_dimension.csv** &mdash; prediction grouped by extra dimension
-* **prediction_by_customer.csv** &mdash; prediction for each single customer
+* **prediction_summary** &mdash; prediction grouped by segment (useful to understand who are those customers providing the best value)
+* **prediction_summary_extra_dimension** &mdash; prediction grouped by extra dimension
+* **prediction_by_customer** &mdash; prediction for each single customer
 
 Those files contain the model prediction output data:
 
