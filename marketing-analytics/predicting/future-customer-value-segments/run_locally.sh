@@ -20,7 +20,7 @@ then
 fi
 mkdir ./output
 
-python dataflow.py --runner=DirectRunner \
+python fcvs_pipeline_csv.py --runner=DirectRunner \
   --input_csv ./input_cdnow.csv \
   --output_folder ./output/ \
   --customer_id_column_position 1 \

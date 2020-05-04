@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import csv
 import datetime as dt
 import io
@@ -23,22 +22,27 @@ import operator
 import apache_beam as beam
 import numpy as np
 import pandas as pd
-from apache_beam import pvalue
 from apache_beam.io.gcp import gcsfilesystem
-from apache_beam.options import pipeline_options
 from apache_beam.options import value_provider
-from apache_beam.transforms import util
 import lifetimes
-
 
 _SEGMENT_PREDICTION_THRESHOLD = 100000
 
 _OPTION_INPUT_CSV = 'input_csv'
+_OPTION_INPUT_BQ_QUERY = 'input_bq_query'
+_OPTION_INPUT_BQ_PROJECT = 'input_bq_project'
+_OPTION_TEMP_GCS_LOCATION = 'temp_gcs_location'
 _OPTION_OUTPUT_FOLDER = 'output_folder'
+_OPTION_OUTPUT_BQ_PROJECT = 'output_bq_project'
+_OPTION_OUTPUT_BQ_DATASET = 'output_bq_dataset'
 _OPTION_CUSTOMER_ID_COLUMN_POSITION = 'customer_id_column_position'
 _OPTION_TRANSACTION_DATE_COLUMN_POSITION = 'transaction_date_column_position'
 _OPTION_SALES_COLUMN_POSITION = 'sales_column_position'
 _OPTION_EXTRA_DIMENSION_COLUMN_POSITION = 'extra_dimension_column_position'
+_OPTION_CUSTOMER_ID_COLUMN_NAME = 'customer_id_column_name'
+_OPTION_TRANSACTION_DATE_COLUMN_NAME = 'transaction_date_column_name'
+_OPTION_SALES_COLUMN_NAME = 'sales_column_name'
+_OPTION_EXTRA_DIMENSION_COLUMN_NAME = 'extra_dimension_column_name'
 _OPTION_EXTRA_DIMENSION_EXISTS = 'extra_dimension_exists'
 _OPTION_DATE_PARSING_PATTERN = 'date_parsing_pattern'
 _OPTION_MODEL_TIME_GRANULARITY = 'model_time_granularity'
@@ -52,6 +56,7 @@ _OPTION_PREDICTION_PERIOD = 'prediction_period'
 _OPTION_OUTPUT_SEGMENTS = 'output_segments'
 _OPTION_TRANSACTION_FREQUENCY_THRESHOLD = 'transaction_frequency_threshold'
 _OPTION_PENALIZER_COEF = 'penalizer_coef'
+_OPTION_ROUND_NUMBERS = 'round_numbers'
 
 _MODEL_TYPE_BGNBD = 'BGNBD'
 _MODEL_TYPE_PNBD = 'PNBD'
@@ -149,8 +154,14 @@ def set_extra_options(options):
     Returns:
         The same dictionary with extra entries.
     """
-    options[_OPTION_EXTRA_DIMENSION_EXISTS] = bool(
-        options[_OPTION_EXTRA_DIMENSION_COLUMN_POSITION])
+    if _OPTION_EXTRA_DIMENSION_COLUMN_POSITION in options:
+        options[_OPTION_EXTRA_DIMENSION_EXISTS] = bool(
+            options[_OPTION_EXTRA_DIMENSION_COLUMN_POSITION])
+    if _OPTION_EXTRA_DIMENSION_COLUMN_NAME in options:
+        options[_OPTION_EXTRA_DIMENSION_EXISTS] = bool(
+            options[_OPTION_EXTRA_DIMENSION_COLUMN_NAME])
+    options[_OPTION_ROUND_NUMBERS] = False if \
+        options[_OPTION_ROUND_NUMBERS].lower() == 'false' else True
     return options
 
 
@@ -193,7 +204,6 @@ def csv_line_to_list(line, options):
     customer_id_pos = options[_OPTION_CUSTOMER_ID_COLUMN_POSITION] - 1
     transaction_date_pos = options[_OPTION_TRANSACTION_DATE_COLUMN_POSITION] - 1
     sales_pos = options[_OPTION_SALES_COLUMN_POSITION] - 1
-    extra_dimension_exists = options[_OPTION_EXTRA_DIMENSION_EXISTS]
 
     element = [
         line[customer_id_pos],
@@ -202,10 +212,49 @@ def csv_line_to_list(line, options):
         float(line[sales_pos]),
     ]
 
-    if extra_dimension_exists:
+    if options[_OPTION_EXTRA_DIMENSION_EXISTS]:
         extra_dimension_pos = \
             options[_OPTION_EXTRA_DIMENSION_COLUMN_POSITION] - 1
-        element.append(line[extra_dimension_pos])
+        extra_dim = line[extra_dimension_pos]
+        if isinstance(extra_dim, float):
+            extra_dim = round(extra_dim)
+        element.append(str(extra_dim))
+
+    return [element]
+
+
+def bq_row_to_list(row, options):
+    """Creates list that pipeline can process from a BigQuery row.
+
+    Takes a row (dict) from the input BQ table and generate a list containing
+    the data needed for the calculations (with entries in the right position).
+
+    Args:
+        row: Dict containing a single row from the input BigQuery table.
+        options: Pipeline options (containing also the name of the fields).
+
+    Returns:
+        A list containing the fields needed for the next steps, in the right
+        order [customer_id, date, sales, extra_dimension?].
+        The result is wrapped in another list since this function is called
+        inside a FlatMap operator.
+    """
+    customer_id = row[options[_OPTION_CUSTOMER_ID_COLUMN_NAME]]
+    if isinstance(customer_id, float):
+        customer_id = round(customer_id)
+
+    element = [
+        str(customer_id),
+        row[options[_OPTION_TRANSACTION_DATE_COLUMN_NAME]],
+        parse_date(row[options[_OPTION_TRANSACTION_DATE_COLUMN_NAME]], options),
+        float(row[options[_OPTION_SALES_COLUMN_NAME]]),
+    ]
+
+    if options[_OPTION_EXTRA_DIMENSION_EXISTS]:
+        extra_dim = row[options[_OPTION_EXTRA_DIMENSION_COLUMN_NAME]]
+        if isinstance(extra_dim, float):
+            extra_dim = round(extra_dim)
+        element.append(str(extra_dim))
 
     return [element]
 
@@ -335,7 +384,13 @@ def filter_customers_in_cohort(entry, dates):
     return []
 
 
-def count_customers(_, cohort_ids_count, all_customer_ids_count):
+def round_number(num, decimal_digits, options):
+    if options[_OPTION_ROUND_NUMBERS]:
+        return round(num, decimal_digits)
+    return num
+
+
+def count_customers(_, cohort_ids_count, all_customer_ids_count, options):
     """Creates a dictionary containing statistics on the number of customers.
 
     Args:
@@ -344,6 +399,7 @@ def count_customers(_, cohort_ids_count, all_customer_ids_count):
             operator)
         cohort_ids_count: Number of customers in the cohort period of time.
         all_customer_ids_count: Number of all customers.
+        options: Pipeline options.
 
     Returns:
          Dictionary containing the data regarding the number of customers
@@ -356,7 +412,7 @@ def count_customers(_, cohort_ids_count, all_customer_ids_count):
         'num_customers_total':
             all_customer_ids_count,
         'perc_customers_cohort':
-            round(100.0 * cohort_ids_count / all_customer_ids_count, 2),
+            round_number(100.0 * cohort_ids_count / all_customer_ids_count, 2, options),
     }]
 
 
@@ -417,7 +473,7 @@ def filter_records_in_calibration(entry, dates):
     return []
 
 
-def count_txns(_, cal_hol_count, num_txns_total):
+def count_txns(_, cal_hol_count, num_txns_total, options):
     """Creates a dictionary containing the info regarding the number of
     transactions.
 
@@ -427,6 +483,7 @@ def count_txns(_, cal_hol_count, num_txns_total):
             operator)
         cal_hol_count: Number of records in the cohort period of time.
         num_txns_total: Number of total transactions.
+        options: Pipeline options.
 
     Returns:
          Dictionary containing the data regarding the number of transactions
@@ -436,7 +493,8 @@ def count_txns(_, cal_hol_count, num_txns_total):
     return [{
         'num_txns_val': cal_hol_count,
         'num_txns_total': num_txns_total,
-        'perc_txns_val': round(100.0 * cal_hol_count / num_txns_total, 2),
+        'perc_txns_val': round_number(
+            100.0 * cal_hol_count / num_txns_total, 2, options),
     }]
 
 
@@ -730,14 +788,14 @@ def prediction_sharded(entry, options, use_exact_method):
     """
     result = [
         entry[0],
-        round(entry[1], 4),
-        round(entry[2], 3),
-        round(entry[3], 2),
-        round(entry[4], 2),
-        round(entry[5], 2),
+        round_number(entry[1], 4, options),
+        round_number(entry[2], 3, options),
+        round_number(entry[3], 2, options),
+        round_number(entry[4], 2, options),
+        round_number(entry[5], 2, options),
         entry[6],
-        round(entry[7], 3),
-        round(entry[8], 3),
+        round_number(entry[7], 3, options),
+        round_number(entry[8], 3, options),
     ]
     if options[_OPTION_EXTRA_DIMENSION_EXISTS]:
         result.append(entry[9])
@@ -849,15 +907,18 @@ def split_in_ntiles_hash(entry, segment_limits):
     return [entry]
 
 
-def generate_prediction_summary(segment_records):
+def generate_prediction_summary(segment_records, options):
     """Generates prediction summary for each segment.
 
     Args:
         segment_records: Tuple containing the segment number and the list of
             records associated to it.
+        options: Pipeline options.
 
     Returns:
         Tuple containing the segment and the aggregated statistics.
+        The result is wrapped in a list since this function is called inside
+        a FlatMap operator.
     """
     segment, records = segment_records
 
@@ -873,26 +934,31 @@ def generate_prediction_summary(segment_records):
         future_aov_sum += r[3]
         predicted_purchases_sum += r[2]
 
-    average_retention_probability = round(p_alive_sum / count, 2)
-    average_predicted_customer_value = round(expected_value_sum / count, 2)
-    average_predicted_order_value = round(future_aov_sum / count, 2)
-    average_predicted_purchases = round(predicted_purchases_sum / count, 2)
-    total_customer_value = round(expected_value_sum, 2)
+    average_retention_probability = round_number(p_alive_sum / count, 2,
+                                                 options)
+    average_predicted_customer_value = round_number(expected_value_sum / count,
+                                                    2, options)
+    average_predicted_order_value = round_number(future_aov_sum / count, 2,
+                                                 options)
+    average_predicted_purchases = round_number(predicted_purchases_sum / count,
+                                               2, options)
+    total_customer_value = round_number(expected_value_sum, 2, options)
     number_of_customers = count
 
-    return (segment, average_retention_probability,
+    return [(segment, average_retention_probability,
             average_predicted_customer_value, average_predicted_order_value,
             average_predicted_purchases, total_customer_value,
-            number_of_customers)
+            number_of_customers)]
 
 
-def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity):
+def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity, options):
     """Generates prediction summary for each extra dimension.
 
     Args:
         extra_dim_records: Tuple containing the extra_dimension and the list of
             records associated to it.
         tot_equity: The total customer value.
+        options: Pipeline options.
 
     Returns:
         Tuple containing the extra_dimension and the aggregated statistics.
@@ -913,14 +979,18 @@ def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity):
         future_aov_sum += r[3]
         predicted_purchases_sum += r[2]
 
-    average_retention_probability = round(p_alive_sum / count, 2)
-    average_predicted_customer_value = round(expected_value_sum / count, 2)
-    average_predicted_order_value = round(future_aov_sum / count, 2)
-    average_predicted_purchases = round(predicted_purchases_sum / count, 2)
-    total_customer_value = round(expected_value_sum, 2)
+    average_retention_probability = round_number(p_alive_sum / count, 2,
+                                                 options)
+    average_predicted_customer_value = round_number(expected_value_sum / count,
+                                                    2, options)
+    average_predicted_order_value = round_number(future_aov_sum / count, 2,
+                                                 options)
+    average_predicted_purchases = round_number(predicted_purchases_sum / count,
+                                               2, options)
+    total_customer_value = round_number(expected_value_sum, 2, options)
     number_of_customers = count
-    perc_of_total_customer_value = str(
-        round(100 * total_customer_value / tot_equity, 2)) + '%'
+    perc_of_total_customer_value = round_number(100 * total_customer_value
+                                                / tot_equity, 2, options)
 
     return [(extra_dimension, average_retention_probability,
              average_predicted_customer_value, average_predicted_order_value,
@@ -928,20 +998,21 @@ def generate_prediction_summary_extra_dimension(extra_dim_records, tot_equity):
              number_of_customers, perc_of_total_customer_value)]
 
 
-def calculate_perc_of_total_customer_value(entry, tot_equity):
+def calculate_perc_of_total_customer_value(entry, tot_equity, options):
     """Appends the percentage of total customer value to the entry.
 
     Args:
         entry: Entry record with segments statistics.
         tot_equity: The total equity for the customers value.
+        options: Pipeline options.
 
     Returns:
         The input entry with the percentage of total customer value appended.
         The result is wrapped in a list since this function is called inside
         a FlatMap operator.
     """
-    perc_of_total_customer_value = str(round(100 * entry[5] / tot_equity,
-                                             2)) + '%'
+    perc_of_total_customer_value = round_number(100 * entry[5] / tot_equity, 2,
+                                                options)
     return [entry + (perc_of_total_customer_value, )]
 
 
@@ -958,6 +1029,22 @@ def list_to_csv_line(data):
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL, lineterminator='')
     writer.writerow(data)
     return output.getvalue()
+
+
+def list_to_dict(data, keys):
+    """Converts the input list into a Dictionary.
+
+    Args:
+        data: The input list
+        keys: Keys to be used in the dictionary
+
+    Returns:
+        Dictionary containing a representation of the input list.
+    """
+    result = {}
+    for i, k in enumerate(keys):
+        result[k] = data[i]
+    return result
 
 
 def fit_bgnbd_model(data, penalizer_coef=0.0):
@@ -1174,6 +1261,9 @@ def plot_repeat_transaction_over_time(data, median, output_folder, time_label):
     Returns:
         Nothing. Just save the image file to the output folder.
     """
+    if not output_folder:
+        return
+
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib import pyplot as plt
@@ -1220,6 +1310,9 @@ def plot_cumulative_repeat_transaction_over_time(data, median, output_folder,
     Returns:
         Nothing. Just save the image file to the output folder.
     """
+    if not output_folder:
+        return
+
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib import pyplot as plt
@@ -1303,6 +1396,30 @@ def gamma_gamma_validation(cbs, penalizer_coef):
         cbs['average_order_value'])
 
 
+def frequency_model_validation_to_text(model_params):
+    """Generate readable text from validation of frequency model.
+
+    Validates the model type on the input data and parameters and calculate the
+    Mean Absolute Percent Error (MAPE).
+
+    Args:
+        model_params: Model parameters from the validation.
+
+    Returns:
+        Text string with the result of the validation.
+    """
+    output_text = f"""Frequency Model: {model_params['frequency_model']}
+
+Customers modeled for validation: {model_params['num_customers_cohort']} \
+({model_params['perc_customers_cohort']}% of total customers)
+Transactions observed for validation: {model_params['num_transactions_validation']} \
+({model_params['perc_transactions_validation']} % of total transactions)
+
+Mean Absolute Percent Error (MAPE): {str(model_params['mape'])}%"""
+
+    return output_text
+
+
 def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
                                time_divisor, time_label, hold_end_date,
                                repeat_tx, output_folder, num_customers_cohort,
@@ -1333,15 +1450,15 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
         penalizer_coef: The coefficient applied to an l2 norm on the parameters.
 
     Returns:
-        A tuple containing a text string with the result of the validation and
-        the value of the Mean Absolute Percent Error (MAPE).
+        A Dict containing the params for the model validation.
     """
+    model_params = {}
     if model_type == _MODEL_TYPE_BGNBD:
         frequency_model = fit_bgnbd_model(cbs, penalizer_coef)
-        model_params = 'Frequency Model: BG/NBD\n'
+        model_params['frequency_model'] = 'BG/NBD'
     elif model_type == _MODEL_TYPE_PNBD:
         frequency_model = fit_pnbd_model(cbs, penalizer_coef)
-        model_params = 'Frequency Model: Pareto/NBD\n'
+        model_params['frequency_model'] = 'Pareto/NBD'
     else:
         raise ValueError('Model type %s is not valid' % model_type)
 
@@ -1371,13 +1488,10 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
                                                  output_folder, time_label)
 
     # Output customers in cohort and txns observed
-    model_params += f"""
-Customers modeled for validation: {num_customers_cohort} \
-({perc_customers_cohort}% of total customers)
-Transactions observed for validation: {num_txns_val} \
-({perc_txns_val} % of total transactions)
-    """
-    model_params = model_params.strip() + '\n\n'
+    model_params['num_customers_cohort'] = num_customers_cohort
+    model_params['perc_customers_cohort'] = perc_customers_cohort
+    model_params['num_transactions_validation'] = num_txns_val
+    model_params['perc_transactions_validation'] = perc_txns_val
 
     # Calculate MAPE (Mean Absolute Percent Error)
     error_by_time = (
@@ -1386,12 +1500,11 @@ Transactions observed for validation: {num_txns_val} \
     ) / txs.iloc[median_line:, :]['repeat_transactions_cumulative'] * 100
     mape = error_by_time.abs().mean()
 
-    model_params += f"Mean Absolute Percent Error (MAPE): \
-{str(round(mape, 2))}%\n"
+    model_params['mape'] = round(mape, 2)
 
     # return tuple that includes the MAPE, which will be used for a
     # threshold check
-    return model_params, round(mape, 2)
+    return model_params
 
 
 def raise_error_if_invalid_mape(validation_result):
@@ -1407,8 +1520,35 @@ def raise_error_if_invalid_mape(validation_result):
     Returns:
         Nothing, just raise an exception to stop the pipeline if needed.
     """
-    if 'invalid_mape' in validation_result:
-        raise RuntimeError(validation_result['error_message'])
+    _, error = validation_result
+
+    if error:
+        raise RuntimeError(error)
+
+
+def calculate_model_fit_validation_to_text(model_params, options):
+    """Generate readable text from validation of frequency model and save
+    it to a file.
+
+    Args:
+        model_params: Model parameters from the validation.
+        options: Pipeline options.
+
+    Returns:
+        Save results to file.
+    """
+    param_output = f"""Modeling Dates
+Calibration Start Date: {model_params['calibration_start_date']}
+Calibration End Date: {model_params['calibration_end_date']}
+Cohort End Date: {model_params['cohort_end_date']}
+Holdout End Date: {model_params['holdout_end_date']}
+
+Model Time Granularity: {model_params['model_time_granularity']}
+{frequency_model_validation_to_text(model_params['model'])}
+"""
+
+    save_to_file(options[_OPTION_OUTPUT_FOLDER] + 'validation_params.txt',
+                 lambda f: f.write(bytes(param_output, 'utf8')))
 
 
 def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
@@ -1452,7 +1592,7 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
     model_time_divisor = TimeGranularityParams(
         options[_OPTION_MODEL_TIME_GRANULARITY]).get_days()
 
-    model_params, mape = frequency_model_validation(
+    model_params = frequency_model_validation(
         model_type=options[_OPTION_FREQUENCY_MODEL_TYPE],
         cbs=cbs,
         cal_start_date=dates[_OPTION_CALIBRATION_START_DATE],
@@ -1472,40 +1612,69 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
     # Validate the gamma-gamma (spend) model
     gamma_gamma_validation(cbs, options[_OPTION_PENALIZER_COEF])
 
-    # Write params to text file
-    param_output = f"""Modeling Dates
-Calibration Start Date: {date_to_str(dates[_OPTION_CALIBRATION_START_DATE])}
-Calibration End Date: {date_to_str(dates[_OPTION_CALIBRATION_END_DATE])}
-Cohort End Date: {date_to_str(dates[_OPTION_COHORT_END_DATE])}
-Holdout End Date: {date_to_str(dates[_OPTION_HOLDOUT_END_DATE])}
-
-Model Time Granularity: {options[_OPTION_MODEL_TIME_GRANULARITY].capitalize()}
-{model_params}
-"""
-
-    save_to_file(options[_OPTION_OUTPUT_FOLDER] + 'validation_params.txt',
-                 lambda f: f.write(bytes(param_output, 'utf8')))
-
-    # Let's swap out the '\n' for '<br/>' and use the param_output
-    # as a teaser for the model validation email.
-    result = {
-        'mape_meta': param_output.replace('\n', '<br/>'),
-        'mape_decimal': mape
+    validation_params = {
+        'calibration_start_date': date_to_str(dates[_OPTION_CALIBRATION_START_DATE]),
+        'calibration_end_date': date_to_str(dates[_OPTION_CALIBRATION_END_DATE]),
+        'cohort_end_date': date_to_str(dates[_OPTION_COHORT_END_DATE]),
+        'holdout_end_date': date_to_str(dates[_OPTION_HOLDOUT_END_DATE]),
+        'model_time_granularity': options[_OPTION_MODEL_TIME_GRANULARITY].capitalize(),
+        'model': model_params,
     }
 
     # Let's check to see if the transaction frequency error is within
     # the allowed threshold.  If so, continue the calculation.  If not,
     # send an email explaining why and stop all calculations.
-    if mape > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
-        result['invalid_mape'] = True
-        result['mape'] = str(mape)
-        result['error_message'] = (
-            f"Mean Absolute Percent Error (MAPE) [{mape}%]"
+    error = None
+    if model_params['mape'] > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
+        model_params['invalid_mape'] = True
+        error = (
+            f"Mean Absolute Percent Error (MAPE) [{model_params['mape']}%]"
             " exceeded the allowable threshold of "
             f"{options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]}"
         )
 
-    return [result]
+    return [(validation_params, error)]
+
+
+def model_params_to_string(model_params):
+    if not model_params:
+        return ''
+
+    result = ''
+    for key, val in model_params.items():
+        result += f'{key}: {val}\n'
+    return result
+
+
+def calculate_prediction_to_text(prediction_params, options):
+    """Generate readable text prediction parameters and save it to a file.
+
+    Args:
+        prediction_params: Parameters generated during the calculation.
+        options: Pipeline options.
+
+    Returns:
+        Save results to file.
+    """
+    param_output = f"""Prediction for: {prediction_params['prediction_period']} \
+{prediction_params['prediction_period_unit']}
+Model Time Granularity: {prediction_params['model_time_granularity']}
+
+Customers modeled: {prediction_params['customers_modeled']}
+Transactions observed: {prediction_params['transactions_observed']}
+
+Frequency Model: {prediction_params['frequency_model']}
+Model Parameters
+{model_params_to_string(prediction_params['bgnbd_model_params'] or 
+                        prediction_params['paretonbd_model_params'])}
+Gamma-Gamma Parameters
+{model_params_to_string(prediction_params['gamma_gamma_params'])}"""
+
+    # Params to text file
+    save_to_file(
+        options[_OPTION_OUTPUT_FOLDER] + 'prediction_params.txt',
+        lambda f: f.write(bytes(param_output, 'utf8')),
+    )
 
 
 def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
@@ -1523,7 +1692,7 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
             of transactions.
 
     Returns:
-        Predictions per customer (as lists).
+        Predictions per customer (as lists) and prediction parameters Dict.
         The result is wrapped in another list since this function is called
         inside a FlatMap operator.
     """
@@ -1531,15 +1700,14 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
         options[_OPTION_MODEL_TIME_GRANULARITY]).get_time_unit()
     prediction_period = options[_OPTION_PREDICTION_PERIOD]
 
-    # Param output
-    param_output = f"""Prediction for: {prediction_period} \
-{model_time_granularity_single}
-Model Time Granularity: {options[_OPTION_MODEL_TIME_GRANULARITY].capitalize()}
-
-Customers modeled: {num_customers['num_customers_total']}
-Transactions observed: {num_txns['num_txns_total']}
-
-"""
+    prediction_params = {
+        'prediction_period': prediction_period,
+        'prediction_period_unit': model_time_granularity_single,
+        'model_time_granularity': options[_OPTION_MODEL_TIME_GRANULARITY]
+            .capitalize(),
+        'customers_modeled': num_customers['num_customers_total'],
+        'transactions_observed': num_txns['num_txns_total']
+    }
 
     columns = [
         'customer_id', 'number_of_transactions', 'historical_aov', 'frequency',
@@ -1557,23 +1725,17 @@ Transactions observed: {num_txns['num_txns_total']}
         frequency_model = fit_bgnbd_model(data, options[_OPTION_PENALIZER_COEF])
         bgnbd_params = extract_bgnbd_params(frequency_model)
 
-        param_output += (
-            "Frequency Model: BG/NBD\n"
-            "Model Parameters\n"
-        )
-        for key, value in bgnbd_params.items():
-            param_output += f"{key}: {value}\n"
+        prediction_params['frequency_model'] = 'BG/NBD'
+        prediction_params['bgnbd_model_params'] = bgnbd_params
+        prediction_params['paretonbd_model_params'] = None
 
     elif frequency_model_type == _MODEL_TYPE_PNBD:
         frequency_model = fit_pnbd_model(data, options[_OPTION_PENALIZER_COEF])
         pnbd_params = extract_pnbd_params(frequency_model)
 
-        param_output += (
-            "Frequency Model: Pareto/NBD\n"
-            "Model Parameters\n\n"
-        )
-        for key, value in pnbd_params.items():
-            param_output += f"{key}: {value}\n"
+        prediction_params['frequency_model'] = 'Pareto/NBD'
+        prediction_params['paretonbd_model_params'] = pnbd_params
+        prediction_params['bgnbd_model_params'] = None
 
     else:
         raise ValueError('Model type %s is not valid' % frequency_model_type)
@@ -1597,9 +1759,7 @@ Transactions observed: {num_txns['num_txns_total']}
     gamma_gamma_model = fit_gamma_gamma_model_prediction(
         data, options[_OPTION_PENALIZER_COEF])
     gamma_gamma_params = extract_gamma_gamma_params(gamma_gamma_model)
-    param_output += '\nGamma-Gamma Parameters\n'
-    for key, value in gamma_gamma_params.items():
-        param_output += f"{key}: {value}\n"
+    prediction_params['gamma_gamma_params'] = gamma_gamma_params
 
     # Calculate FutureAOV by customer
     data['future_aov'] = gamma_gamma_model.conditional_expected_average_profit(
@@ -1621,13 +1781,20 @@ Transactions observed: {num_txns['num_txns_total']}
         columns.append('extra_dimension')
     final_no_segments = data[columns]
 
-    # Params to text file
-    save_to_file(
-        options[_OPTION_OUTPUT_FOLDER] + 'prediction_params.txt',
-        lambda f: f.write(bytes(param_output, 'utf8')),
-    )
+    return [[final_no_segments.values, prediction_params]]
 
-    return final_no_segments.values
+
+def clean_nan_and_inf(entry):
+    result = []
+    for x in entry:
+        if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
+            logging.getLogger().log(logging.WARNING,
+                                    f'NaN or Inf found in {str(entry)}')
+            result.append(0)
+        else:
+            result.append(x)
+
+    return result
 
 
 class MinMaxDatesFn(beam.CombineFn):
@@ -1670,473 +1837,14 @@ class MinMaxDatesFn(beam.CombineFn):
         return acc
 
 
-class RuntimeOptions(pipeline_options.PipelineOptions):
-    """Specifies runtime options for the pipeline.
+class TableValueProvider(value_provider.ValueProvider):
+    def __init__(self, project_vp, dataset_vp, table_name):
+        self.project_vp = project_vp
+        self.dataset_vp = dataset_vp
+        self.table_name = table_name
 
-    Class defining the arguments that can be passed to the pipeline to
-    customize the execution.
-    """
-    @classmethod
-    def _add_argparse_args(cls, parser):
-        parser.add_value_provider_argument(f'--{_OPTION_INPUT_CSV}')
-        parser.add_value_provider_argument(f'--{_OPTION_OUTPUT_FOLDER}')
-        parser.add_value_provider_argument(
-            f'--{_OPTION_CUSTOMER_ID_COLUMN_POSITION}', type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_TRANSACTION_DATE_COLUMN_POSITION}', type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_SALES_COLUMN_POSITION}', type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_EXTRA_DIMENSION_COLUMN_POSITION}', type=int)
-        parser.add_value_provider_argument(f'--{_OPTION_DATE_PARSING_PATTERN}')
-        parser.add_value_provider_argument(
-            f'--{_OPTION_MODEL_TIME_GRANULARITY}',
-            default=TimeGranularityParams.GRANULARITY_WEEKLY)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_FREQUENCY_MODEL_TYPE}', default=_MODEL_TYPE_BGNBD)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_CALIBRATION_START_DATE}')
-        parser.add_value_provider_argument(f'--{_OPTION_CALIBRATION_END_DATE}')
-        parser.add_value_provider_argument(f'--{_OPTION_COHORT_END_DATE}')
-        parser.add_value_provider_argument(f'--{_OPTION_HOLDOUT_END_DATE}')
-        parser.add_value_provider_argument(
-            f'--{_OPTION_PREDICTION_PERIOD}', default=52, type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_OUTPUT_SEGMENTS}', default=5, type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_TRANSACTION_FREQUENCY_THRESHOLD}', default=15,
-            type=int)
-        parser.add_value_provider_argument(
-            f'--{_OPTION_PENALIZER_COEF}', default=0.0, type=float)
+    def is_accessible(self):
+        return self.project_vp.is_accessible() and self.dataset_vp.is_accessible()
 
-
-def run(argv=None):
-    """Main function.
-
-    Main function containing the Apache Beam pipeline describing how to process
-    the input CSV file to generate the LTV predictions.
-    """
-    parser = argparse.ArgumentParser()
-    _, pipeline_args = parser.parse_known_args(argv)
-    options = pipeline_options.PipelineOptions(pipeline_args)
-    runtime_options = options.view_as(RuntimeOptions)
-
-    with beam.Pipeline(options=options) as pipeline:
-        options = (
-            pipeline
-            | 'Create single element Stream containing options dict' >>
-                beam.Create([options.get_all_options()])
-            | beam.Map(lambda x: {
-                  k: v.get() if isinstance(v, value_provider.ValueProvider)
-                             else v
-                  for (k, v) in x.items()
-              })
-            | beam.Map(set_extra_options)
-        )
-
-        full_elog = (
-            pipeline
-            | beam.io.ReadFromText(
-                runtime_options.input_csv, skip_header_lines=1)
-            | beam.Map(lambda x: list(csv.reader([x]))[0])
-            | beam.FlatMap(
-                csv_line_to_list,
-                pvalue.AsSingleton(options))  # (customer_id, date_str, date,
-                                              #  sales, extra_dimension?)
-        )
-
-        full_elog_merged = (
-            full_elog
-            | beam.Filter(lambda x: x[3] > 0)  # sales > 0
-            | beam.Map(lambda x: ((x[0], x[1]), x))  # key: (customer_id, date)
-            | 'Group full elog by customer and date' >> beam.GroupByKey()
-            | beam.Map(merge_full_elog_by_customer_and_date)  # (customer_id,
-                                                              #  date_str, date,
-                                                              #  sales)
-        )
-
-        min_max_dates = (
-            full_elog_merged
-            | beam.Map(lambda x: x[2])  # date
-            | beam.CombineGlobally(MinMaxDatesFn())
-            | beam.Map(min_max_dates_dict)
-        )
-
-        limits_dates = (
-            min_max_dates
-            | beam.FlatMap(limit_dates_boundaries, pvalue.AsSingleton(options))
-        )
-
-        cohort = (
-            full_elog_merged
-            | beam.FlatMap(filter_customers_in_cohort,
-                           pvalue.AsSingleton(limits_dates))
-            | 'Distinct Customer IDs in Cohort' >> util.Distinct()
-        )
-
-        cohort_count = (
-            cohort
-            | 'Count cohort entries' >> beam.combiners.Count.Globally()
-        )
-
-        cohort_set = (
-            cohort
-            | beam.Map(lambda x: (x, 1))
-        )
-
-        all_customer_ids = (
-            full_elog_merged
-            | beam.Map(lambda x: x[0])  # key: customer_id
-            | 'Distinct all Customer IDs' >> util.Distinct()
-        )
-
-        all_customer_ids_count = (
-            all_customer_ids
-            | 'Count all customers' >> beam.combiners.Count.Globally()
-        )
-
-        num_customers = (
-            pipeline
-            | 'Create single elem Stream I' >> beam.Create([1])
-            | beam.FlatMap(count_customers,
-                           pvalue.AsSingleton(cohort_count),
-                           pvalue.AsSingleton(all_customer_ids_count))
-        )
-
-        cal_hol_elog = (
-            full_elog_merged
-            | beam.FlatMap(filter_cohort_records_in_cal_hol,
-                           pvalue.AsDict(cohort_set),
-                           pvalue.AsSingleton(limits_dates))
-        )
-
-        cal_hol_elog_count = (
-            cal_hol_elog
-            | 'Count cal hol elog entries' >> beam.combiners.Count.Globally()
-        )
-
-        calibration = (
-            cal_hol_elog
-            | beam.FlatMap(filter_records_in_calibration,
-                           pvalue.AsSingleton(limits_dates))
-        )
-
-        num_txns_total = (
-            full_elog_merged
-            | beam.FlatMap(filter_records_in_cal_hol,
-                           pvalue.AsSingleton(limits_dates))
-            | 'Count num txns total' >> beam.combiners.Count.Globally()
-        )
-
-        num_txns = (
-            pipeline
-            | 'Create single elem Stream II' >> beam.Create([1])
-            | beam.FlatMap(count_txns,
-                           pvalue.AsSingleton(cal_hol_elog_count),
-                           pvalue.AsSingleton(num_txns_total))
-        )
-
-        calcbs = (
-            calibration
-            | beam.Map(lambda x: (x[0], x))
-            | 'Group calibration elog by customer id' >> beam.GroupByKey()
-            | beam.FlatMap(
-                create_cal_cbs,
-                pvalue.AsSingleton(options),
-                pvalue.AsSingleton(limits_dates)
-            )  # (customer_id, number_of_transactions, average_order_value,
-               #  frequency, recency, total_time_observed)
-        )
-
-        first_transaction_dates_by_customer = (
-            cal_hol_elog
-            | beam.Map(lambda x: (x[0], x))  # customer_id
-            | 'Group cal hol elog by customer id' >> beam.GroupByKey()
-            | beam.Map(lambda x: (x[0], min(map(operator.itemgetter(2), x[1])))
-                       )  # item 2 -> date
-        )
-
-        cal_hol_elog_repeat = (
-            cal_hol_elog
-            | beam.FlatMap(filter_first_transaction_date_records,
-                           pvalue.AsDict(first_transaction_dates_by_customer))
-            | beam.FlatMap(
-                calculate_time_unit_numbers,  # (customer_id, date,
-                                              #  time_unit_number)
-                pvalue.AsSingleton(options),
-                pvalue.AsSingleton(limits_dates))
-            | beam.Map(lambda x: (x[2], 1))  # key: time_unit_number
-            | 'Group cal hol elog repeat by time unit number' >>
-            beam.GroupByKey()
-            | beam.Map(lambda x: (x[0], sum(x[1]))
-                       )  # (time_unit_number, occurrences)
-        )
-
-        repeat_tx = (
-            pipeline
-            | 'Create single elem Stream III' >> beam.Create([1])
-            | beam.FlatMap(calculate_cumulative_repeat_transactions,
-                           pvalue.AsIter(cal_hol_elog_repeat)
-                           )  # (time_unit_number, repeat_transactions,
-                              #  repeat_transactions_cumulative)
-        )
-
-        _ = (
-            pipeline
-            | 'Create single elem Stream IV' >> beam.Create([1])
-            | beam.FlatMap(calculate_model_fit_validation,
-                           pvalue.AsSingleton(options),
-                           pvalue.AsSingleton(limits_dates),
-                           pvalue.AsIter(calcbs),
-                           pvalue.AsIter(repeat_tx),
-                           pvalue.AsSingleton(num_customers),
-                           pvalue.AsSingleton(num_txns))
-            | beam.Map(raise_error_if_invalid_mape)
-        )
-
-        fullcbs_without_extra_dimension = (
-            full_elog_merged
-            | beam.Map(lambda x: (x[0], x))  # key: customer_id
-            | 'Group full merged elog by customer id' >> beam.GroupByKey()
-            | beam.FlatMap(
-                create_fullcbs,
-                pvalue.AsSingleton(options),
-                pvalue.AsSingleton(min_max_dates)
-            )  # (customer_id, number_of_transactions, historical_aov,
-               #  frequency, recency, total_time_observed)
-        )
-
-        full_elog_if_extra_dimension = (
-            full_elog
-            | 'Discard records if no extra dimension' >> beam.FlatMap(
-                discard_if_no_extra_dimension, pvalue.AsSingleton(options))
-        )
-
-        extra_dimensions_stats = (
-            full_elog_if_extra_dimension
-            | beam.Map(lambda x: ((x[0], x[4]), x)
-                       )  # key: (customer_id, extra_dimension)
-            | 'Group full elog by customer id and extra dimension' >>
-                beam.GroupByKey()
-            | beam.Map(
-                create_extra_dimensions_stats
-            )  # (customer_id, extra_dimension, dimension_count, tot_sales,
-               #  max_dimension_date)
-        )
-
-        top_dimension_per_customer = (
-            extra_dimensions_stats
-            | beam.Map(lambda x: (x[0], x))  # customer_id
-            | 'Group extra dimension stats by customer id' >> beam.GroupByKey()
-            | beam.Map(
-                extract_top_extra_dimension
-            )  # (customer_id, extra_dimension, dimension_count, tot_sales,
-               #  max_dimension_date)
-        )
-
-        customer_dimension_map = (
-            top_dimension_per_customer
-            | beam.Map(
-                lambda x: (x[0], x[1]))  # (customer_id, extra_dimension)
-        )
-
-        fullcbs = (
-            fullcbs_without_extra_dimension
-            | beam.FlatMap(
-                add_top_extra_dimension_to_fullcbs, pvalue.AsSingleton(options),
-                pvalue.AsDict(customer_dimension_map)
-            )  # (customer_id, number_of_transactions, historical_aov,
-               #  frequency, recency, total_time_observed,
-               #  extra_dimension?)
-        )
-
-        prediction_by_customer_no_segments = (
-            pipeline
-            | 'Create single elem Stream V' >> beam.Create([1])
-            | beam.FlatMap(
-                calculate_prediction, pvalue.AsSingleton(options),
-                pvalue.AsIter(fullcbs), pvalue.AsSingleton(num_customers),
-                pvalue.AsSingleton(num_txns)
-            )  # [customer_id, p_alive, predicted_purchases, future_aov,
-               #  historical_aov, expected_value, frequency, recency,
-               #  total_time_observed, extra_dimension?]
-        )
-
-        num_rows = (
-            full_elog_merged
-            | 'Count num rows in full elog merged' >>
-                beam.combiners.Count.Globally()
-        )
-
-        segment_predictions_exact = (
-            pipeline
-            | 'Create single elem Stream VII' >> beam.Create([1])
-            | beam.FlatMap(lambda _, rows_count: [True]
-                 if rows_count <= _SEGMENT_PREDICTION_THRESHOLD
-                 else [False],
-                           pvalue.AsSingleton(num_rows))
-        )
-
-        sharded_cust_predictions_no_segments_exact, \
-            sharded_cust_predictions_no_segments_hash = (
-                prediction_by_customer_no_segments
-                | beam.FlatMap(
-                    prediction_sharded,
-                    pvalue.AsSingleton(options),
-                    pvalue.AsSingleton(segment_predictions_exact)
-                )  # [customer_id, p_alive, predicted_purchases, future_aov,
-                   #  historical_aov, expected_value, frequency, recency,
-                   #  total_time_observed, extra_dimension?]
-                | beam.Partition(lambda x, _: 0 if x[1] else 1, 2)
-            )
-
-        # BEGIN of "exact" branch
-        prediction_by_customer_exact = (
-            pipeline
-            | 'Create single elem Stream VIII' >> beam.Create([1])
-            | beam.FlatMap(split_in_ntiles_exact,
-                           pvalue.AsSingleton(options),
-                           pvalue.AsIter(
-                               sharded_cust_predictions_no_segments_exact)
-                           )  # [customer_id, p_alive, predicted_purchases,
-                              #  future_aov, historical_aov, expected_value,
-                              #  frequency, recency, total_time_observed,
-                              #  segment, extra_dimension?]
-        )
-        # END of "exact" branch
-
-        # BEGIN of "hash" branch
-        customer_count_by_expected_value = (
-            sharded_cust_predictions_no_segments_hash
-            | beam.Map(lambda x: (x[0][5], 1))  # (expected_value, 1)
-            | 'Group customer predictions by expected value' >>
-                beam.GroupByKey()
-            | beam.Map(
-                lambda x: (x[0], sum(x[1])))  # expected_value, customers_count
-        )
-
-        hash_segment_limits = (
-            pipeline
-            | 'Create single elem Stream IX' >> beam.Create([1])
-            | beam.FlatMap(expected_values_segment_limits,
-                           pvalue.AsSingleton(options),
-                           pvalue.AsIter(customer_count_by_expected_value),
-                           pvalue.AsSingleton(all_customer_ids_count))
-        )
-
-        prediction_by_customer_hash = (
-            sharded_cust_predictions_no_segments_hash
-            | beam.Map(lambda x: x[0])
-            | beam.FlatMap(split_in_ntiles_hash,
-                           pvalue.AsSingleton(hash_segment_limits)
-                           )  # [customer_id, p_alive, predicted_purchases,
-                              #  future_aov, historical_aov, expected_value,
-                              #  frequency, recency, total_time_observed,
-                              #  segment, extra_dimension?]
-        )
-        # END of "hash" branch
-
-        prediction_by_customer = (
-            # only one of these two streams will contains values
-            (prediction_by_customer_exact, prediction_by_customer_hash)
-            | beam.Flatten()
-        )
-
-        _ = (
-            prediction_by_customer
-            | beam.FlatMap(lambda x, opts: [x + ['']]
-                           if not opts[_OPTION_EXTRA_DIMENSION_EXISTS] else [x],
-                           pvalue.AsSingleton(options))
-            | 'prediction_by_customer to CSV line' >> beam.Map(list_to_csv_line)
-            | 'Write prediction_by_customer' >>
-                beam.io.WriteToText(runtime_options.output_folder,
-                                    header='customer_id,p_alive'
-                                           ',predicted_purchases'
-                                           ',future_aov,historical_aov'
-                                           ',expected_value,frequency,recency'
-                                           ',total_time_observed,segment'
-                                           ',extra_dimension',
-                                    shard_name_template='',
-                                    num_shards=1,
-                                    file_name_suffix=
-                                        'prediction_by_customer.csv')
-        )
-
-        prediction_summary_temp = (
-            prediction_by_customer
-            | beam.Map(lambda x: (x[9], x))  # key: segment
-            | 'Group customer predictions by segment' >> beam.GroupByKey()
-            | beam.Map(generate_prediction_summary
-                       )  # (segment, average_retention_probability,
-                          #  average_predicted_customer_value,
-                          #  average_predicted_order_value,
-                          #  average_predicted_purchases, total_customer_value,
-                          #  number_of_customers)
-        )
-
-        tot_equity = (
-            prediction_summary_temp
-            | beam.Map(lambda x: x[5])  # total_customer_value
-            | beam.CombineGlobally(sum)
-        )
-
-        prediction_summary = (
-            prediction_summary_temp
-            | beam.FlatMap(
-                calculate_perc_of_total_customer_value, pvalue.AsSingleton(
-                    tot_equity))  # (segment, average_retention_probability,
-                                  #  average_predicted_customer_value,
-                                  #  average_predicted_order_value,
-                                  #  average_predicted_purchases,
-                                  #  total_customer_value, number_of_customers,
-                                  #  perc_of_total_customer_value)
-        )
-
-        _ = (
-            prediction_summary
-            | 'prediction_summary to CSV line' >> beam.Map(list_to_csv_line)
-            | 'Write prediction_summary' >> beam.io.WriteToText(
-                runtime_options.output_folder,
-                header='segment,average_retention_probability'
-                ',average_predicted_customer_value'
-                ',average_predicted_order_value,average_predicted_purchases'
-                ',total_customer_value,number_of_customers'
-                ',perc_of_total_customer_value',
-                shard_name_template='',
-                num_shards=1,
-                file_name_suffix='prediction_summary.csv')
-        )
-
-        prediction_summary_extra_dimension = (
-            prediction_by_customer
-            | 'Discard prediction if there is not extra dimension' >>
-                beam.FlatMap(discard_if_no_extra_dimension,
-                             pvalue.AsSingleton(options))
-            | beam.Map(lambda x: (x[10], x))  # extra dimension
-            | 'Group customer predictions by extra dimension' >>
-                beam.GroupByKey()
-            | beam.FlatMap(generate_prediction_summary_extra_dimension,
-                           pvalue.AsSingleton(tot_equity))
-        )
-
-        _ = (
-            prediction_summary_extra_dimension
-            | 'prediction_summary_extra_dimension to CSV line' >>
-                beam.Map(list_to_csv_line)
-            |
-            'Write prediction_summary_extra_dimension' >> beam.io.WriteToText(
-                runtime_options.output_folder,
-                header='extra_dimension,average_retention_probability'
-                ',average_predicted_customer_value'
-                ',average_predicted_order_value'
-                ',average_predicted_purchases,total_customer_value'
-                ',number_of_customers,perc_of_total_customer_value',
-                shard_name_template='',
-                num_shards=1,
-                file_name_suffix='prediction_summary_extra_dimension.csv')
-        )
-
-
-if __name__ == '__main__':
-    logging.getLogger().setLevel(logging.INFO)
-    run()
+    def get(self):
+        return f'{self.project_vp.get()}:{self.dataset_vp.get()}.{self.table_name}'
