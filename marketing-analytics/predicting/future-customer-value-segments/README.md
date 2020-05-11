@@ -1,5 +1,7 @@
 # Future-Customer-Value-Segments (FoCVS) Cloud Dataflow pipeline
 
+![alt FoCVS Dataflow](https://storage.googleapis.com/future-customer-value-segments/FoCVS_dataflow.png)
+
 ## Overview
 
 Future-Customer-Value-Segments (aka FoCVS) is a data-processing pipeline that helps understand users behavior by calculating Customer Lifetime Value and segmenting customers by total value.
