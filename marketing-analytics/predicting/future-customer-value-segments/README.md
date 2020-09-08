@@ -1,49 +1,61 @@
-# Future-Customer-Value-Segments Cloud Dataflow pipeline
+# Future-Customer-Value-Segments (FoCVS)
+
+![alt FoCVS Dataflow](images/FoCVS_dataflow.png)
 
 ## Overview
 
-Future-Customer-Value-Segments is a data-processing pipeline that helps understand users behavior by calculating Customer Lifetime Value and segmenting customers by total value.
+Future-Customer-Value-Segments (FoCVS) is a data-processing pipeline that helps
+understand user behavior by calculating Customer Lifetime Value (CLV / LTV) and
+segmenting customers by total value.
+It runs on Google Cloud Dataflow and can be deployed to any Google Cloud
+Platform (GCP) project.
 
-It runs on Google Cloud Dataflow and can be deployed to any GCP account.
+There are two different versions of the pipeline:
+
+* CSV: read input data and store output as CSV files in Google Cloud Storage (GCS)
+* BigQuery (BQ): read input data and store output in BQ tables
 
 ## Goals
 
-1. Let the users run the pipeline themselves, as many time as they want, using different input data or different parameters.
-2. First focus on privacy; input transactions data doesn't need to be shared with Google or any other company.
+1. Focus on **privacy**; input data does not need to be shared with Google or
+any other company.
+2. Focus on **flexibility**; users can run the pipeline as many times as they
+want, using different input data or different parameters.
 
 ## How to use the solution
 
-The solution consists of a single Cloud Dataflow template that can be run using different runtime parameters to customize the execution of the pipeline.
-
-The following procedure explains how to install the Cloud Dataflow template in a Google Cloud Platform project.
-
-Alternatively the user can start the Cloud Dataflow pipeline (see Usage section) by referring to the publicly available deployment of the template:
-
-`gs://future-customer-value-segments/templates/Future-Customer-Value-Segments`
+The solution consists of Cloud Dataflow templates that can be run using different
+parameters to customize the execution of the pipeline.
+The following procedure explains how to install the Cloud Dataflow template in a
+GCP project.
 
 ### Installation
 
-Note: This solution requires Python 3.4.
+Note: This solution requires Python 3.7.
 
-* Open Cloud Shell inside the Google Cloud Platform
-* Set the project where to install the solution by running: `gcloud config set project [PROJECT_ID]`
-* Clone this repo and `cd` into the directory
-* Create python3 virtual env `virtualenv env`
+* Navigate to GCP and open Cloud Shell
+* Set the project in which to install the Dataflow templates by running:
+  `gcloud config set project [PROJECT_ID]`
+* Clone this repo and `cd` into the *Future-Customer-Value-Segments* directory
+* Create a python3 virtual env `virtualenv env`
 * Activate the virtual env `source env/bin/activate`
-* Install the project requirements `pip install -r requirements.txt`
-* Create (if doesn't exist yet) a bucket where the dataflow template will be stored
-* Set an environment variable with the name of the bucket `export PIPELINE_BUCKET=bucket_to_store_template`
-* Generate the template by running `./generate_template.sh`
-* Move template metadata to the same folder of the template `gsutil cp Future-Customer-Value-Segments_metadata gs://${PIPELINE_BUCKET}/templates`
-* Deactivate the Python virtual env at the end `deactivate`
-* Close Cloud Shell
+* Install python3 dependencies `pip install -r requirements.txt`
+* Create a GCS bucket (if one does not already exist) where the Dataflow templates
+  will be stored
+* Set an environment variable with the name of the bucket
+  `export PIPELINE_BUCKET=bucket_to_store_template`
+* Generate the templates by running `./generate_templates.sh`
+* Move template metadata to the same folder as the templates
+  `gsutil cp FoCVS-*_metadata gs://${PIPELINE_BUCKET}/templates`
+* Deactivate the virtual env `deactivate` and close cloud shell
 
 ### Usage
 
 * Go to the Cloud Dataflow page
 * Click `+ Create Job From Template`
 * Give the job a name and select `Custom Template` under `Cloud Dataflow template`
-* Insert the Template GCS path (`<your_pipeline_bucket_name>/templates/Future-Customer-Value-Segments` or the public template `gs://future-customer-value-segments/templates/Future-Customer-Value-Segments`)
+* Insert the desired template (CSV or BQ) GCS path
+  (`<your_pipeline_bucket_name>/templates/FoCVS-<csv|bq>`)
 * Fill the Required Parameters
 * Expand the "Optional Parameters" section if needed
 
@@ -51,15 +63,22 @@ Note: This solution requires Python 3.4.
 
 ### Input Data
 
-The pipeline takes as input data a CSV file containing the transaction data for the customers (the file must contain a header describing the columns). It must contain the following fields:
+The pipeline takes input data in the form of a CSV file or BigQuery table
+containing customer transactions (the file must contain a header describing the columns).
+It must contain the following fields:
 
 * **Customer ID** (an identifier for the customer, can be either a number or a string).
-* **Date of the transaction** (must be in one of the following formats: 'YYYY-MM-DD’, 'MM/DD/YY', 'MM/DD/YYYY’, 'DD/MM/YY', 'DD/MM/YYYY’, 'YYYYMMDD').
+* **Date of the transaction** (must be in one of the following formats:
+  'YYYY-MM-DD’, 'MM/DD/YY', 'MM/DD/YYYY’, 'DD/MM/YY', 'DD/MM/YYYY’, 'YYYYMMDD').
 * **Value of the transaction** (number)
-* **Extra dimension** *(Optional)* (can be a number or a string referring for example to a category, marketing channel, geographic region or any other property of the transaction).
+* **Extra dimension** *(Optional)* (can be a number or a string referring for
+  example to a category, marketing channel, geographic region or any other
+  property of the transaction).
 
-Here’s an example of input data from the CDNOW popular dataset:
-```
+Here is an example of input data from the [CDnow](https://en.wikipedia.org/wiki/CDNow)
+popular [transactions dataset](https://www.brucehardie.com/datasets/):
+
+``` txt
 customer_id,date,category,sales
 00001,1997-01-01,1,11.77
 00002,1997-01-12,1,12.00
@@ -71,8 +90,9 @@ customer_id,date,category,sales
 
 ### Output Data
 
-The Future-Customer-Value-Segments pipeline generates a bunch of files in the output directory.
-These files can be divided into two categories, **validation files** and **prediction reports**:
+The pipeline generates several files in the output directory.
+These files can be divided into two categories, **validation files** and
+**prediction reports**:
 
 #### Validation Files
 
@@ -80,7 +100,7 @@ These files can be divided into two categories, **validation files** and **predi
 
 Contains information regarding the validation of the model. See an example below:
 
-```
+``` txt
 Modeling Dates
 Calibration Start Date: 1997-01-01
 Calibration End Date: 1997-10-01
@@ -96,19 +116,24 @@ Transactions observed for validation: 23497 (34.8% of total transactions)
 Mean Absolute Percent Error (MAPE): 2.43%
 ```
 
-***repeat_transactions_over_time.png (and repeat_cumulative_transactions_over_time.png)***
+***repeat_transactions_over_time.png and repeat_cumulative_transactions_over_time.png***
 
-Contains a chart that help the user understand how well the model fits the input data.
+<img src="images/repeat_transactions_over_time.png" alt="Transactions" width="300"/>
+<img src="images/repeat_cumulative_transactions_over_time.png"
+alt="Cumulative Transactions" width="309"/>
 
-The first part of the chart is relative to the calibration period of the model.
+Charts that help the user understand how well the model fits the input data.
+The vertical lines disecting the charts represent the difference between the
+_calibration_ and _prediction_ periods respectively.
 
 #### Prediction Reports
 
 ***prediction_params.txt***
 
-Contains information about the prediction period and the parameters used in the model. See an example below:
+Contains information about the prediction period and the parameters used in the
+model. See an example below:
 
-```
+``` txt
 Prediction for: 52 weeks
 Model Time Granularity: Weekly
 
@@ -128,16 +153,17 @@ q: 3.6321332914686537
 v: 11.435020413203247
 ```
 
-***Prediction CSV Files***
+***Prediction CSV Files (or BigQuery tables)***
 
-* **prediction_summary.csv** &mdash; prediction grouped by segment (useful to understand who are those customers providing the best value)
-* **prediction_summary_extra_dimension.csv** &mdash; prediction grouped by extra dimension
+* **prediction_summary.csv** &mdash; prediction grouped by segment (useful to
+  identify the customer segment that provides the most value)
+* **prediction_summary_extra_dimension.csv** &mdash; prediction grouped by extra
+  dimension
 * **prediction_by_customer.csv** &mdash; prediction for each single customer
 
-Those files contain the model prediction output data:
+The following columns within those files contain the model prediction output data:
 
-* **Retention Probability** (Likelihood of a customer to come back)
-* **Predicted Purchases** (Predicted future purchases for the next year)
-* **Future AOV** (Predicted future value per order)
-* **Expected Value** (Predicted future spend for the next year)
-* **Customer Equity** (Summed predicted future spend for customers in segment)
+* **Retention Probability**: Likelihood of a customer to come back
+* **Predicted Purchases**: Predicted future purchases for the next year
+* **Future Average Order Value (AOV)**: Predicted future value per order
+* **Expected Value / Customer Value**: Predicted future spend for the next year

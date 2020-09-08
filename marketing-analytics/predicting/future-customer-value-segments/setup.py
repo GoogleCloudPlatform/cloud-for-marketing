@@ -19,7 +19,7 @@ setuptools.setup(
     version='0.0.1',
     install_requires=[
         'Lifetimes==0.11.1',
-        'matplotlib==3.1.2',
+        'matplotlib==3.2.1',
     ],
     packages=setuptools.find_packages(),
 )

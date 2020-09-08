@@ -14,11 +14,21 @@
 # limitations under the License.
 
 
-python dataflow.py \
+python fcvs_pipeline_csv.py \
   --runner DataflowRunner \
   --project "${DEVSHELL_PROJECT_ID}" \
   --temp_location "gs://${PIPELINE_BUCKET}/temp/" \
   --staging_location "gs://${PIPELINE_BUCKET}/staging/" \
-  --template_location "gs://${PIPELINE_BUCKET}/templates/Future-Customer-Value-Segments" \
+  --template_location "gs://${PIPELINE_BUCKET}/templates/FoCVS-csv" \
   --save_main_session \
+  --setup_file ./setup.py
+
+python fcvs_pipeline_bq.py \
+  --runner DataflowRunner \
+  --project "${DEVSHELL_PROJECT_ID}" \
+  --temp_location "gs://${PIPELINE_BUCKET}/temp/" \
+  --staging_location "gs://${PIPELINE_BUCKET}/staging/" \
+  --template_location "gs://${PIPELINE_BUCKET}/templates/FoCVS-bq" \
+  --save_main_session \
+  --experiments=use_beam_bq_sink \
   --setup_file ./setup.py
