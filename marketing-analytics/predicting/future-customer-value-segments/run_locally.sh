@@ -21,7 +21,7 @@ fi
 mkdir ./output
 
 python fcvs_pipeline_csv.py --runner=DirectRunner \
-  --input_csv ./input_cdnow.csv \
+  --input_csv ./samples/input_cdnow.csv \
   --output_folder ./output/ \
   --customer_id_column_position 1 \
   --transaction_date_column_position 2 \
