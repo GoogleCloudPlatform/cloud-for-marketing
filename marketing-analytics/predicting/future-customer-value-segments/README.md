@@ -8,12 +8,13 @@ Future-Customer-Value-Segments (FoCVS) is a data-processing pipeline that helps
 understand user behavior by calculating Customer Lifetime Value (CLV / LTV) and
 segmenting customers by total value.
 It runs on Google Cloud Dataflow and can be deployed to any Google Cloud
-Platform (GCP) project.
+Platform (GCP) project. You can also run it on-prem / on other cloud providers
 
 There are two different versions of the pipeline:
 
 * CSV: read input data and store output as CSV files in Google Cloud Storage (GCS)
-* BigQuery (BQ): read input data and store output in BQ tables
+  / on-prem
+* BigQuery (BQ): read input data and store output in Google Cloud BigQuery tables
 
 ## Goals
 
@@ -26,12 +27,15 @@ want, using different input data or different parameters.
 
 The solution consists of Cloud Dataflow templates that can be run using different
 parameters to customize the execution of the pipeline.
-The following procedure explains how to install the Cloud Dataflow template in a
-GCP project.
+The following procedure explains how to install the Cloud Dataflow templates in
+a GCP project. Alternatively, the solution can also be run on-prem using Apache
+Beam.
 
 ### Installation
 
 Note: This solution requires Python 3.7.
+
+#### GCP Steps
 
 * Navigate to GCP and open Cloud Shell
 * Set the project in which to install the Dataflow templates by running:
@@ -49,7 +53,7 @@ Note: This solution requires Python 3.7.
   `gsutil cp FoCVS-*_metadata gs://${PIPELINE_BUCKET}/templates`
 * Deactivate the virtual env `deactivate` and close cloud shell
 
-### Usage
+#### GCP Usage
 
 * Go to the Cloud Dataflow page
 * Click `+ Create Job From Template`
@@ -58,6 +62,18 @@ Note: This solution requires Python 3.7.
   (`<your_pipeline_bucket_name>/templates/FoCVS-<csv|bq>`)
 * Fill the Required Parameters
 * Expand the "Optional Parameters" section if needed
+
+#### On-prem Steps
+
+* Clone this repo and `cd` into the *Future-Customer-Value-Segments* directory
+* Create a python3 virtual env `virtualenv env`
+* Activate the virtual env `source env/bin/activate`
+* Install python3 (off-GCP) dependencies `pip install -r requirements_local.txt`
+* Prepare your transactional data in CSV format
+* Run the solution through the provided `run_locally.sh` after specifying the
+  location of your CSV data
+* View the output under the newly created `output/` directory
+* Deactivate the virtual env `deactivate`
 
 ## Data
 

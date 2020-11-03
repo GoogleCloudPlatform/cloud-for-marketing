@@ -22,7 +22,6 @@ import operator
 import apache_beam as beam
 import numpy as np
 import pandas as pd
-from apache_beam.io.gcp import gcsfilesystem
 from apache_beam.options import value_provider
 import lifetimes
 
@@ -178,6 +177,8 @@ def save_to_file(output_path, save_function):
             descriptor and writing data into it.
     """
     if output_path.startswith('gs://'):
+        from apache_beam.io.gcp import gcsfilesystem
+
         with gcsfilesystem.GCSFileSystem(None).create(output_path) as f:
             save_function(f)
     else:
@@ -1665,7 +1666,7 @@ Transactions observed: {prediction_params['transactions_observed']}
 
 Frequency Model: {prediction_params['frequency_model']}
 Model Parameters
-{model_params_to_string(prediction_params['bgnbd_model_params'] or 
+{model_params_to_string(prediction_params['bgnbd_model_params'] or
                         prediction_params['paretonbd_model_params'])}
 Gamma-Gamma Parameters
 {model_params_to_string(prediction_params['gamma_gamma_params'])}"""
