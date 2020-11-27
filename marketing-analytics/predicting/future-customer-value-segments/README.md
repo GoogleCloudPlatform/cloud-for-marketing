@@ -4,17 +4,19 @@
 
 ## Overview
 
-Future-Customer-Value-Segments (FoCVS) is a data-processing pipeline that helps
-understand user behavior by calculating Customer Lifetime Value (CLV / LTV) and
+Future-Customer-Value-Segments (FoCVS) is a configurable and privacy-safe
+solution for calculating and predicting customer lifetime value (pCLV) and
 segmenting customers by total value.
+
 It runs on Google Cloud Dataflow and can be deployed to any Google Cloud
-Platform (GCP) project. You can also run it on-prem / on other cloud providers
+Platform (GCP) project. You can also run it on-prem / off of Google Cloud.
 
 There are two different versions of the pipeline:
 
-* CSV: read input data and store output as CSV files in Google Cloud Storage (GCS)
-  / on-prem
-* BigQuery (BQ): read input data and store output in Google Cloud BigQuery tables
+* CSV: read input data from, and store output as, CSV files in Google Cloud
+  Storage (GCS) / on-prem
+* BigQuery (BQ): read input data from, and store output in, Google Cloud
+  BigQuery tables
 
 ## Goals
 
