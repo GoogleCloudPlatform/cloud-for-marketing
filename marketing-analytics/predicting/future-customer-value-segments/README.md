@@ -5,8 +5,8 @@
 ## Overview
 
 Future-Customer-Value-Segments (FoCVS) is a configurable and privacy-safe
-solution for calculating and predicting customer lifetime value (pCLV) and
-segmenting customers by total value.
+solution for **calculating** and **predicting** customer lifetime value (pCLV) and
+**segmenting** customers by total value.
 
 It runs on Google Cloud Dataflow and can be deployed to any Google Cloud
 Platform (GCP) project. You can also run it on-prem / off of Google Cloud.
