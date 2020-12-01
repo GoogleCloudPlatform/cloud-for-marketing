@@ -29,7 +29,7 @@ want, using different input data or different parameters.
 
 The solution consists of Cloud Dataflow templates that can be run using different
 parameters to customize the execution of the pipeline.
-The following procedure explains how to install the Cloud Dataflow templates in
+The following steps explain how to install the Cloud Dataflow templates in
 a GCP project. Alternatively, the solution can also be run on-prem using Apache
 Beam.
 
