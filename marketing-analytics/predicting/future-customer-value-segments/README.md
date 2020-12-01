@@ -179,9 +179,11 @@ v: 11.435020413203247
   dimension
 * **prediction_by_customer.csv** &mdash; prediction for each single customer
 
-The following columns within those files contain the model prediction output data:
+The following columns within those files contain the model prediction output data for the duration of the prediction period (one year by default):
 
-* **Retention Probability**: Likelihood of a customer to come back
-* **Predicted Purchases**: Predicted future purchases for the next year
-* **Future Average Order Value (AOV)**: Predicted future value per order
-* **Expected Value / Customer Value**: Predicted future spend for the next year
+* **Probability Alive** (p_alive): Likelihood that a customer has not churned
+* **Predicted Purchases** (predicted_purchases): Predicted number of purchases
+* **Predicted Average Order Value** (future_aov): Predicted average monetary value per order
+* **Total Customer Value** (expected_value): Predicted future spend. This is analogous to `predicted_purchases * future_aov`
+
+Including the probability that a customer has not churned into the _Total Customer Value_ equation yields a more accurate pCLV score: `p_alive * expected_value`
