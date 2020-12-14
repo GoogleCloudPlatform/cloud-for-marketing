@@ -1,0 +1,6 @@
+cart
+welcome
+home
+shopping_cart
+checkout
+product

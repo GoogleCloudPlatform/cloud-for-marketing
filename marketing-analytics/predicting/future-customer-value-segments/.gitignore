@@ -1,0 +1,4 @@
+**/__pycache__/
+env/
+output/
+beam-temp-output*/
