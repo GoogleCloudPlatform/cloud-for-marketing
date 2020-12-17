@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: {MeasurementProtocol: {MeasurementProtocol}},
+  api: {measurementprotocol: {MeasurementProtocol}},
   utils: {apiSpeedControl, getProperValue},
 } = require('nodejs-common');
 

@@ -1,6 +1,6 @@
 {
   "name": "tentacles",
-  "version": "0.0.2",
+  "version": "0.1.2",
   "private": true,
   "author": "lushu77@gmail.com",
   "repository": {
@@ -12,15 +12,16 @@
   ],
   "main": "index.js",
   "dependencies": {
-    "@google-cloud/storage": "^3.5.0",
-    "nodejs-common": "file:libs/nodejs-common-0.0.1.tgz",
-    "ssh2-sftp-client": "^2.5.2"
+    "@google-cloud/storage": "^5.1.2",
+    "nodejs-common": "file:libs/nodejs-common-0.1.1.tgz",
+    "ssh2-sftp-client": "^5.0.2"
   },
   "devDependencies": {
     "jasmine": "^3.5.0"
   },
   "scripts": {
     "prepare": "mkdir -p libs; cd libs/; npm pack -s ../../common-libs/nodejs-common; cd ..; ",
+    "install-lib": "npm install -s nodejs-common",
     "test": "node node_modules/jasmine/bin/jasmine"
   },
   "cloud-repo-tools": {

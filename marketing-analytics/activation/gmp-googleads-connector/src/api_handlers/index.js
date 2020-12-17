@@ -18,30 +18,32 @@
 
 'use strict';
 
-const GoogleAnalyticsDataImport = require('./ga_data_import.js');
-const MeasurementProtocol = require('./ga_measurement_protocol.js');
-const CampaignManagerConversionsUpload = require('./cm_conversions_upload.js');
-const SftpUpload = require('./sftp_uploader.js');
-const SheetsLoadCsv = require('./sheets_load_csv.js');
-const saConversionsUpload = require('./sa_conversions_insert.js');
+const gaDataImport = require('./ga_data_import.js');
+const gaMeasurementProtocol = require('./ga_measurement_protocol.js');
+const cmConversionsUpload = require('./cm_conversions_upload.js');
+const sftpUpload = require('./sftp_upload.js');
+const sheetsLoadCsv = require('./sheets_load_csv.js');
+const saConversionsInsert = require('./sa_conversions_insert.js');
+const pubsubMessageSend = require('./pubsub_message_send.js');
+const googleAdsClickConversionUpload = require('./google_ads_click_conversions_upload.js');
 
-const {GoogleAnalyticsConfig} = GoogleAnalyticsDataImport;
-const {MeasurementProtocolConfig} = MeasurementProtocol;
-const {CampaignManagerConfig} = CampaignManagerConversionsUpload;
-const {SftpConfig} = SftpUpload;
-const {SheetsLoadConfig} = SheetsLoadCsv;
-const {SearchAdsConfig} = saConversionsUpload;
+const {GoogleAnalyticsConfig} = gaDataImport;
+const {MeasurementProtocolConfig} = gaMeasurementProtocol;
+const {CampaignManagerConfig} = cmConversionsUpload;
+const {SftpConfig} = sftpUpload;
+const {SheetsLoadConfig} = sheetsLoadCsv;
+const {SearchAdsConfig} = saConversionsInsert;
+const {PubSubMessageConfig} = pubsubMessageSend;
+const {GoogleAdsClickConversionConfig} = googleAdsClickConversionUpload;
 
 /**
  * API configuration types for all APIs that Tentacles supports.
  *
  * @typedef {(!GoogleAnalyticsConfig|!CampaignManagerConfig|
  * !MeasurementProtocolConfig|!SftpConfig|!SheetsLoadConfig|
- * !SearchAdsConfig)}
+ * !SearchAdsConfig|!PubSubMessageConfig|!GoogleAdsClickConversionConfig)}
  */
 let ApiConfigItem;
-
-exports.ApiConfigItem = ApiConfigItem;
 
 /**
  * Definition of API handler function. It takes three parameters:
@@ -52,19 +54,19 @@ exports.ApiConfigItem = ApiConfigItem;
  */
 let ApiHandlerFunction;
 
-exports.ApiHandlerFunction = ApiHandlerFunction;
-
 /**
  * All handlers for the APIs that Tentacles supports.
  * @type {!Object<string,!ApiHandlerFunction>}
  */
 const API_HANDLERS = Object.freeze({
-  [GoogleAnalyticsDataImport.name]: GoogleAnalyticsDataImport,
-  [MeasurementProtocol.name]: MeasurementProtocol,
-  [CampaignManagerConversionsUpload.name]: CampaignManagerConversionsUpload,
-  [SftpUpload.name]: SftpUpload,
-  [SheetsLoadCsv.name]: SheetsLoadCsv,
-  [saConversionsUpload.name]: saConversionsUpload,
+  [gaDataImport.name]: gaDataImport,
+  [gaMeasurementProtocol.name]: gaMeasurementProtocol,
+  [cmConversionsUpload.name]: cmConversionsUpload,
+  [sftpUpload.name]: sftpUpload,
+  [sheetsLoadCsv.name]: sheetsLoadCsv,
+  [saConversionsInsert.name]: saConversionsInsert,
+  [pubsubMessageSend.name]: pubsubMessageSend,
+  [googleAdsClickConversionUpload.name]: googleAdsClickConversionUpload,
 });
 
 /**
@@ -72,9 +74,7 @@ const API_HANDLERS = Object.freeze({
  *
  * @return {!Array<string>}
  */
-exports.getApiNameList = () => {
-  return Object.keys(API_HANDLERS);
-};
+const getApiNameList = () => Object.keys(API_HANDLERS);
 
 /**
  * Gets the names of APIs that use Cloud Storage as the default data transfer
@@ -85,10 +85,8 @@ exports.getApiNameList = () => {
  *
  * @return {!Array<string>}
  */
-exports.getApiOnGcs = () => {
-  return Object.keys(API_HANDLERS)
-      .filter((key) => API_HANDLERS[key].defaultOnGcs);
-};
+const getApiOnGcs = () =>
+    getApiNameList().filter((key) => API_HANDLERS[key].defaultOnGcs);
 
 /**
  * Gets the handler for the given API.
@@ -96,6 +94,13 @@ exports.getApiOnGcs = () => {
  * @param {string} api The API name.
  * @return {(!ApiHandlerFunction|undefined)}
  */
-exports.getApiHandler = (api) => {
-  if (API_HANDLERS[api]) return API_HANDLERS[api].sendData;
+const getApiHandler = (api) =>
+    API_HANDLERS[api] ? API_HANDLERS[api].sendData : undefined;
+
+module.exports = {
+  ApiConfigItem,
+  ApiHandlerFunction,
+  getApiNameList,
+  getApiOnGcs,
+  getApiHandler,
 };

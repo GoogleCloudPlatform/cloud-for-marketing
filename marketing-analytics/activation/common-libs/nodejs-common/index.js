@@ -18,15 +18,10 @@
 
 'use strict';
 
-exports.api = require('./apis/index.js');
-exports.base = require('./base/base_dao.js');
-exports.CloudFunctionsUtils = require('./components/cloudfunctions_utils.js');
-exports.FirestoreAccessBase = require('./components/firestore_access_base.js');
-exports.DatastoreModeAccess = require('./components/datastore_mode_access.js');
-exports.NativeModeAccess = require('./components/native_mode_access.js');
-exports.PubSubUtils = require('./components/pubsub_utils.js');
-exports.StorageUtils = require('./components/storage_utils.js');
-exports.utils = require('./components/utils.js');
-
-exports.getCloudProduct = require('./components/gcloud.js');
-exports.BigQueryStorageConnector = require('./components/bigquery_storage.js');
+exports.api = require('./src/apis/index.js');
+exports.cloudfunctions = require('./src/components/cloudfunctions_utils.js');
+exports.firestore = require('./src/components/firestore/index.js');
+exports.pubsub = require('./src/components/pubsub.js');
+exports.scheduler = require('./src/components/scheduler.js');
+exports.storage = require('./src/components/storage.js');
+exports.utils = require('./src/components/utils.js');

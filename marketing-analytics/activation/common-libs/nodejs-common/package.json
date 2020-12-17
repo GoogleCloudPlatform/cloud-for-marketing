@@ -1,12 +1,10 @@
 {
   "name": "nodejs-common",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "private": true,
   "author": "lushu77@gmail.com",
   "files": [
-    "apis/",
-    "base/",
-    "components/"
+    "src/"
   ],
   "main": "index.js",
   "repository": {
@@ -14,16 +12,20 @@
     "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/common-libs/nodejs-common"
   },
   "dependencies": {
-    "gaxios": "^2.1.0",
-    "@google-cloud/bigquery": "^4.3.0",
-    "@google-cloud/datastore": "^4.4.0",
-    "@google-cloud/firestore": "^2.4.0",
-    "@google-cloud/pubsub": "^1.1.2",
-    "@google-cloud/storage": "^3.5.0",
-    "google-auth-library": "^5.5.0",
-    "googleapis": "^43.0.0",
-    "log4js": "^5.2.2",
-    "request": "^2.88.0"
+    "gaxios": "^3.0.4",
+    "@google-cloud/bigquery": "^5.0.1",
+    "@google-cloud/datastore": "^6.1.0",
+    "@google-cloud/firestore": "^4.1.1",
+    "@google-cloud/logging-winston": "^4.0.0",
+    "@google-cloud/pubsub": "^2.3.0",
+    "@google-cloud/storage": "^5.1.2",
+    "google-auth-library": "^6.0.5",
+    "googleapis": "^55.0.0",
+    "google-ads-node": "^2.0.2",
+    "google-ads-api": "^4.0.1",
+    "node-google-dfp": "^0.3.2",
+    "soap": "^0.32.0",
+    "winston": "^3.3.3"
   },
   "devDependencies": {
     "jasmine": "^3.5.0"

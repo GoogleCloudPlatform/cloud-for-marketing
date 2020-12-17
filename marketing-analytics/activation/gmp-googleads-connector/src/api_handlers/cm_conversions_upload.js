@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: {DfaReporting: {DfaReporting, InsertConversionsConfig}},
+  api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
   utils: {apiSpeedControl, getProperValue},
 } = require('nodejs-common');
 
@@ -70,6 +70,8 @@ exports.CampaignManagerConfig = CampaignManagerConfig;
  * Gets the CM user profile based on CM account Id and current user, then uses
  * the profile to send out data as CM conversions with speed control and data
  * volume adjustment.
+ * This function exposes a DfaReporting parameter for test
+ * @param {DfaReporting} dfaReporting Injected DfaReporting instance.
  * @param {string} records Data to send out as conversions. Expected JSON
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
@@ -77,8 +79,7 @@ exports.CampaignManagerConfig = CampaignManagerConfig;
  * @return {!Promise<boolean>} Whether 'records' have been sent out without any
  *     errors.
  */
-exports.sendData = (records, messageId, config) => {
-  const dfaReporting = new DfaReporting();
+const sendDataInternal = (dfaReporting, records, messageId, config) => {
   return dfaReporting.getProfileId(config.cmAccountId).then((profileId) => {
     config.cmConfig.profileId = profileId;
     const recordsPerRequest =
@@ -92,3 +93,23 @@ exports.sendData = (records, messageId, config) => {
     return managedSend(configedUpload, records, messageId);
   });
 };
+
+exports.sendDataInternal = sendDataInternal;
+
+/**
+ * Sends out the data as conversions to Campaign Manager (CM).
+ * Gets the CM user profile based on CM account Id and current user, then uses
+ * the profile to send out data as CM conversions with speed control and data
+ * volume adjustment.
+ * @param {string} records Data to send out as conversions. Expected JSON
+ *     string in each line.
+ * @param {string} messageId Pub/sub message ID for log.
+ * @param {!CampaignManagerConfig} config
+ * @return {!Promise<boolean>} Whether 'records' have been sent out without any
+ *     errors.
+ */
+exports.sendData = (records, messageId, config) => {
+  const dfaReporting = new DfaReporting();
+  return sendDataInternal(dfaReporting, records, messageId, config);
+};
+

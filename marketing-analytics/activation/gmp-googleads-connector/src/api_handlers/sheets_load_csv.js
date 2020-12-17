@@ -19,9 +19,9 @@
 
 'use strict';
 const {
-  api: {Spreadsheets: {Spreadsheets, ParseDataRequest}},
+  api: {spreadsheets: {Spreadsheets, ParseDataRequest}},
   utils: {getProperValue, splitArray},
-  StorageUtils,
+  storage: {StorageFile},
 } = require('nodejs-common');
 
 const MAXIMUM_REQUESTS_LENGTH = 10000000;  // Maximum requests size of this API.
@@ -44,7 +44,7 @@ exports.defaultOnGcs = true;
  * 'sheetHeader' is the fixed head row(s) in the Sheet. 'requestLength' is the
  *  byte size of each request.
  *
- * @typedef{{
+ * @typedef {{
  *   spreadsheetId:string,
  *   sheetName:string,
  *   sheetHeader:(string|undefined),
@@ -80,7 +80,7 @@ const setDimensions = (spreadsheets, sheetName, data, pasteDataRequest) => {
  * To achieve the best performance, the whole CSV data will be divided into
  * rounds and each round contain several batches. Each batch is a request with a
  * piece of data to be loaded in to the target Sheet. Any round will wait until
- * its batcher are all fulfilled before it goes for the next round.
+ * its batches are all fulfilled before it goes for the next round.
  * @param {!Spreadsheets} spreadsheets Sheets API v4 stub class.
  * @param {string} sheetName Name of the sheet will be loaded data.
  * @param {!ParseDataRequest} pasteDataRequest PasteDataRequest for Sheets API
@@ -93,17 +93,17 @@ const setDimensions = (spreadsheets, sheetName, data, pasteDataRequest) => {
  */
 const loadCsvToSheet =
     (spreadsheets, sheetName, pasteDataRequest, data, messageMaxSize) => {
-      const storageUtils = new StorageUtils(data.bucket, data.file);
+      const storageFile = new StorageFile(data.bucket, data.file);
       let rowIndex = pasteDataRequest.coordinate.rowIndex;
-      return storageUtils.loadContent(0).then((allData) => {
+      return storageFile.loadContent(0).then((allData) => {
         return setDimensions(spreadsheets, sheetName, allData, pasteDataRequest)
             .then((reshapeResult) => {
               if (!reshapeResult) {
                 throw new Error(`Fail to reshape the sheet ${sheetName}`);
               }
-              return storageUtils.getFileSize()
+              return storageFile.getFileSize()
                   .then((fileSize) => {
-                    return storageUtils.getSplitRanges(
+                    return storageFile.getSplitRanges(
                         fileSize, messageMaxSize);
                   })
                   .then((splitRanges) => {
@@ -114,7 +114,7 @@ const loadCsvToSheet =
                       promise = promise.then((lastResult) => {
                         const dataPieces =
                             singleSplitRanges.map(([start, end]) => {
-                              return storageUtils.loadContent(start, end);
+                              return storageFile.loadContent(start, end);
                             });
                         return Promise.all(dataPieces).then((pieces) => {
                           return Promise
@@ -172,7 +172,9 @@ exports.sendData = (message, messageId, config) => {
       config.pasteData);
   const coordinate = pasteDataRequest.coordinate;
   return spreadsheets.clearSheet(sheetName).then((clearResult) => {
-    if (!clearResult) throw new Error('Fail to clear the sheet');
+    if (!clearResult) {
+      throw new Error('Fail to clear the sheet');
+    }
     return spreadsheets.getSheetId(sheetName).then((sheetId) => {
       coordinate.sheetId = sheetId;
       coordinate.rowIndex = coordinate.rowIndex || 0;
@@ -180,11 +182,11 @@ exports.sendData = (message, messageId, config) => {
       const sheetHeader = config.sheetHeader;
       if (sheetHeader) {
         promise = spreadsheets.loadData(sheetHeader, pasteDataRequest, 'header')
-                      .then(() => {
-                        return coordinate.rowIndex +
-                            sheetHeader.split('\n').length +
-                            (sheetHeader.endsWith('\n') ? -1 : 0);
-                      });
+            .then(() => {
+              return coordinate.rowIndex +
+                  sheetHeader.split('\n').length +
+                  (sheetHeader.endsWith('\n') ? -1 : 0);
+            });
       } else {
         promise = Promise.resolve(coordinate.rowIndex);
       }

@@ -21,8 +21,8 @@
 
 const {File} = require('@google-cloud/storage');
 const {
-  api: {Analytics: {Analytics, DataImportConfig}},
-  StorageUtils,
+  api: {analytics: {Analytics, DataImportConfig}},
+  storage: {StorageFile},
 } = require('nodejs-common');
 
 /** API name in the incoming file name. */
@@ -62,16 +62,15 @@ exports.GoogleAnalyticsConfig = GoogleAnalyticsConfig;
  * @return {!Promise<!File>} Cloud Storage File to be uploaded.
  */
 const prepareFile = (bucket, fileName, dataImportHeader = undefined) => {
-  const storageUtils = new StorageUtils(bucket, fileName);
-  if (dataImportHeader) {
-    console.log(`Appends ${dataImportHeader} to the head of: `, fileName);
-    return storageUtils.addHeader(dataImportHeader).then((newFileName) => {
-      return new StorageUtils(bucket, newFileName).getFile();
-    });
-  } else {
+  const storageFile = new StorageFile(bucket, fileName);
+  if (!dataImportHeader) {
     console.log(`No head line need to take care for: `, fileName);
-    return Promise.resolve(storageUtils.getFile());
+    return Promise.resolve(storageFile.getFile());
   }
+  console.log(`Appends ${dataImportHeader} to the head of: `, fileName);
+  return storageFile.addHeader(dataImportHeader).then((newFileName) => {
+    return new StorageFile(bucket, newFileName).getFile();
+  });
 };
 
 /**
@@ -93,18 +92,18 @@ exports.sendData = (message, messageId, config) => {
     console.log(`This is not a JSON string. GA Data Import's data not on GCS.`);
     data = message;
   }
+  const analytics = new Analytics();
+  let promise;
   if (data.bucket) {  // Data is a GCS file.
-    return prepareFile(data.bucket, data.file, config.dataImportHeader)
-        .then((file) => {
-          const stream = file.createReadStream();
-          const analytics = new Analytics();
-          return analytics.uploadData(stream, config.gaConfig, messageId);
-        });
+    promise = prepareFile(data.bucket, data.file, config.dataImportHeader)
+        .then((file) => file.createReadStream());
   } else {  // Data comes from the message data.
     if (config.dataImportHeader) {
       data = config.dataImportHeader + '\n' + data;
     }
-    const analytics = new Analytics();
-    return analytics.uploadData(data, config.gaConfig, messageId);
+    promise = Promise.resolve(data);
   }
+  // noinspection JSCheckFunctionSignatures
+  return promise.then(
+      (data) => analytics.uploadData(data, config.gaConfig, messageId));
 };
