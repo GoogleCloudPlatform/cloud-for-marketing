@@ -33,6 +33,7 @@ way.
   - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
   - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
+  - [4.7. ACLC: Google Ads Click Conversions upload](#47-google-ads-click-conversions-upload)
 
 ## 1. Key Concepts
 
@@ -245,6 +246,7 @@ expects the incoming data filenames contain the pattern **API{X}** and
     *   **CM**: DCM/DFA Reporting and Trafficking API to upload offline
         conversions
     *   **SFTP**: SFTP upload
+    *   **ACLC**: Google Ads Click Conversion Upload via API
 
 *   `Y` stands for the config name, e.g. `foo` or `bar` in the previous case.
 
@@ -617,4 +619,57 @@ Reference               | [Search Ads 360 API > Conversion: insert][insert_conve
 
 ```
 {"clickId":"Cj0KCQjwiILsBRCGARIsAHK","conversionTimestamp":"1568766602000","revenueMicros":"1571066"}
+```
+
+### 4.7. ACLC: Google Ads Click Conversions upload via API
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | ACLC
+Data Format             | JSONL
+Authentication          | OAuth
+What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_api].
+**Usage Scenarios**     | Uploading offline sales and other valuable actions to target and optimize your campaigns for increased profit based on better data.
+Transfer Data on        | Pub/Sub
+Require Service Account | NO
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | 2,000
+QPS                     | 1
+Reference               | [Overview: Offline Conversion Imports][offline_conversions_overview]
+
+[google_ads_api]:https://opteo.com/dev/google-ads-api#upload-conversionclick
+[offline_conversions_overview]:https://developers.google.com/google-ads/api/docs/conversions/overview#offline_conversions
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+  "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "adsConfig": {
+    "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
+    "conversion_value": "[YOUR-CONVERSION-VALUE]",
+    "currency_code": "[YOUR-CURRENCY-CODE]"
+  }
+}
+```
+
+*   Fields' definition:
+    *   `customerId`, Google Ads Customer account Id 
+    *   `loginCustomerId`, Login customer account Id (MCC Account Id)
+    *   `developerToken`, Developer token to access the API.
+    *   `conversion_action`, Resource name of the conversion action in the format `customers/${customerId}/conversionActions/${conversionActionId}`
+    *   `conversion_value`, The default value of the conversion for the advertiser
+    *   `currency_code`, The default currency associated with conversion value; ISO 4217 3 character currency code e.g. EUR, USD
+
+Tip: For more details see
+[Upload click conversions](https://developers.google.com/google-ads/api/reference/rpc/v4/ClickConversion)
+
+*   *Sample Data file content:*
+
+Attributed to a Google Click Identifier (`gclid`):
+
+```json
+{"conversion_date_time":"2020-01-01 03:00:00-18:00", "conversion_value":"20", "gclid":"EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
 ```
