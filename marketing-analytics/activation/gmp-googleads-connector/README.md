@@ -33,7 +33,7 @@ way.
   - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
   - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
-  - [4.7. ACLC: Google Ads Click Conversions upload](#47-google-ads-click-conversions-upload)
+  - [4.7. ACLC: Google Ads Click Conversions upload](#47-aclc-google-ads-click-conversions-upload-via-api)
 
 ## 1. Key Concepts
 
