@@ -58,6 +58,7 @@ _OPTION_PENALIZER_COEF = 'penalizer_coef'
 _OPTION_ROUND_NUMBERS = 'round_numbers'
 
 _MODEL_TYPE_BGNBD = 'BGNBD'
+_MODEL_TYPE_MBGNBD = 'MBGNBD'
 _MODEL_TYPE_PNBD = 'PNBD'
 
 date_formats = {
@@ -1063,14 +1064,29 @@ def fit_bgnbd_model(data, penalizer_coef=0.0):
     return bgf
 
 
-def extract_bgnbd_params(model):
-    """Extracts params from the BG/NBD model
+def fit_mbgnbd_model(data, penalizer_coef=0.0):
+    """Generates MBG/NBD model from the input data.
 
     Args:
-        model: the BG/NBD model.
+        data: Pandas DataFrame containing the customers data.
+        penalizer_coef: The coefficient applied to an l2 norm on the parameters.
 
     Returns:
-        The a, b, r and alpha params of the BG/NBD model.
+        The MBG/NBD model.
+    """
+    bgf = lifetimes.ModifiedBetaGeoFitter(penalizer_coef=penalizer_coef)
+    bgf.fit(data['frequency'], data['recency'], data['total_time_observed'])
+    return bgf
+
+
+def extract_bgnbd_params(model):
+    """Extracts params from the (M)BG/NBD model
+
+    Args:
+        model: the (M)BG/NBD model.
+
+    Returns:
+        The a, b, r and alpha params of the (M)BG/NBD model.
     """
     r, alpha, a, b = model._unload_params('r', 'alpha', 'a', 'b')
     return {'r': r, 'alpha': alpha, 'a': a, 'b': b}
@@ -1433,7 +1449,7 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
 
     Args:
         model_type: String defining the type of model to be used, it can be
-            either 'BGNBD' or 'PNBD'.
+            either 'BGNBD', 'MBGNBD' or 'PNBD'.
         cbs: Customer-by-sufficient-statistic (CBS) DataFrame.
         cal_start_date: Calibration start date.
         cal_end_date: Calibration end date.
@@ -1457,6 +1473,9 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     if model_type == _MODEL_TYPE_BGNBD:
         frequency_model = fit_bgnbd_model(cbs, penalizer_coef)
         model_params['frequency_model'] = 'BG/NBD'
+    elif model_type == _MODEL_TYPE_MBGNBD:
+        frequency_model = fit_mbgnbd_model(cbs, penalizer_coef)
+        model_params['frequency_model'] = 'MBG/NBD'
     elif model_type == _MODEL_TYPE_PNBD:
         frequency_model = fit_pnbd_model(cbs, penalizer_coef)
         model_params['frequency_model'] = 'Pareto/NBD'
@@ -1728,6 +1747,14 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
 
         prediction_params['frequency_model'] = 'BG/NBD'
         prediction_params['bgnbd_model_params'] = bgnbd_params
+        prediction_params['paretonbd_model_params'] = None
+
+    elif frequency_model_type == _MODEL_TYPE_MBGNBD:
+        frequency_model = fit_mbgnbd_model(data, options[_OPTION_PENALIZER_COEF])
+        mbgnbd_params = extract_bgnbd_params(frequency_model)
+
+        prediction_params['frequency_model'] = 'MBG/NBD'
+        prediction_params['bgnbd_model_params'] = mbgnbd_params
         prediction_params['paretonbd_model_params'] = None
 
     elif frequency_model_type == _MODEL_TYPE_PNBD:

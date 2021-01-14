@@ -85,12 +85,12 @@
     },
     {
       "regexes": [
-        "(BGNBD|PNBD|)"
+        "(BGNBD|MBGNBD|PNBD|)"
       ],
       "name": "frequency_model_type",
       "label": "Frequency Model Type",
       "is_optional": true,
-      "helpText": "[Default BGNBD] \"BGNBD\" or \"PNBD\". BG/NBD vs Pareto/NBD frequency models."
+      "helpText": "[Default BGNBD] \"BGNBD\", \"MBGNBD\" or \"PNBD\". BG/NBD (or MBG/NBD) vs Pareto/NBD frequency models."
     },
     {
       "regexes": [
