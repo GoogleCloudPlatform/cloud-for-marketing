@@ -10,6 +10,7 @@
 .git
 .gitignore
 .gcloudignore
+.idea
 *.template
 *.sh
 *.iml
@@ -19,3 +20,4 @@ README.md
 node_modules
 package-lock.json
 tests
+tutorials

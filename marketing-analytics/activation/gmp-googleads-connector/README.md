@@ -32,6 +32,8 @@ way.
   - [4.3. CM: DCM/DFA Reporting and Trafficking API to upload offline conversions](#43-cm-dcmdfa-reporting-and-trafficking-api-to-upload-offline-conversions)
   - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
   - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
+  - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
+  - [4.7. ACLC: Google Ads Click Conversions upload](#47-aclc-google-ads-click-conversions-upload-via-api)
 
 ## 1. Key Concepts
 
@@ -234,8 +236,8 @@ bash deploy.sh update_api_config
 After deployment, Tentacles will monitor all the files in the Storage bucket.
 Tentacles isn't designed for a fixed API or configurations. On the contrary, it
 is easy to extend for new APIs or configurations. To achieve that, Tentacles
-expects the incoming data filenames contain the pattern **API[X]** and
-**config[Y]**.
+expects the incoming data filenames contain the pattern **API{X}** and
+**config{Y}**.
 
 *   `X` stands for the API code, currently available values:
 
@@ -244,6 +246,7 @@ expects the incoming data filenames contain the pattern **API[X]** and
     *   **CM**: DCM/DFA Reporting and Trafficking API to upload offline
         conversions
     *   **SFTP**: SFTP upload
+    *   **ACLC**: Google Ads Click Conversion Upload via API
 
 *   `Y` stands for the config name, e.g. `foo` or `bar` in the previous case.
 
@@ -252,12 +255,15 @@ Other optional patterns in filename:
 *   If the filename contains `dryrun`, then the whole process will be carried
     out besides that the data won't be really sent to API serve.
 
-*   If the filename contains `_size[Z]` or `_size[Zmb]`, the incoming file will
+*   If the filename contains `_size{Z}` or `_size{Zmb}`, the incoming file will
     be divided into multiple files with the size under `Z`MB in Cloud Storage.
     For some APIs, Tentacles will use files in Cloud Storage to transfer the
     data instead of the Pub/Sub. (The reason is for those 'file uploading' type
     of APIs, using file directly is more efficient.) In that case, this setting
     will make sure the files won't oversize the target systems' capacity.
+
+**Note: Previous square brackets as the file name marker (e.g. API[X]) is also
+supported. But it is not convenient to copy those files through gsutil.**
 
 ### 3.5. Content of data files
 
@@ -554,4 +560,116 @@ EAIaIQobChMIvdTVjayx4wIV0eF3Ch0eGQAQEAAYBCAAEgIFAKE_BwE,foo,2019-07-13 00:04:00,
 EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,1,USD
 ```
 
-Disclaimer: This is not an official Google product.
+### 4.6. SA: Search Ads 360 conversions insert
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | SA
+Data Format             | JSONL
+Authentication          | TODO: [Create a User Profile][create_user_profile] for the Service Account's email with a role that has the **Insert offline conversion** permission
+What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to SA360 API endpoint.<br> If the data file is empty, then a [updateAvailability][update_availability] request is sent out instead.
+**Usage Scenarios**     | Import conversions from ad clicks into Search Ads.
+Transfer Data on        | Pub/Sub
+Require Service Account | YES
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | 200
+QPS                     | 10
+Reference               | [Search Ads 360 API > Conversion: insert][insert_conversions]
+
+[import_conversions]:https://support.google.com/google-ads/answer/7014069
+[insert_conversions]:https://developers.google.com/search-ads/v2/reference/conversion/insert
+[update_availability]:https://developers.google.com/search-ads/v2/reference/conversion/updateAvailability
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "saConfig": {
+    "type": "TRANSACTION",
+    "segmentationType": "FLOODLIGHT",
+    "segmentationId": "[YOUR-SEGMENTATION-ID]",
+    "state": "ACTIVE"
+  },
+  "availabilities": [
+    {
+      "agencyId": "[YOUR-AGENCY-ID]",
+      "advertiserId": "[YOUR-ADVERTISER-ID]",
+      "segmentationType": "FLOODLIGHT",
+      "segmentationId": "[YOUR-SEGMENTATION-ID]"
+    }
+  ]
+}
+```
+
+*   Fields' definition:
+    *   `saConfig`, the configuration for conversions
+        *   `type`, .
+        *   `segmentationType`, 
+        *   `segmentationId`,.
+        *   `state`, "ACTIVE".
+    *   `availabilities`, the configuration for updating availabilities.
+        *   `agencyId`, agency Id.
+        *   `advertiserId`, advertiser Id.
+        *   `segmentationType`, 
+        *   `segmentationId`,
+        
+[PasteDataRequest]:https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
+
+*   *Sample Data file content:*
+
+```
+{"clickId":"Cj0KCQjwiILsBRCGARIsAHK","conversionTimestamp":"1568766602000","revenueMicros":"1571066"}
+```
+
+### 4.7. ACLC: Google Ads Click Conversions upload via API
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | ACLC
+Data Format             | JSONL
+Authentication          | OAuth
+What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_api].
+**Usage Scenarios**     | Uploading offline sales and other valuable actions to target and optimize your campaigns for increased profit based on better data.
+Transfer Data on        | Pub/Sub
+Require Service Account | NO
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | 2,000
+QPS                     | 1
+Reference               | [Overview: Offline Conversion Imports][offline_conversions_overview]
+
+[google_ads_api]:https://opteo.com/dev/google-ads-api#upload-conversionclick
+[offline_conversions_overview]:https://developers.google.com/google-ads/api/docs/conversions/overview#offline_conversions
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+  "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "adsConfig": {
+    "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
+    "conversion_value": "[YOUR-CONVERSION-VALUE]",
+    "currency_code": "[YOUR-CURRENCY-CODE]"
+  }
+}
+```
+
+*   Fields' definition:
+    *   `customerId`, Google Ads Customer account Id 
+    *   `loginCustomerId`, Login customer account Id (MCC Account Id)
+    *   `developerToken`, Developer token to access the API.
+    *   `conversion_action`, Resource name of the conversion action in the format `customers/${customerId}/conversionActions/${conversionActionId}`
+    *   `conversion_value`, The default value of the conversion for the advertiser
+    *   `currency_code`, The default currency associated with conversion value; ISO 4217 3 character currency code e.g. EUR, USD
+
+Tip: For more details see
+[Upload click conversions](https://developers.google.com/google-ads/api/reference/rpc/v4/ClickConversion)
+
+*   *Sample Data file content:*
+
+Attributed to a Google Click Identifier (`gclid`):
+
+```json
+{"conversion_date_time":"2020-01-01 03:00:00-18:00", "conversion_value":"20", "gclid":"EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
+```

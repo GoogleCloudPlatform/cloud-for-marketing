@@ -19,32 +19,28 @@
 'use strict';
 
 const {
-  FirestoreAccessBase: {DataSource},
-  PubSubUtils: {
-    publish,
-    getOrCreateSubscription,
-  },
-  StorageUtils,
-  CloudFunctionsUtils: {
+  firestore: {DataSource, FirestoreAccessBase,},
+  pubsub: {EnhancedPubSub},
+  storage: {StorageFile},
+  cloudfunctions: {
     ValidatedStorageFile,
     PubsubMessage,
     CloudFunction,
+    MainFunctionOfStorage,
     adaptNode6,
     validatedStorageTrigger,
   },
-  utils: {
-    getProperValue,
-    wait,
-    getLogger,
-  },
+  utils: {getProperValue, wait, getLogger, replaceParameters,},
 } = require('nodejs-common');
 
-const {getApiHandler, getApiOnGcs} = require('./api_handlers/index.js');
-const {getApiConfig, ApiConfigHost, ApiConfigJson} = require('./api_config.js');
-const {getApiLock, ApiLockBase} = require('./api_lock.js');
-const {getTentaclesFile, TentaclesFileBase} = require('./tentacles_file.js');
-const {getTentaclesTask, TentaclesTaskBase, TentaclesTaskEntity} =
-    require('./tentacles_task.js');
+const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
+    './api_handlers/index.js');
+const {getApiConfig, ApiConfig, ApiConfigJson} = require(
+    './api_config/index.js');
+const {getApiLock, ApiLock} = require('./api_lock/index.js');
+const {getTentaclesFile, TentaclesFile} = require('./tentacles_file/index.js');
+const {getTentaclesTask, TentaclesTask, TentaclesTaskEntity} =
+    require('./tentacles_task/index.js');
 
 /**
  * The maximum length (megabyte) for original (before encoding) message.
@@ -57,7 +53,6 @@ const {getTentaclesTask, TentaclesTaskBase, TentaclesTaskEntity} =
  * @type {number}
  */
 const MESSAGE_MAXIMUM_SIZE = 7;
-exports.MESSAGE_MAXIMUM_SIZE = MESSAGE_MAXIMUM_SIZE;
 
 /** Cloud Storage file maximum size (MB). Different APIs may vary. */
 const STORAGE_FILE_MAXIMUM_SIZE = 999;
@@ -74,7 +69,21 @@ const TransportResult = {
   TIMEOUT: 'timeout',
 };
 
-exports.TransportResult = TransportResult;
+/**
+ * @typedef {{
+ *   namespace:string,
+ *   apiConfig:!ApiConfig,
+ *   apiLock:!ApiLock,
+ *   tentaclesFile:!TentaclesFile,
+ *   tentaclesTask:!TentaclesTask,
+ *   pubsub:!EnhancedPubSub,
+ *   getStorage:{function(string,string):!StorageFile},
+ *   validatedStorageTrigger:
+ *       {function(MainFunctionOfStorage,string,string=):!CloudFunction},
+ *   getApiHandler: {function(string):(!ApiHandlerFunction|undefined)},
+ * }}
+ */
+let TentaclesOptions;
 
 /**
  * Tentacles solution is composed with three Cloud Functions:
@@ -93,36 +102,17 @@ exports.TransportResult = TransportResult;
 class Tentacles {
   /**
    * Initializes the Tentacles instance.
-   *
-   * @param {string} topicPrefix Prefix of the topics that this instance will
-   *     use.
-   * @param {!DataSource|undefined=} datasource The underlying datasource type.
-   *     Tentacles use the database to manage 'API Configuration', 'ApiLock',
-   *     'TentaclesTask' and 'TentaclesFile'. If this is omitted, Tentacles can
-   *     still work without following features:
-   *     1. anti-duplicated Pub/Sub messages.
-   *     2. speed control for multiple simultaneously incoming files of a same
-   *     API.
-   *     3. logs for files and tasks for reports or further analysis.
-   * @param {!ApiConfigJson|undefined=} apiConfig Source of the ApiConfigHost.
-   *     In case there is no available Firestore/Datastore, Tentacles can still
-   *     work on a JSON file based API configuration.
+   * @param {!TentaclesOptions} options
    */
-  constructor(topicPrefix, datasource = undefined, apiConfig = undefined) {
-    /** @const {string} */ this.topicPrefix = topicPrefix;
-    /** @const {!ApiConfigHost} */
-    this.apiConfigHost = getApiConfig(apiConfig ? apiConfig : datasource);
-    /** @const {!TentaclesFileBase} */
-    this.tentaclesFile = getTentaclesFile(datasource);
-    /** @const {!TentaclesTaskBase} */
-    this.tentaclesTask = getTentaclesTask(datasource);
-    /** @const {!ApiLockBase} */
-    this.apiLock = getApiLock(datasource);
-    /** @const {!Logger} */
-    this.logger = getLogger('T.MAIN');
-    console.log(`Init Tentacles for Topic[${topicPrefix}], Api Config[${
-        this.apiConfigHost.constructor.name}] Lock[${
-        this.apiLock.constructor.name}], File&Task[${datasource}]`);
+  constructor(options) {
+    /** @const {!TentaclesOptions} */ this.options = options;
+    /** @const {string} */ this.namespace = options.namespace;
+    /** @const {!ApiConfig} */ this.apiConfig = options.apiConfig;
+    /** @const {!ApiLock} */ this.apiLock = options.apiLock;
+    /** @const {!TentaclesFile} */ this.tentaclesFile = options.tentaclesFile;
+    /** @const {!TentaclesTask} */ this.tentaclesTask = options.tentaclesTask;
+    /** @const {!EnhancedPubSub} */ this.pubsub = options.pubsub;
+    /** @const {!Logger} */ this.logger = getLogger('T.MAIN');
   }
 
   /**
@@ -143,7 +133,7 @@ class Tentacles {
     const loadFileAndNudge = (file) => {
       return this.loadGcsToPs(file)
           .then((topicName) => {
-            const fullFilePath = `gs//:${file.bucket}/${file.name}`;
+            const fullFilePath = `gs://${file.bucket}/${file.name}`;
             if (topicName) {
               return this.nudge(
                   `After publish of ${fullFilePath}`, {topic: topicName});
@@ -152,7 +142,7 @@ class Tentacles {
           })
           .catch(console.error);
     };
-    return validatedStorageTrigger(loadFileAndNudge, outbound);
+    return this.options.validatedStorageTrigger(loadFileAndNudge, outbound);
   }
 
   /**
@@ -166,13 +156,14 @@ class Tentacles {
   loadGcsToPs(file) {
     /** @const {!Object<string,string>} Attributes in the Pub/Sub messages. */
     const attributes = getAttributes(file.name);
-    attributes.topic = getTopicNameByApi(this.topicPrefix, attributes.api);
+    attributes.topic = getTopicNameByApi(this.namespace, attributes.api);
     this.logger.debug(`Attributes from [${file.name}]: `, attributes);
     return this.tentaclesFile.save(file).then((fileId) => {
+      fileId = fileId.toString();
       this.logger.debug(`Incoming file is logged as [${fileId}].`);
-      return this.apiConfigHost.getConfig(attributes.api, attributes.config)
+      return this.apiConfig.getConfig(attributes.api, attributes.config)
           .then((apiConfig) => {
-            if (!getApiHandler(attributes.api)) {
+            if (!this.options.getApiHandler(attributes.api)) {
               throw new Error(`Unknown API: ${attributes.api}.`);
             }
             if (!apiConfig) {
@@ -182,6 +173,7 @@ class Tentacles {
             if (file.size === 0) {
               console.warn(`Empty file: ${file.name}.`);
             }
+            /** @type {TentaclesTaskEntity} */
             const taskBaseInfo = Object.assign({fileId: fileId}, attributes);
             if (attributes.gcs === 'true') {
               return this.sendFileInfoToMessage_(file, taskBaseInfo);
@@ -213,11 +205,12 @@ class Tentacles {
    * @private
    */
   saveTaskAndSendData_(taskEntity, data) {
-    return this.tentaclesTask.create(taskEntity).then((taskId) => {
+    return this.tentaclesTask.createTask(taskEntity).then((taskId) => {
+      taskId = taskId.toString();
       const messageAttributes = Object.assign({taskId: taskId}, taskEntity);
-      return publish(taskEntity.topic, data, messageAttributes)
+      return this.pubsub.publish(taskEntity.topic, data, messageAttributes)
           .then((messageId) => {
-            return this.tentaclesTask.update(
+            return this.tentaclesTask.updateTask(
                 taskId, {dataMessageId: messageId});
           });
     });
@@ -231,19 +224,21 @@ class Tentacles {
    * @private
    */
   sendDataToMessage_(file, taskBaseInfo) {
-    const storageUtils = new StorageUtils(file.bucket, file.name);
+    const storageFile = this.options.getStorage(file.bucket, file.name);
     const messageMaxSize = 1000 * 1000 *
         getProperValue(parseFloat(taskBaseInfo.size), MESSAGE_MAXIMUM_SIZE);
     this.logger.debug(`Split data size: ${messageMaxSize}`);
-    return storageUtils.getFileSize()
-        .then((fileSize) => {
-          return storageUtils.getSplitRanges(fileSize, messageMaxSize);
-        })
+    //TODO(lushu): review the reason to get file size here.
+    // return storageFile.getFileSize()
+    //     .then((fileSize) => {
+    //       return storageFile.getSplitRanges(fileSize, messageMaxSize);
+    //     })
+    return storageFile.getSplitRanges(file.size, messageMaxSize)
         .then((splitRanges) => {
           let promise = Promise.resolve(true);
           splitRanges.forEach(([start, end], index) => {
             promise = promise.then((latestResult) => {
-              return storageUtils.loadContent(start, end).then((data) => {
+              return storageFile.loadContent(start, end).then((data) => {
                 const taskEntity = Object.assign(
                     {start: start.toString(), end: end.toString()},
                     taskBaseInfo);
@@ -268,12 +263,12 @@ class Tentacles {
    * @private
    */
   sendFileInfoToMessage_(file, taskBaseInfo) {
-    const storageUtils = new StorageUtils(file.bucket, file.name);
+    const storageFile = this.options.getStorage(file.bucket, file.name);
     const gcsSplitSize =
         getProperValue(
             parseFloat(taskBaseInfo.size), STORAGE_FILE_MAXIMUM_SIZE, false) *
         1000 * 1000;
-    return storageUtils.split(gcsSplitSize).then((slicedFiles) => {
+    return storageFile.split(gcsSplitSize).then((slicedFiles) => {
       let promise = Promise.resolve(true);
       slicedFiles.forEach((slicedFile, index) => {
         const data = JSON.stringify({file: slicedFile, bucket: file.bucket});
@@ -297,10 +292,10 @@ class Tentacles {
    * @param {number=} timeout Idle time (seconds) for this function to wait for
    *     a new message from the 'source queue'. The default value is 60.
    * @param {string=} targetTopic The name of topic that this function will
-   *     push to. The default value is 'topicPrefix' followed by '-push'.
+   *     push to. The default value is 'namespace' followed by '-push'.
    * @return {!CloudFunction} The Cloud Functions 'transporter'.
    */
-  getTransporter(timeout = 60, targetTopic = `${this.topicPrefix}-push`) {
+  getTransporter(timeout = 60, targetTopic = `${this.namespace}-push`) {
     /** @type {!CloudFunctionNode8} */
     const transportMessage = (message, context) => {
       const attributes = message.attributes || {};
@@ -364,7 +359,7 @@ class Tentacles {
         const taskId = message.attributes.taskId;
         this.tentaclesTask.start(taskId).then((startSuccessfully) => {
           if (startSuccessfully) {
-            publish(
+            this.pubsub.publish(
                 targetTopic, Buffer.from(message.data, 'base64').toString(),
                 message.attributes)
                 .then((messageId) => {
@@ -372,7 +367,7 @@ class Tentacles {
                       targetTopic}]`);
                   message.ack();
                   return this.tentaclesTask
-                      .update(taskId, {apiMessageId: messageId})
+                      .updateTask(taskId, {apiMessageId: messageId})
                       .then(() => {
                         resolver(TransportResult.DONE);
                       });
@@ -387,7 +382,7 @@ class Tentacles {
       };
     };
 
-    return getOrCreateSubscription(
+    return this.pubsub.getOrCreateSubscription(
         sourceTopic, `${sourceTopic}-holder`,
         {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}})
         .then((subscription) => {
@@ -423,9 +418,9 @@ class Tentacles {
       console.log(
           `Receive message[${messageId}] with ${records.length} bytes.`);
       const attributes = message.attributes || {};
-      return this.apiConfigHost.getConfig(attributes.api, attributes.config)
+      return this.apiConfig.getConfig(attributes.api, attributes.config)
           .then((apiConfig) => {
-            const apiHandler = getApiHandler(attributes.api);
+            const apiHandler = this.options.getApiHandler(attributes.api);
             if (!apiHandler) {
               throw new Error(`Unknown API: ${attributes.api}.`);
             }
@@ -438,34 +433,61 @@ class Tentacles {
                   `[DryRun] API[${attributes.api}] and config[${
                       attributes.config}]: `,
                   apiConfig);
-              return Promise.resolve(true);
+              return true;
             } else {
-              return apiHandler(records, messageId, apiConfig);
+              const config = JSON.parse(
+                  replaceParameters(JSON.stringify(apiConfig), attributes));
+              return apiHandler(records, messageId, config);
             }
           })
           .then((succeeded) => {
-            return this.tentaclesTask.finish(attributes.taskId, succeeded);
+            return this.tentaclesTask.finish(attributes.taskId, succeeded).then(
+                () => true);
           })
           .catch((error) => {
-            console.error(
-                `Error in API[${attributes.api}], config[${
-                    attributes.config}]: `,
-                error);
-            return this.tentaclesTask.logError(attributes.taskId, error);
+            console.error(`Error in API[${attributes.api}], config[${
+                attributes.config}]: `, error);
+            return this.tentaclesTask.logError(attributes.taskId, error).then(
+                () => !error.message.startsWith('Unsupported API'));
           })
-          .then(() => {
-            if (attributes.topic) {
-              return this.apiLock.unlock(message.attributes.topic).then(() => {
-                return this.nudge(
-                    `Triggered by message[${messageId}]`,
-                    {topic: message.attributes.topic});
-              });
+          .then((needContinue) => {
+            if (!attributes.topic) {
+              console.log(`There is no topic. In local file upload mode.`);
+              return;
             }
-            console.log(`There is no topic. In local file upload mode.`);
-            return Promise.resolve();
+            if (!needContinue) {
+              console.log(`Skip unsupported API ${attributes.api}.`);
+            }
+            return this.releaseLockAndNotify(attributes.topic,
+                messageId, needContinue).catch((error) => {
+              // Re-do this when unknown external exceptions happens.
+              console.error('External exception happened: ', error);
+              return wait(10000).then(() => {
+                console.log('Wait 10 second and retry...');
+                return this.releaseLockAndNotify(attributes.topic, messageId,
+                    needContinue);
+              });
+            });
           });
     };
     return adaptNode6(sendApiData);
+  }
+
+  /**
+   * Releases the lock and sends notification message for next piece of data.
+   * @param {string} topic The topic name as well as the lock name.
+   * @param {string} messageId ID of current message.
+   * @param {boolean} needContinue Whether should send notification message.
+   * @return {!Promise<string|undefined>} ID of the 'nudge' message.
+   */
+  releaseLockAndNotify(topic, messageId, needContinue) {
+    return this.apiLock.unlock(topic).then(() => {
+      if (needContinue) {
+        return this.nudge(
+            `Triggered by message[${messageId}]`,
+            {topic: topic});
+      }
+    });
   }
 
   /**
@@ -474,15 +496,13 @@ class Tentacles {
    * @param {string} message The message string.
    * @param {{topic:(string|undefined)}=} attributes Message attributes.
    * @param {string=} topicName The name of the topic that this message will be
-   *     sent to. The default value is `${this.topicPrefix}-trigger`
+   *     sent to. The default value is 'namespace' followed by '-trigger'.
    * @return {!Promise<string>} ID of the 'nudge' message.
    */
-  nudge(message, attributes = {}, topicName = `${this.topicPrefix}-trigger`) {
-    return publish(topicName, message, attributes);
+  nudge(message, attributes = {}, topicName = `${this.namespace}-trigger`) {
+    return this.pubsub.publish(topicName, message, attributes);
   }
 }
-
-exports.Tentacles = Tentacles;
 
 /**
  * Returns the topic name for the data of a given API name.
@@ -494,14 +514,12 @@ const getTopicNameByApi = (topicPrefix, apiName) => {
   return `${topicPrefix}-${apiName}`;
 };
 
-exports.getTopicNameByApi = getTopicNameByApi;
-
 /**
  * Pub/Sub message attributes from a given file name.
  * @typedef {{
  *   api:string,
  *   config:string,
- *   gcs:(string|undefined),
+ *   gcs:(string),
  *   size:(string|undefined),
  *   dryRun:string,
  * }}
@@ -521,18 +539,99 @@ let FileAttributes;
 const getAttributes = (fileName) => {
   const attributes = {};
 
-  const api = /API\[([\w-]*)]/i.exec(fileName);
+  const api = /API[\[|{]([\w-]*)[\]|}]/i.exec(fileName);
   if (api) attributes.api = api[1];
 
-  const config = /_config\[([\w-]*)]/i.exec(fileName);
+  const config = /config[\[|{]([\w-]*)[\]|}]/i.exec(fileName);
   if (config) attributes.config = config[1];
 
-  const size = /_size\[(\d*)(MB?)?]/i.exec(fileName);
+  const size = /size[\[|{](\d*\.?\d*)(MB?)?[\]|}]/i.exec(fileName);
   if (size) attributes.size = size[1].toString();
 
   attributes.dryRun = /dryrun/i.test(fileName).toString();
   attributes.gcs = getApiOnGcs().includes(attributes.api).toString();
+
+  const appended = /appended({[^}]*})/i.exec(fileName);
+  if (appended) {
+    const appendedParameters = JSON.parse(appended[1].toString());
+    // Attributes will be passed through Pub/sub's attributes, which only
+    // support 'string' type.
+    const stringTypeParameters = {};
+    Object.keys(appendedParameters).forEach((key) => {
+      stringTypeParameters[key] = appendedParameters[key].toString();
+    });
+    Object.assign(attributes, stringTypeParameters);
+  }
   return attributes;
 };
 
-exports.getAttributes = getAttributes;
+/**
+ * Returns a Tentacles instance based on the parameters.
+ * Tentacles works on several components which depend on the configuration. This
+ * factory function will seal the details in product environment and let the
+ * Tentacles class be more friendly to test.
+ *
+ * @param {string} namespace The `namespace` of this instance, e.g. prefix of
+ *     the topics, Firestore root collection name, Datastore namespace, etc.
+ * @param {!DataSource|undefined=} datasource The underlying datasource type.
+ *     Tentacles use the database to manage 'API Configuration', 'ApiLock',
+ *     'TentaclesTask' and 'TentaclesFile'. If this is omitted, Tentacles can
+ *     still work without following features:
+ *     1. anti-duplicated Pub/Sub messages.
+ *     2. speed control for multiple simultaneously incoming files of a same
+ *     API.
+ *     3. logs for files and tasks for reports or further analysis.
+ * @param {!ApiConfigJson|undefined=} apiConfig Source of the ApiConfig.
+ *     In case there is no available Firestore/Datastore, Tentacles can still
+ *     work on a JSON file based API configuration.
+ * @return {!Tentacles} The Tentacles instance.
+ */
+const getTentacles = (namespace, datasource = undefined, apiConfig) => {
+  /** @type {TentaclesOptions} */
+  const options = {
+    namespace,
+    apiConfig: /** @type {ApiConfig} */ getApiConfig(apiConfig || datasource,
+        namespace),
+    apiLock: /** @type {ApiLock} */ getApiLock(datasource, namespace),
+    tentaclesFile: /** @type {TentaclesFile} */ getTentaclesFile(datasource,
+        namespace),
+    tentaclesTask: /** @type {TentaclesTask} */ getTentaclesTask(datasource,
+        namespace),
+    pubsub: new EnhancedPubSub(),
+    getStorage: StorageFile.getInstance,
+    validatedStorageTrigger,
+    getApiHandler,
+  };
+  console.log(
+      `Init Tentacles for namespace[${namespace}], Datasource[${datasource}]`);
+  return new Tentacles(options);
+};
+
+/**
+ * Probes the Google Cloud Project's Firestore mode (Native or Datastore), then
+ * uses it to create an instance of Tentacles.
+ * @return {!Promise<!Tentacles>}
+ */
+const guessTentacles = (namespace = process.env['PROJECT_NAMESPACE']) => {
+  if (!namespace) {
+    console.warn(
+        'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`');
+    namespace = 'tentacles';
+  }
+  return FirestoreAccessBase.isNativeMode().then((isNative) => {
+    const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
+    return getTentacles(namespace, dataSource);
+  });
+};
+
+module.exports = {
+  STORAGE_FILE_MAXIMUM_SIZE,
+  MESSAGE_MAXIMUM_SIZE,
+  TransportResult,
+  TentaclesOptions,
+  Tentacles,
+  getAttributes,
+  getTopicNameByApi,
+  getTentacles,
+  guessTentacles,
+};

@@ -83,5 +83,17 @@
         }
       ]
     }
+  },
+  "ACLC": {
+    "foo" : {
+      "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+      "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+      "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+      "adsConfig": {
+        "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
+        "conversion_value": "[YOUR-CONVERSION-VALUE]",
+        "currency_code": "[YOUR-CURRENCY-CODE]"
+      }
+    }
   }
 }
