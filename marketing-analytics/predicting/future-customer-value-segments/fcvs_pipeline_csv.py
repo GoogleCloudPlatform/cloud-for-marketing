@@ -50,7 +50,7 @@ class RuntimeOptions(pipeline_options.PipelineOptions):
             f'--{c._OPTION_MODEL_TIME_GRANULARITY}',
             default=c.TimeGranularityParams.GRANULARITY_WEEKLY)
         parser.add_value_provider_argument(
-            f'--{c._OPTION_FREQUENCY_MODEL_TYPE}', default=c._MODEL_TYPE_BGNBD)
+            f'--{c._OPTION_FREQUENCY_MODEL_TYPE}', default=c._MODEL_TYPE_MBGNBD)
         parser.add_value_provider_argument(
             f'--{c._OPTION_CALIBRATION_START_DATE}')
         parser.add_value_provider_argument(f'--{c._OPTION_CALIBRATION_END_DATE}')
