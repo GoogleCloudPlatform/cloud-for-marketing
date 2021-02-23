@@ -19,7 +19,8 @@
 
 'use strict';
 
-const {firestore: {DataSource, DataAccessObject}} = require('nodejs-common');
+const {firestore: {DataSource, DataAccessObject}} = require(
+    '@google-cloud/nodejs-common');
 const {TentaclesFile} = require('./tentacles_file.js');
 
 /**

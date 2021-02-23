@@ -1,27 +1,28 @@
 {
-  "name": "tentacles",
-  "version": "0.1.2",
-  "private": true,
-  "author": "lushu77@gmail.com",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector"
-  },
+  "name": "@google-cloud/gmp-googleads-connector",
+  "version": "1.0.0",
+  "description": "GMP & Google Ads connector based on Cloud Functions",
+  "author": "Google Inc.",
+  "license": "Apache-2.0",
   "files": [
     "src/"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing.git",
+    "directory": "marketing-analytics/activation/gmp-googleads-connector"
+  },
+  "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md",
   "main": "index.js",
   "dependencies": {
+    "@google-cloud/nodejs-common": "^0.3.3",
     "@google-cloud/storage": "^5.1.2",
-    "nodejs-common": "file:libs/nodejs-common-0.1.1.tgz",
     "ssh2-sftp-client": "^5.0.2"
   },
   "devDependencies": {
     "jasmine": "^3.5.0"
   },
   "scripts": {
-    "prepare": "mkdir -p libs; cd libs/; npm pack -s ../../common-libs/nodejs-common; cd ..; ",
-    "install-lib": "npm install -s nodejs-common",
     "test": "node node_modules/jasmine/bin/jasmine"
   },
   "cloud-repo-tools": {

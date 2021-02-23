@@ -44,7 +44,8 @@ INTEGRATION_APIS_DESCRIPTION=(
   "Google Analytics Data Import"
   "Campaign Manager Conversions Upload"
   "Search Ads 360 Conversions Upload"
-  "Google Ads API for Google Ads Click Conversions Upload"
+  "Google Ads API for Customer Match Upload"
+  "Google Ads API for Click Conversions Upload"
   "Google Sheets API for Google Ads Conversions Upload based on Google Sheets"
   "SFTP Upload for Search Ads 360 Business Data Upload"
   "Pub/Sub Messages Send"
@@ -56,6 +57,7 @@ INTEGRATION_APIS=(
   "analytics.googleapis.com"
   "dfareporting.googleapis.com doubleclicksearch.googleapis.com"
   "doubleclicksearch.googleapis.com"
+  "googleads.googleapis.com"
   "googleads.googleapis.com"
   "sheets.googleapis.com"
   "N/A"
@@ -69,6 +71,7 @@ INTEGRATION_APIS_CODE=(
   "GA"
   "CM"
   "SA"
+  "ACM"
   "ACLC"
   "GS"
   "SFTP"
@@ -416,7 +419,6 @@ DEFAULT_INSTALL_TASKS=(
   "print_welcome Tentacles"
   load_config
   check_in_cloud_shell
-  prepare_dependencies
   confirm_namespace confirm_project confirm_region
   confirm_integration_api confirm_auth_method
   check_permissions enable_apis

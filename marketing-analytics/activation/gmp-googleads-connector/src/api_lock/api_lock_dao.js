@@ -22,7 +22,7 @@
 const {
   firestore: {TransactionOperation, DataAccessObject},
   utils: {getLogger},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 const {ApiLock} = require('./api_lock.js');
 
 /**

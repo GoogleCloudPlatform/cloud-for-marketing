@@ -31,7 +31,7 @@ const {
     validatedStorageTrigger,
   },
   utils: {getProperValue, wait, getLogger, replaceParameters,},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
     './api_handlers/index.js');
@@ -435,8 +435,14 @@ class Tentacles {
                   apiConfig);
               return true;
             } else {
-              const config = JSON.parse(
-                  replaceParameters(JSON.stringify(apiConfig), attributes));
+              let config;
+              if (!attributes.appended) {
+                config = apiConfig;
+              } else {
+                const parameters = JSON.parse(attributes.appended);
+                config = JSON.parse(replaceParameters(
+                    JSON.stringify(apiConfig), parameters, true));
+              }
               return apiHandler(records, messageId, config);
             }
           })
@@ -550,18 +556,9 @@ const getAttributes = (fileName) => {
 
   attributes.dryRun = /dryrun/i.test(fileName).toString();
   attributes.gcs = getApiOnGcs().includes(attributes.api).toString();
-
+  // Appended parameters for config in a JSON string format.
   const appended = /appended({[^}]*})/i.exec(fileName);
-  if (appended) {
-    const appendedParameters = JSON.parse(appended[1].toString());
-    // Attributes will be passed through Pub/sub's attributes, which only
-    // support 'string' type.
-    const stringTypeParameters = {};
-    Object.keys(appendedParameters).forEach((key) => {
-      stringTypeParameters[key] = appendedParameters[key].toString();
-    });
-    Object.assign(attributes, stringTypeParameters);
-  }
+  if (appended) attributes.appended = appended[1];
   return attributes;
 };
 

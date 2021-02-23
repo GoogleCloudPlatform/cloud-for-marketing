@@ -18,7 +18,7 @@
 
 'use strict';
 
-const {firestore: {DataSource}} = require('nodejs-common');
+const {firestore: {DataSource}} = require('@google-cloud/nodejs-common');
 const {ApiLock} = require('./api_lock.js');
 const {ApiLockDummy} = require('./api_lock_dummy.js');
 const {ApiLockDao} = require('./api_lock_dao.js');

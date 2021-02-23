@@ -22,7 +22,7 @@ const {
   api: {spreadsheets: {Spreadsheets, ParseDataRequest}},
   utils: {getProperValue, splitArray},
   storage: {StorageFile},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 const MAXIMUM_REQUESTS_LENGTH = 10000000;  // Maximum requests size of this API.
 const NUMBER_OF_THREADS = 9;  // Maximum number of concurrent requests.

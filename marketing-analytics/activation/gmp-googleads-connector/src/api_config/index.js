@@ -17,7 +17,7 @@
 
 'use strict';
 
-const {firestore: {DataSource}} = require('nodejs-common');
+const {firestore: {DataSource}} = require('@google-cloud/nodejs-common');
 
 const {ApiConfig} = require('./api_config.js');
 const {ApiConfigJson, ApiConfigOnJson} = require('./api_config_json.js');
