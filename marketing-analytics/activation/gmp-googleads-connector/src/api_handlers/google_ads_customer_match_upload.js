@@ -13,22 +13,25 @@
 // limitations under the License.
 
 /**
- * @fileoverview Tentacles API handler for Google Ads Click Conversions
+ * @fileoverview Tentacles API handler for Google Ads Customer Match
  * uploading (Google Ads API (unofficial) Wrapper).
  */
 
 'use strict';
 
 const {
-  api: {googleads: {GoogleAds, ClickConversionConfig}},
+  api: {googleads: {GoogleAds, CustomerMatchConfig}},
   utils: {apiSpeedControl, getProperValue},
 } = require('@google-cloud/nodejs-common');
 
 /**
- * Conversions per request. Google Ads has a limit as 2000.
+ * Mutate requests. Google Ads has a limit as 5000.
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
+ * However UserDataService has limit of 10 operations and 100 userIds per request
+ * @see https://developers.google.com/google-ads/api/docs/migration/user-data-service#rate_limits
  */
-const RECORDS_PER_REQUEST = 2000;
+const RECORDS_PER_REQUEST = 1000;
+
 /**
  * Queries per second. Google Ads has no limits on queries per second, however
  * it has limits on the gRPC size (4MB), so large requests may fail.
@@ -36,34 +39,32 @@ const RECORDS_PER_REQUEST = 2000;
 const QUERIES_PER_SECOND = 1;
 
 /** API name in the incoming file name. */
-exports.name = 'ACLC';
+exports.name = 'ACM';
 
 /** Data for this API will be transferred through GCS by default. */
 exports.defaultOnGcs = false;
 
 /**
- * Configuration for a Google Ads click conversions upload.
+ * Configuration for a Google Ads customer match upload.
  * @typedef {{
  *   developerToken:string,
- *   customerId:string,
- *   loginCustomerId:(string|undefined),
- *   adsConfig:!ClickConversionConfig,
+ *   customerMatchConfig: !CustomerMatchConfig,
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
  * }}
  */
-let GoogleAdsClickConversionConfig;
+let GoogleAdsCustomerMatchConfig;
 
-exports.GoogleAdsClickConversionConfig = GoogleAdsClickConversionConfig;
+exports.GoogleAdsCustomerMatchConfig = GoogleAdsCustomerMatchConfig;
 
 /**
- * Sends out the data as click conversions to Google Ads API.
+ * Sends out the data as user ids to Google Ads API.
  * This function exposes a googleAds parameter for test
  * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {string} records Data to send out as click conversions. Expected JSON
+ * @param {string} records Data to send out as user ids. Expected JSON
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsClickConversionConfig} config
+ * @param {!GoogleAdsCustomerMatchConfig} config
  * @return {!Promise<boolean>} Whether 'records' have been sent out without any
  *     errors.
  */
@@ -72,19 +73,19 @@ const sendDataInternal = (googleAds, records, messageId, config) => {
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
-  const configedUpload = googleAds.getUploadConversionFn(config.customerId,
-      config.loginCustomerId, config.adsConfig);
+  const configedUpload = googleAds.getUploadCustomerMatchFn(
+      config.customerMatchConfig);
   return managedSend(configedUpload, records, messageId);
 };
 
 exports.sendDataInternal = sendDataInternal;
 
 /**
- * Sends out the data as click conversions to Google Ads API.
- * @param {string} records Data to send out as click conversions. Expected JSON
+ * Sends out the data as user ids to Google Ads API.
+ * @param {string} records Data to send out as user id. Expected JSON
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsClickConversionConfig} config
+ * @param {!GoogleAdsCustomerMatchConfig} config
  * @return {!Promise<boolean>} Whether 'records' have been sent out without any
  *     errors.
  */

@@ -22,7 +22,7 @@
 const {
   api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
   utils: {apiSpeedControl, getProperValue},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 /**
  * Conversions per request. Campaign Manager has a limit as 1000.

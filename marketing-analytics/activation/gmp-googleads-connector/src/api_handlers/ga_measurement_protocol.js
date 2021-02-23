@@ -22,7 +22,7 @@
 const {
   api: {measurementprotocol: {MeasurementProtocol}},
   utils: {apiSpeedControl, getProperValue},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 /**
  * Hits per request. Measurement Protocol(MP) has a value as 20.

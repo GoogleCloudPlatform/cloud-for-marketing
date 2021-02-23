@@ -20,7 +20,8 @@
 
 const SftpClient = require('ssh2-sftp-client');
 const path = require('path');
-const {storage: {StorageFile}, utils: {getLogger}} = require('nodejs-common');
+const {storage: {StorageFile}, utils: {getLogger}} = require(
+    '@google-cloud/nodejs-common');
 
 /** Placeholder for a timestamp in the name of a uploaded file. */
 const TIMESTAMP_PLACEHOLDER = 'TIMESTAMP';

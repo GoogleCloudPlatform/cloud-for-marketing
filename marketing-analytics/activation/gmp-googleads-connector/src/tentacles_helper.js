@@ -22,7 +22,7 @@ const {
   pubsub: {EnhancedPubSub},
   storage: {StorageFile},
   firestore: {DataSource, FirestoreAccessBase},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 const {ApiConfigOnFirestore, ApiConfigJson, getApiConfig} = require(
     './api_config/index.js');
 const {ApiConfigItem, getApiNameList} = require('./api_handlers/index.js');

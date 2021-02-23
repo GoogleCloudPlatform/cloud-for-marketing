@@ -19,7 +19,7 @@
 
 'use strict';
 const {firestore: {DataSource, Entity, DataAccessObject}} = require(
-    'nodejs-common');
+    '@google-cloud/nodejs-common');
 const {TaskStatus, TentaclesTask} = require('./tentacles_task.js');
 
 /**

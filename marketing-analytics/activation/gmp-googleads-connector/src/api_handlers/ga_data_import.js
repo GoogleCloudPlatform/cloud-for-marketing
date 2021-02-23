@@ -23,7 +23,7 @@ const {File} = require('@google-cloud/storage');
 const {
   api: {analytics: {Analytics, DataImportConfig}},
   storage: {StorageFile},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 /** API name in the incoming file name. */
 exports.name = 'GA';

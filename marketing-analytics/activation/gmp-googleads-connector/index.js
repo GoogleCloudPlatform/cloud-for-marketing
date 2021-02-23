@@ -21,7 +21,8 @@
 
 'use strict';
 
-const {cloudfunctions: {convertEnvPathToAbsolute}} = require('nodejs-common');
+const {cloudfunctions: {convertEnvPathToAbsolute}} = require(
+    '@google-cloud/nodejs-common');
 const {TransportResult, guessTentacles} = require('./src/tentacles.js');
 
 /** Exports functions in tentacles_helper.js which are used in installation. */

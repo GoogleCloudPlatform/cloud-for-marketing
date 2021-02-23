@@ -9,7 +9,7 @@ You can use things like [BQML][bqml] to do logistic regression, or leverage open
 source libraries like [Lifetimes][lifetimes] to do pLTV or even go as far as
 creating your own models on [TensorFlow][tensorflow]. In order to import this
 data back into Google Analytics 360 for re-targeting you can adopt one of the
-tow methods:
+two methods:
 
 * Data Import
 * Measurement Protocol

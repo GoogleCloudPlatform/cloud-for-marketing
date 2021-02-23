@@ -37,6 +37,7 @@ let ApiConfigJsonItem;
  *   GS:!ApiConfigJsonItem,
  *   SA:!ApiConfigJsonItem,
  *   ACLC:!ApiConfigJsonItem,
+ *   ACM:!ApiConfigJsonItem,
  * }}
  */
 let ApiConfigJson;

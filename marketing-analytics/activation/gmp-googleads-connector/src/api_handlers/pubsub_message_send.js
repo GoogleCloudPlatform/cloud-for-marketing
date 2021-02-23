@@ -21,7 +21,7 @@
 const {
   pubsub: {EnhancedPubSub},
   utils: {apiSpeedControl, getProperValue, replaceParameters, wait},
-} = require('nodejs-common');
+} = require('@google-cloud/nodejs-common');
 
 /**
  * One message per request.
