@@ -419,6 +419,7 @@ DEFAULT_INSTALL_TASKS=(
   "print_welcome Tentacles"
   load_config
   check_in_cloud_shell
+  prepare_dependencies
   confirm_namespace confirm_project confirm_region
   confirm_integration_api confirm_auth_method
   check_permissions enable_apis

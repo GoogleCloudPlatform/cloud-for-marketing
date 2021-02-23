@@ -64,6 +64,7 @@ declare EXTERNAL_APIS=(
   "doubleclicksearch.googleapis.com" #SA360
   "sheets.googleapis.com"
   "googleads.googleapis.com"
+  "adsdatahub.googleapis.com"
 )
 
 # Some APIs only support OAuth which needs an process to generate refresh token.
@@ -88,6 +89,7 @@ EXTERNAL_API_SCOPES=(
 "https://www.googleapis.com/auth/doubleclicksearch"
   ["sheets.googleapis.com"]="https://www.googleapis.com/auth/spreadsheets"
   ["googleads.googleapis.com"]="https://www.googleapis.com/auth/adwords"
+  ["adsdatahub.googleapis.com"]="https://www.googleapis.com/auth/adsdatahub"
 )
 
 # Enabled APIs' OAuth scopes.
@@ -294,13 +296,8 @@ https://cloud.google.com/shell/ for more information."
 prepare_dependencies() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Preparing dependency libraries..."
-  mkdir -p libs
-  npm run prepare -s
-  local flag=$?
-  npm run install-lib -s
-  flag=$(( $?+flag ))
   npm install -s
-  flag=$(( $?+flag ))
+  local flag=$?
   if [[ ${flag} -gt 0 ]];then
     echo "Failed to install dependencies. Try to run the script again. If you \
 still get errors, report the issue to \
@@ -1241,6 +1238,8 @@ set_authentication_env_for_cloud_functions() {
 #   Attributes
 #######################################
 create_or_update_cloud_scheduler_for_pubsub(){
+  check_authentication
+  quit_if_failed $?
   local scheduler_flag=()
   scheduler_flag+=(--schedule="$2")
   scheduler_flag+=(--time-zone="$3")
@@ -1360,7 +1359,13 @@ const properties = process.argv[2].split('.');
 const result = properties.reduce((previous, currentProperty) => {
   return previous[currentProperty];
 }, require(process.argv[1]));
-console.log(result);
+let output;
+if (typeof result !== 'object'){
+  output = result;
+} else{
+  output = JSON.stringify(result);
+}
+console.log(output);
 EOF
     node -e "${script}" "$@"
   fi
@@ -1395,6 +1400,30 @@ get_sa_domain_from_gcp_id() {
 sed  -r 's/^([^:]*):(.*)$/\2.\1/').iam.gserviceaccount.com"
   else
     printf '%s' "$1.iam.gserviceaccount.com"
+  fi
+}
+
+#######################################
+# Returns the default service account of the given Cloud Functions.
+# Use cases:
+# 1. When BigQuery query Google Sheet based external tables, this service
+#    account needs to be added to the Google Sheet as a viewer.
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   The default service account of the given Cloud Functions.
+#######################################
+get_cloud_functions_service_account() {
+  local region=$(gcloud functions list --format="csv[no-heading](name,REGION)" \
+| grep "${1}" | cut -d, -f2 | uniq)
+  if [[ -z ${region} ]]; then
+    printf '%s\n' "Cloud Functions [$1] doesn't exist."
+  else
+    local service_account=$(gcloud functions describe "$1" \
+--region="${region}" --format="get(serviceAccountEmail)")
+    printf '%s' "$service_account"
   fi
 }
 
