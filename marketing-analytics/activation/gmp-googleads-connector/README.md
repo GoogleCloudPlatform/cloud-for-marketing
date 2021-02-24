@@ -34,7 +34,6 @@ way.
   - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
   - [4.7. ACLC: Google Ads Click Conversions upload](#47-aclc-google-ads-click-conversions-upload-via-api)
-  - [4.8. ACM: Google Ads Customer Match upload](#48-acm-google-ads-customer-match-upload-via-api)
 
 ## 1. Key Concepts
 
@@ -675,56 +674,3 @@ Attributed to a Google Click Identifier (`gclid`):
 {"conversion_date_time":"2020-01-01 03:00:00-18:00", "conversion_value":"20", "gclid":"EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
 ```
 
-### 4.8. ACM: Google Ads Customer Match upload via API
-
-API Specification       | Value
------------------------ | --------------------------------------------------
-API Code                | ACM
-Data Format             | JSONL
-Authentication          | OAuth
-What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_node].
-**Usage Scenarios**     | Customer Match lets you use your online and offline data to reach and re-engage with your customers across Search, Shopping, Gmail, YouTube, and Display.
-Transfer Data on        | Pub/Sub
-Require Service Account | NO
-Request Type            | HTTP Request to RESTful endpoint
-\# Records per request  | 1000
-QPS                     | 1
-Reference               | [Overview: Customer Match][customer_match_overview]
-
-[google_ads_node]:https://github.com/Opteo/google-ads-node
-[customer_match_overview]:https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match
-
-*   *Sample configuration piece:*
-
-```json
-{
-  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
-  "customerMatchConfig": {
-    "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
-    "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
-    "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-    "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE]",
-    "operation": "create|remove"
-  }
-}
-```
-
-*   Fields' definition:
-    *   `developerToken`, Developer token to access the API.
-    *   `customer_id`, Google Ads Customer account Id 
-    *   `login_customer_id`, Login customer account Id (MCC Account Id)
-    *   `list_id`, User List id for customer match audience
-    *   `list_type`, Must be one of the following: hashed_email, hashed_phone_number, mobile_id, third_party_user_id or address_info; [Read more about id types][user_identifier]
-    *   `operation`, Can be either create or remove in single file; [Read more about operation][user_data_operation]
-
-[user_identifier]:https://developers.google.com/google-ads/api/reference/rpc/v4/UserIdentifier
-[user_data_operation]:https://developers.google.com/google-ads/api/reference/rpc/v4/UserDataOperation
-
-Tip: For more details see
-[USer Data Service](https://developers.google.com/google-ads/api/reference/rpc/v4/UserDataService)
-
-*   *Sample Data file content:*
-
-```json
-{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
-```

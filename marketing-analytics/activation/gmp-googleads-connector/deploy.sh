@@ -44,7 +44,6 @@ INTEGRATION_APIS_DESCRIPTION=(
   "Google Analytics Data Import"
   "Campaign Manager Conversions Upload"
   "Search Ads 360 Conversions Upload"
-  "Google Ads API for Customer Match Upload"
   "Google Ads API for Click Conversions Upload"
   "Google Sheets API for Google Ads Conversions Upload based on Google Sheets"
   "SFTP Upload for Search Ads 360 Business Data Upload"
@@ -58,7 +57,6 @@ INTEGRATION_APIS=(
   "dfareporting.googleapis.com doubleclicksearch.googleapis.com"
   "doubleclicksearch.googleapis.com"
   "googleads.googleapis.com"
-  "googleads.googleapis.com"
   "sheets.googleapis.com"
   "N/A"
   "N/A"  # Pub/Sub will use ADC auth instead of OAuth or JWT.
@@ -71,7 +69,6 @@ INTEGRATION_APIS_CODE=(
   "GA"
   "CM"
   "SA"
-  "ACM"
   "ACLC"
   "GS"
   "SFTP"
