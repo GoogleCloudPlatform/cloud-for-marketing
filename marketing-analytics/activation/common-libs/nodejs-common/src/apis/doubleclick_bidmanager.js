@@ -38,6 +38,19 @@ const API_VERSION = 'v1.1';
 let QueryResource;
 
 /**
+ * RequestBody controls the data range of reports.
+ * see:
+ * https://developers.google.com/bid-manager/v1.1/queries/runquery#request-body
+ * @typedef {{
+ *   dataRange: string,
+ *   reportDataStartTimeMs: long,
+ *   reportDataEndTimeMs: long,
+ *   timezoneCode: string
+ * }}
+ */
+let RequestBody;
+
+/**
  * DoubleClick Bid Manager (DV360) Ads 360 API stub.
  * Note: DV360 report API only support OAuth 2.0, see:
  * https://developers.google.com/bid-manager/how-tos/authorizing
@@ -58,11 +71,13 @@ class DoubleClickBidManager {
    * See https://developers.google.com/bid-manager/v1.1/queries/runquery
    * This API returns empty HTTP content.
    * @param {number} queryId
+   * @param {!RequestBody|undefined=} requestBody Data range of the report.
    * @return {!Promise<boolean>} Whether it starts successfully.
    */
-  runQuery(queryId) {
-    return this.instance.queries.runquery({queryId})
-        .then((response) => response.status >= 200 && response.status < 300);
+  async runQuery(queryId, requestBody = undefined) {
+    const response = await this.instance.queries.runquery(
+        {queryId, requestBody});
+    return response.status >= 200 && response.status < 300;
   }
 
   /**
@@ -72,14 +87,27 @@ class DoubleClickBidManager {
    * @return {!Promise<!QueryResource>} Query resource, see
    *     https://developers.google.com/bid-manager/v1.1/queries#resource
    */
-  getQuery(queryId) {
-    return this.instance.queries.getquery({queryId})
-        .then((response) => response.data.metadata);
+  async getQuery(queryId) {
+    const response = await this.instance.queries.getquery({queryId});
+    return response.data.metadata;
+  }
+
+  /**
+   * Creates a query.
+   * @param {Object} query The DV360 query object, for more details, see:
+   *     https://developers.google.com/bid-manager/v1.1/queries#resource
+   * @return {!Promise<number>} Id of created query.
+   */
+  async createQuery(query) {
+    const response = await this.instance.queries.createquery(
+        {requestBody: query});
+    return response.data.queryId;
   }
 
 }
 
 module.exports = {
   QueryResource,
+  RequestBody,
   DoubleClickBidManager,
 };

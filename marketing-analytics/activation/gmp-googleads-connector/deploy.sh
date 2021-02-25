@@ -15,7 +15,11 @@
 # limitations under the License.
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${BASE_DIR}/../common-libs/install-script-library/install_functions.sh"
+
+# Only in standalone mode, import the basic install script.
+if [[ "${BASH_SOURCE[0]}" -ef "$0" ]]; then
+  source "${BASE_DIR}/../common-libs/nodejs-common/bin/install_functions.sh"
+fi
 
 # Solution name.
 SOLUTION_NAME="tentacles"

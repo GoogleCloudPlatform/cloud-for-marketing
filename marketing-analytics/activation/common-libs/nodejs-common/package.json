@@ -1,30 +1,33 @@
 {
-  "name": "nodejs-common",
-  "version": "0.1.1",
-  "private": true,
-  "author": "lushu77@gmail.com",
+  "name": "@google-cloud/nodejs-common",
+  "version": "0.4.0",
+  "description": "A Node Js common library for solutions based on Cloud Functions",
+  "author": "Google Inc.",
+  "license": "Apache-2.0",
   "files": [
+    "bin/",
     "src/"
   ],
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/common-libs/nodejs-common"
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing",
+    "directory": "marketing-analytics/activation/common-libs/nodejs-common"
   },
+  "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/common-libs/nodejs-common/README.md",
   "dependencies": {
-    "gaxios": "^3.0.4",
-    "@google-cloud/bigquery": "^5.0.1",
-    "@google-cloud/datastore": "^6.1.0",
-    "@google-cloud/firestore": "^4.1.1",
-    "@google-cloud/logging-winston": "^4.0.0",
-    "@google-cloud/pubsub": "^2.3.0",
-    "@google-cloud/storage": "^5.1.2",
-    "google-auth-library": "^6.0.5",
-    "googleapis": "^55.0.0",
-    "google-ads-node": "^2.0.2",
+    "@google-cloud/bigquery": "^5.5.0",
+    "@google-cloud/datastore": "^6.3.1",
+    "@google-cloud/firestore": "^4.9.4",
+    "@google-cloud/logging-winston": "^4.0.4",
+    "@google-cloud/pubsub": "^2.10.0",
+    "@google-cloud/storage": "^5.8.0",
+    "gaxios": "^4.1.0",
     "google-ads-api": "^4.0.1",
-    "node-google-dfp": "^0.3.2",
-    "soap": "^0.32.0",
+    "google-ads-node": "^2.0.2",
+    "google-auth-library": "^7.0.2",
+    "googleapis": "^67.1.0",
+    "soap": "^0.36.0",
     "winston": "^3.3.3"
   },
   "devDependencies": {
