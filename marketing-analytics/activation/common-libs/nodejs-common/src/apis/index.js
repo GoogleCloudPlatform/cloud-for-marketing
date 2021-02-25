@@ -89,7 +89,15 @@ exports.bigquery = require('./bigquery.js');
  * @const {{
  *   GoogleAds:!GoogleAds,
  *   ClickConversionConfig:!ClickConversionConfig,
+ *   CustomerMatchConfig: !CustomerMatchConfig,
+ *   CustomerMatchRecord: !CustomerMatchRecord,
  *   ReportQueryConfig:!ReportQueryConfig,
  * }}
  */
 exports.googleads = require('./google_ads.js');
+
+/**
+ * APIs integration class for Ads Data Hub.
+ * @const {{AdsDataHub:!AdsDataHub}}
+ */
+exports.adsdatahub = require('./ads_data_hub.js');
