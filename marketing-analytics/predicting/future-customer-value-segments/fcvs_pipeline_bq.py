@@ -292,7 +292,7 @@ def run(argv=None):
                                     {'name': 'perc_customers_cohort', 'type': 'FLOAT'},
                                     {'name': 'num_transactions_validation', 'type': 'INTEGER'},
                                     {'name': 'perc_transactions_validation', 'type': 'FLOAT'},
-                                    {'name': 'mape', 'type': 'FLOAT'},
+                                    {'name': 'validation_mape', 'type': 'FLOAT'},
                                 ]}
                         ]
                     },

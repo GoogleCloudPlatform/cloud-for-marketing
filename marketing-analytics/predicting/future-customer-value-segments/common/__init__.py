@@ -1432,7 +1432,7 @@ Customers modeled for validation: {model_params['num_customers_cohort']} \
 Transactions observed for validation: {model_params['num_transactions_validation']} \
 ({model_params['perc_transactions_validation']} % of total transactions)
 
-Mean Absolute Percent Error (MAPE): {str(model_params['mape'])}%"""
+Validation Mean Absolute Percent Error (MAPE): {str(model_params['validation_mape'])}%"""
 
     return output_text
 
@@ -1514,13 +1514,16 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     model_params['perc_transactions_validation'] = perc_txns_val
 
     # Calculate MAPE (Mean Absolute Percent Error)
+    # NB: Do not use this as a performance metric, as it is computed on
+    #     cumulative values and will most of the time underestimate the error.
+    #     We are using it only for validation of fit purposes.
     error_by_time = (
         txs.iloc[median_line:, :]['repeat_transactions_cumulative'] -
         txs.iloc[median_line:, :]['predicted_cumulative_transactions']
     ) / txs.iloc[median_line:, :]['repeat_transactions_cumulative'] * 100
     mape = error_by_time.abs().mean()
 
-    model_params['mape'] = round(mape, 2)
+    model_params['validation_mape'] = round(mape, 2)
 
     # return tuple that includes the MAPE, which will be used for a
     # threshold check
@@ -1645,10 +1648,10 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
     # the allowed threshold.  If so, continue the calculation.  If not,
     # send an email explaining why and stop all calculations.
     error = None
-    if model_params['mape'] > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
+    if model_params['validation_mape'] > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
         model_params['invalid_mape'] = True
         error = (
-            f"Mean Absolute Percent Error (MAPE) [{model_params['mape']}%]"
+            f"Validation Mean Absolute Percent Error (MAPE) [{model_params['validation_mape']}%]"
             " exceeded the allowable threshold of "
             f"{options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]}"
         )
