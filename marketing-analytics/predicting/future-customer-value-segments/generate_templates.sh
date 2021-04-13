@@ -21,7 +21,8 @@ python fcvs_pipeline_csv.py \
   --staging_location "gs://${PIPELINE_BUCKET}/staging/" \
   --template_location "gs://${PIPELINE_BUCKET}/templates/FoCVS-csv" \
   --save_main_session \
-  --setup_file ./setup.py
+  --setup_file ./setup.py \
+  --region "us-central1"
 
 python fcvs_pipeline_bq.py \
   --runner DataflowRunner \
@@ -31,4 +32,5 @@ python fcvs_pipeline_bq.py \
   --template_location "gs://${PIPELINE_BUCKET}/templates/FoCVS-bq" \
   --save_main_session \
   --experiments=use_beam_bq_sink \
-  --setup_file ./setup.py
+  --setup_file ./setup.py \
+  --region "us-central1"

@@ -30,7 +30,7 @@ grpc-google-iam-v1==0.12.3
 grpcio==1.37.0
 grpcio-gcp==0.2.2
 hdfs==2.5.8
-httplib2==0.17.4
+httplib2==0.15.0
 idna==2.9
 kiwisolver==1.2.0
 Lifetimes==0.11.1
