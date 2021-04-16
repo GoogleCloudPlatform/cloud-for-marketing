@@ -232,7 +232,7 @@ class _CustomBigQuerySource(BoundedSource):
         job_ref = bq.perform_extract_job([gcs_location],
                                          job_id,
                                          self.table_reference,
-                                         bigquery_tools.ExportFileFormat.JSON,
+                                         bigquery_tools.FileFormat.JSON,
                                          include_header=False)
         bq.wait_for_bq_job(job_ref)
         metadata_list = FileSystems.match([gcs_location])[0].metadata_list
