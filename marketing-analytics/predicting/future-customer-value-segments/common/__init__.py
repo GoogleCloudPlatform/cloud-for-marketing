@@ -1835,29 +1835,25 @@ class MinMaxDatesFn(beam.CombineFn):
     seen in a stream of dates.
     """
     def create_accumulator(self):
-        return None, None
+        return dt.datetime.max, dt.datetime.min
 
     def add_input(self, acc, elem):
         if not elem:
             return acc
 
         min_date, max_date = acc
-        if not min_date or elem < min_date:
+        if elem < min_date:
             min_date = elem
-        if not max_date or elem > max_date:
+        elif elem > max_date:
             max_date = elem
 
         return min_date, max_date
 
     def merge_accumulators(self, accs):
-        min_date_g = None
-        max_date_g = None
+        min_date_g = dt.datetime.max
+        max_date_g = dt.datetime.min
         for acc in accs:
             min_date, max_date = acc
-            if not min_date_g:
-                min_date_g = min_date
-                max_date_g = max_date
-                continue
             if min_date < min_date_g:
                 min_date_g = min_date
             if max_date > max_date_g:

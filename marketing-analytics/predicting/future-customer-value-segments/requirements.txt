@@ -51,8 +51,8 @@ pyparsing==2.4.7
 python-dateutil==2.8.1
 pytz==2019.3
 requests==2.25.1
-rsa==4.1
+rsa==4.7
 scipy==1.4.1
 six==1.14.0
 typing-extensions==3.7.4.2
-urllib3==1.25.9
+urllib3==1.26.5
