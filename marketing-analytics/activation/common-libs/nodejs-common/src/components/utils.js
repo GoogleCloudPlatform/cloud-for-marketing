@@ -361,6 +361,52 @@ const getFilterFunction = (properties) => {
 };
 
 /**
+ * Returns a function to extract values of properties based on an array of
+ * fields. This is a generalized version of 'getFilterFunction', and nestled
+ * properties are supported in this function.
+ *
+ * @param{Array<string>} paths
+ * @return {object}
+ */
+const extractObject = (paths) => {
+
+  /**
+   * The reduce function to transcribe values of a given path from the source
+   * object to the target object. Nestled objects are supported as segmented
+   * names in the path. Segmented names are separated with 'dot' in the path.
+   * @param {object} sourceObject
+   * @param {object} targetObject
+   * @param {string|undefined} lastSegment A segment of the path. This is the
+   *    one before 'currentSegment'. It is undefined for the initial execution.
+   * @param {string} currentSegment Current segment of the path.
+   * @return {[object|undefined, object, string]}
+   */
+  const transcribe = ([sourceObject, targetObject, lastSegment],
+      currentSegment) => {
+    if (lastSegment && !targetObject[lastSegment]) {
+      targetObject[lastSegment] = {};
+    }
+    return [
+      sourceObject ? sourceObject[currentSegment] : undefined,
+      lastSegment ? targetObject[lastSegment] : targetObject,
+      currentSegment,
+    ];
+  };
+
+  return (sourceObject) => {
+    const output = {};
+    paths.forEach((path) => {
+      const [value, owner, property] = path.split('.')
+          .reduce(transcribe, [sourceObject, output, undefined]);
+      if (value) {
+        owner[property] = value;
+      }
+    });
+    return output;
+  };
+};
+
+/**
  * Checks whether the permissions are granted for current authentication.
  * This function will be invoked during the deployment of a specific solution,
  * e.g. Tentacles, to make sure the operator has the proper permissions to
@@ -421,6 +467,7 @@ module.exports = {
   getProperValue,
   replaceParameters,
   getFilterFunction,
+  extractObject,
   checkPermissions,
   changeNamingFromSnakeToUpperCamel,
   changeNamingFromSnakeToLowerCamel,

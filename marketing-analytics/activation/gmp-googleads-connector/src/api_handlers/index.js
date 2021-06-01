@@ -25,8 +25,11 @@ const sftpUpload = require('./sftp_upload.js');
 const sheetsLoadCsv = require('./sheets_load_csv.js');
 const saConversionsInsert = require('./sa_conversions_insert.js');
 const pubsubMessageSend = require('./pubsub_message_send.js');
-const googleAdsClickConversionUpload = require('./google_ads_click_conversions_upload.js');
-const googleAdsCustomerMatchUpload = require('./google_ads_customer_match_upload.js');
+const googleAdsClickConversionUpload = require(
+    './google_ads_click_conversions_upload.js');
+const googleAdsCustomerMatchUpload = require(
+    './google_ads_customer_match_upload.js');
+const ga4MeasurementProtocol = require('./ga4_measurement_protocol.js');
 
 const {GoogleAnalyticsConfig} = gaDataImport;
 const {MeasurementProtocolConfig} = gaMeasurementProtocol;
@@ -37,6 +40,7 @@ const {SearchAdsConfig} = saConversionsInsert;
 const {PubSubMessageConfig} = pubsubMessageSend;
 const {GoogleAdsClickConversionConfig} = googleAdsClickConversionUpload;
 const {GoogleAdsCustomerMatchConfig} = googleAdsCustomerMatchUpload;
+const {MpGa4IntegrationConfig} = ga4MeasurementProtocol;
 
 /**
  * API configuration types for all APIs that Tentacles supports.
@@ -44,7 +48,8 @@ const {GoogleAdsCustomerMatchConfig} = googleAdsCustomerMatchUpload;
  * @typedef {(!GoogleAnalyticsConfig|!CampaignManagerConfig|
  * !MeasurementProtocolConfig|!SftpConfig|!SheetsLoadConfig|
  * !SearchAdsConfig|!PubSubMessageConfig|
- * !GoogleAdsClickConversionConfig|!GoogleAdsCustomerMatchConfig)}
+ * !GoogleAdsClickConversionConfig|!GoogleAdsCustomerMatchConfig|
+ * !MpGa4IntegrationConfig)}
  */
 let ApiConfigItem;
 
@@ -71,6 +76,7 @@ const API_HANDLERS = Object.freeze({
   [pubsubMessageSend.name]: pubsubMessageSend,
   [googleAdsClickConversionUpload.name]: googleAdsClickConversionUpload,
   [googleAdsCustomerMatchUpload.name]: googleAdsCustomerMatchUpload,
+  [ga4MeasurementProtocol.name]: ga4MeasurementProtocol,
 });
 
 /**

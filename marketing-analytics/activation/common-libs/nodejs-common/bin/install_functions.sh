@@ -709,6 +709,55 @@ enable_apis() {
 }
 
 #######################################
+# Confirm or create a Cloud Storage bucket with a given location.
+# Globals:
+#   GCP_PROJECT
+# Arguments:
+#   Bucket name
+#   Location
+#######################################
+confirm_bucket_with_location() {
+  local gcsName=$1
+  local location=$2
+  local defaultValue="${!gcsName}"
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket in \
+location [${location}] ..."
+  while :; do
+    printf '%s' "Enter the name of your Cloud Storage bucket [${defaultValue}]: "
+    local bucket
+    read -r bucket
+    bucket=${bucket:-$defaultValue}
+    local bucket_str="gs://${bucket}/"
+    local result
+    result="$(gsutil ls -Lb -p "${GCP_PROJECT}" "${bucket_str}" 2>&1 | grep \
+"Location constraint" | cut -d: -f2 |tr -d '[:space:]' |tr [:upper:] [:lower:])"
+    if [[ "${result}" == "${location}" ]]; then
+      printf '%s\n' "OK. The bucket [${bucket}] exists in the location \
+[${location}] ."
+      declare -g "${gcsName}=${bucket}"
+      break
+    elif [[ -n "${result}" ]]; then
+      printf '%s\n' "  The bucket [${bucket}]'s location is [${result}]. \
+Continuing to enter another bucket..."
+      continue
+    else
+      gsutil mb -l "${location}" "${bucket_str}"
+      if [[ $? -gt 0 ]]; then
+        printf '%s\n' "Failed to create the bucket [${bucket}]. Try again."
+        continue
+      else
+        printf '%s\n' "OK. The bucket [${bucket}] has been created in the \
+location [${location}] ."
+        declare -g "${gcsName}=${bucket}"
+        break
+      fi
+    fi
+  done
+  printf '\n'
+}
+
+#######################################
 # Confirm or create a Cloud Storage bucket for this project.
 # Globals:
 #   SOLUTION_NAME
@@ -1306,6 +1355,22 @@ print_service_account(){
 }
 
 #######################################
+# Customized function to start the automatic installation process.
+# Globals:
+#   None
+# Arguments:
+#   An array of tasks
+#######################################
+customized_install() {
+  local tasks=("$@")
+  local task
+  for task in "${tasks[@]}"; do
+    ${task}
+    quit_if_failed $?
+  done
+}
+
+#######################################
 # Default function to start the automatic installation process.
 # Globals:
 #   DEFAULT_INSTALL_TASKS
@@ -1313,11 +1378,7 @@ print_service_account(){
 #   None
 #######################################
 default_install() {
-  local task
-  for task in "${DEFAULT_INSTALL_TASKS[@]}"; do
-    ${task}
-    quit_if_failed $?
-  done
+  customized_install "${DEFAULT_INSTALL_TASKS[@]}"
 }
 
 #######################################

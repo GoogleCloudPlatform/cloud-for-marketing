@@ -25,18 +25,17 @@ const {
 } = require('@google-cloud/nodejs-common');
 
 /**
- * Mutate requests. Google Ads has a limit as 5000.
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
  * However UserDataService has limit of 10 operations and 100 userIds per request
  * @see https://developers.google.com/google-ads/api/docs/migration/user-data-service#rate_limits
  */
-const RECORDS_PER_REQUEST = 1000;
+const RECORDS_PER_REQUEST = 100;
 
 /**
  * Queries per second. Google Ads has no limits on queries per second, however
  * it has limits on the gRPC size (4MB), so large requests may fail.
  */
-const QUERIES_PER_SECOND = 1;
+const QUERIES_PER_SECOND = 10;
 
 /** API name in the incoming file name. */
 exports.name = 'ACM';

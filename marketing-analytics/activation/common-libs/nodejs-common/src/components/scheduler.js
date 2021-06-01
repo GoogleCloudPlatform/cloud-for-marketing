@@ -89,10 +89,15 @@ class CloudScheduler {
   async resumeJob(name, targetLocations = undefined) {
     const jobs = await this.getJobs_(name, targetLocations);
     if (jobs.length === 0) return false;
-    const results = await Promise.all(jobs.map(
-        (job) => this.instance.projects.locations.jobs.resume({name: job})
-    ));
-    return results.every((response) => response.data.state === 'ENABLED');
+    try {
+      const results = await Promise.all(jobs.map(
+          (job) => this.instance.projects.locations.jobs.resume({name: job})
+      ));
+      return results.every((response) => response.data.state === 'ENABLED');
+    } catch (error) {
+      console.error('Fail to resume Scheduler Job', error);
+      return false;
+    }
   }
 
   /**

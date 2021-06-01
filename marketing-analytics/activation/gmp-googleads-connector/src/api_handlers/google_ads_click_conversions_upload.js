@@ -33,7 +33,7 @@ const RECORDS_PER_REQUEST = 2000;
  * Queries per second. Google Ads has no limits on queries per second, however
  * it has limits on the gRPC size (4MB), so large requests may fail.
  */
-const QUERIES_PER_SECOND = 1;
+const QUERIES_PER_SECOND = 10;
 
 /** API name in the incoming file name. */
 exports.name = 'ACLC';

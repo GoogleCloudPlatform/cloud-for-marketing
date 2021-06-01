@@ -1,6 +1,23 @@
 Release Notes
 ===
 
+1.2.0 (2021-06-01)
+---
+
+### Integrated APIs
+
+* Added Google Ads Customer Match user upload through Google Ads API
+* Added Measurement Protocol integration with GA4
+
+
+1.0.0 (2021-02-23)
+---
+
+### Bug fix
+
+* [Unable to Install on GCP](https://github.com/GoogleCloudPlatform/cloud-for-marketing/issues/23)
+
+
 0.1.2 (2020-12-18)
 ---
 
@@ -23,8 +40,8 @@ Features added and bugs fixed in v0.1.2.
 ### Authentication methods
 
 * Added OAuth. Google Ads API only supports OAuth, so if Google Ads API is
-selected, OAuth will be used to authenticate. Otherwise, users can select use
-OAuth or service account key file to authenticate. 
+selected, OAuth will be used to authenticate. Otherwise, users can select to use
+OAuth or service account key file to authenticate.
 
 ### Other updates
 

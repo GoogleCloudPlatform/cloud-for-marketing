@@ -1,12 +1,12 @@
 # GMP and Google Ads Connector
 
-<!--* freshness: { owner: 'lushu' reviewed: '2019-08-27' } *-->
+<!--* freshness: { owner: 'lushu' reviewed: '2021-06-01' } *-->
 
 Disclaimer: This is not an official Google product.
 
 GMP and Google Ads Connector (code name **Tentacles**) is an out-of-box solution
 based on Google Cloud Platform. It can send a massive amount data to GMP (e.g.
-Google Analytics, Campaign Manager) or Google Ads in a automatic and reliable
+Google Analytics, Campaign Manager) or Google Ads in an automatic and reliable
 way.
 
 ## Contents
@@ -34,15 +34,16 @@ way.
   - [4.5. GS: Google Ads conversions scheduled uploads based on Google Sheets](#45-gs-google-ads-conversions-scheduled-uploads-based-on-google-sheets)
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
   - [4.7. ACLC: Google Ads Click Conversions upload](#47-aclc-google-ads-click-conversions-upload-via-api)
+  - [4.8. ACM: Google Ads Customer Match upload](#48-acm-google-ads-customer-match-upload-via-api)
+  - [4.9. MP_GA4: Measurement Protocol Google Analytics 4](#49-mp_ga4-measurement-protocol-google-analytics-4)
 
 ## 1. Key Concepts
 
 ### 1.1. Challenges for sending data to APIs
 
 1.  Different APIs have different idioms, authentication and QPS.
-2.  Sending out big data is a long process with some APIs' QPS limitation.
-3.  Maintaining the reliability of long process requires brings extra
-    complexity.
+2.  Sending out big data is a long process with some APIs' QPS limitations.
+3.  Maintaining the reliability of a long process brings extra complexity.
 
 ### 1.2. Solution architecture overview
 
@@ -81,15 +82,15 @@ Components       | GCP Product     | Description
 
 1.  Cloud Functions **initiator**, **transporter** and Pub/Sub topics
     **ps-data**, **ps-tran**, **ps-api** altogether compose a serverless system
-    that can hold big data while offer pieces of data in an on-demand way. This
-    system is unrelated to APIs[1].
+    that can hold big data while offering pieces of data in an on-demand way.
+    This system is unrelated to APIs[1].
 
-2.  Cloud Functions **apirequester** is a single purposed function to send out a
+2.  Cloud Functions **apirequester** is a single purpose function to send out a
     small piece of data to the given target (backend of the API). It maintains
     the feasibility to extend for new APIs.
 
-[1]: Actually, every API has its own **ps-data** topic. But all these topics
-    are created during installation.
+[1]: Actually, every API has its own **ps-data** topic which will be created
+     during installation.
 
 ## 2. Installation
 
@@ -104,7 +105,7 @@ Components       | GCP Product     | Description
 ### 2.2. Check the permissions
 
 Parts of Cloud Project permissions are required to install this solution.
-Usually, a user as the role 'Project Editor' can do the installation. If more
+Usually, a user with the role 'Project Editor' can do the installation. If more
 precise permissions are preferred, the user may need following roles:
 
 *   Storage Admin
@@ -121,7 +122,9 @@ following roles are required, too.
 *   Service Account Admin
 *   Service Account Key Admin
 
-During the installation, the script will check whether does current user have enough permissions to continue. It would be more smooth if you can check the permissions before start installation.
+During the installation, the script will check whether the current user has
+enough permissions to continue. It would be more smooth if you can check the
+permissions before start installation.
 
 **Tip: Single role 'Project Editor' is enough to carry out an installation.**
 
@@ -246,24 +249,28 @@ expects the incoming data filenames contain the pattern **API{X}** and
     *   **CM**: DCM/DFA Reporting and Trafficking API to upload offline
         conversions
     *   **SFTP**: SFTP upload
+    *   **GS**: Load a CSV into a Google Sheet
+    *   **SA**: Search Ads 360 conversions insert
     *   **ACLC**: Google Ads Click Conversion Upload via API
+    *   **ACM**: Google Ads Customer Match upload
+    *   **MP_GA4**: Measurement Protocol Google Analytics 4
 
 *   `Y` stands for the config name, e.g. `foo` or `bar` in the previous case.
 
 Other optional patterns in filename:
 
 *   If the filename contains `dryrun`, then the whole process will be carried
-    out besides that the data won't be really sent to API serve.
+    out besides that the data won't be really sent to the API server.
 
 *   If the filename contains `_size{Z}` or `_size{Zmb}`, the incoming file will
     be divided into multiple files with the size under `Z`MB in Cloud Storage.
     For some APIs, Tentacles will use files in Cloud Storage to transfer the
-    data instead of the Pub/Sub. (The reason is for those 'file uploading' type
+    data instead of the Pub/Sub. (The reason is for those 'file uploading' types
     of APIs, using file directly is more efficient.) In that case, this setting
     will make sure the files won't oversize the target systems' capacity.
 
 **Note: Previous square brackets as the file name marker (e.g. API[X]) is also
-supported. But it is not convenient to copy those files through gsutil.**
+supported, though it is not convenient to copy those files through gsutil.**
 
 ### 3.5. Content of data files
 
@@ -275,7 +282,7 @@ There are two exceptions:
 
 1.  **SFTP**: This API will upload the given file to the server through SFTP no
     matter what the format of files is.
-2.  **GA**: Google Analytics Data Import only support CSV files.
+2.  **GA**: Google Analytics Data Import only supports CSV files.
 
 ## 4. API Details
 
@@ -286,7 +293,7 @@ API Specification       | Value
 API Code                | MP
 Data Format             | JSONL
 Authentication          | No need
-What Tentacles does     | Merging the **data** with the **configuration** to build the hit URLs and sent them to Google Analytics.
+What Tentacles does     | Merging the **data** with the **configuration** to build the hit URLs and send them to Google Analytics.
 **Usage Scenarios**     | Uploading offline conversions
 Transfer Data on        | Pub/Sub
 Require Service Account | NO
@@ -318,7 +325,7 @@ speed. `qps` is the 'queries per second' and stands for how many requests will
 be sent simultaneously.
 
 Tip: All these properties names in configuration `mpConfig` or data file can be
-find in
+found in
 [Measurement Protocol Parameter Reference](https://developers.google.com/analytics/devguides/collection/protocol/v1/parameters).
 
 *   *Sample Data file content:*
@@ -360,13 +367,14 @@ Reference               | [Custom Data import example][ga_example]
 }
 ```
 
-Note: `dataImportHeader` is the header of uploading CSV file. It is fixed in
+Note: `dataImportHeader` is the header of uploading a CSV file. It is fixed in
 Google Analytics when the user set up the Data Import item and it must exist in
 the file uploaded. \
 Sometimes, the data files do not have such a header line, e.g. BigQuery cannot
-export data with semicolon in column names. In that case, an explicit config
+export data with semicolons in column names. In that case, an explicit config
 item `dataImportHeader` is required, just like this sample. Tentacles will
-automatically attach this line at the beginning of data file before uploading.
+automatically attach this line at the beginning of the data file before
+uploading.
 
 *   *Sample Data file content:*
 
@@ -384,7 +392,7 @@ API Specification       | Value
 API Code                | CM
 Data Format             | JSONL
 Authentication          | [Create a User Profile][create_user_profile] for the Service Account's email with a role that has the **Insert offline conversion** permission
-What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to CM API endpoint.
+What Tentacles does     | Combined the **data** with the **configuration** to build the request body and send them to the CM API endpoint.
 **Usage Scenarios**     | 1. Personalizing Ads via user variables in conversions;<br> 2. Uploading verified(offline process) purchases as the **real** transactions to let CM do the optimization based on better data.
 Transfer Data on        | Pub/Sub
 Require Service Account | YES
@@ -421,11 +429,14 @@ Reference               | [Overview: DCM/DFA Reporting and Trafficking API's Con
 ```
 
 *   Fields' definition:
-    *   `idType`, value can be: `encryptedUserId`, `gclid` or `mobileDeviceId`.
+    *   `idType`, value can be: `encryptedUserId`, `gclid`, `matchId` or 
+    `mobileDeviceId`.
         *   `encryptedUserId`, a single encrypted user ID obtained from the %m
             match macro or Data Transfer.
         *   `gclid`, a Google Click Identifier generated by Google Ads or Search
             Ads 360.
+        *   `matchId`, A unique advertiser created identifier passed to Campaign
+            Manager 360 via a Floodlight tag.
         *   `mobileDeviceId`, an unencrypted mobile ID in the IDFA or AdID
             format.
     *   `conversion`, common properties for a conversion, e.g. floodlight info.
@@ -490,7 +501,7 @@ information, see
 ```
 
 Tip: Optional `fileName` is used to give the uploaded file a fixed name. It
-supports `TIMESTAMP` as a placeholder for a uploading timestamp string value. \
+supports `TIMESTAMP` as a placeholder for an uploading timestamp string value. \
 If `fileName` is omitted, a default file name based on the ingested one will be
 generated.
 
@@ -518,13 +529,14 @@ Reference               | [Import conversions from ad clicks into Google Ads][im
 [import_conversions]:https://support.google.com/google-ads/answer/7014069
 [sheets_api]:https://developers.google.com/sheets/api/reference/rest/
 
-Google Sheets API can be used to read, write, and format data in Sheets. Google Ads supports to use 
-a Google Sheet as the data source of scheduled uploads of conversions. The extra benefit is this 
-integration does **not** require an Google Ads Developer Token.
+Google Sheets API can be used to read, write, and format data in Sheets. Google
+Ads supports to use a Google Sheet as the data source of scheduled uploads of
+conversions. The extra benefit is this integration does **not** require a Google
+Ads Developer Token.
 
-Note: Google Sheets has the limit of 10,000,000 cells for a single SpreadSheet. If every conversion 
-needs 5 properties/columns/fields, then for a single Spreadsheet data source, there could be about 2
-millions conversions supported.
+Note: Google Sheets has a limit of 10,000,000 cells for a single SpreadSheet. If
+every conversion needs 5 properties/columns/fields, then for a single
+Spreadsheet data source, there could be about 2 million conversions supported.
 
 *   *Sample configuration piece:*
 
@@ -545,10 +557,10 @@ millions conversions supported.
 
 *   Fields' definition:
     *   `spreadsheetId`, the [Spreadsheet ID](https://developers.google.com/sheets/api/guides/concepts#spreadsheet_id).
-    *   `sheetName`, the name of sheet that will load CSV data.
+    *   `sheetName`, the name of the sheet that will load CSV data.
     *   `sheetHeader`, fixed row(s) at the top of the Sheet before the CSV data. This is optional.
     *   `pasteData`, [`PasteDataRequest`][PasteDataRequest] for Sheets API batchUpdate.
-    
+
 [PasteDataRequest]:https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
 
 *   *Sample Data file content:*
@@ -603,17 +615,18 @@ Reference               | [Search Ads 360 API > Conversion: insert][insert_conve
 
 *   Fields' definition:
     *   `saConfig`, the configuration for conversions
-        *   `type`, .
-        *   `segmentationType`, 
-        *   `segmentationId`,.
-        *   `state`, "ACTIVE".
+        *   `type`, the type of the conversion, `ACTION` or `TRANSACTION`.
+        *   `segmentationType`, the segmentation type of this conversion (for
+        example, `FLOODLIGHT`).
+        *   `segmentationId`, the numeric segmentation identifier (for example,
+        DoubleClick Search Floodlight activity ID).
+        *   `state`, the state of the conversion, `ACTIVE` or `REMOVED`.
     *   `availabilities`, the configuration for updating availabilities.
         *   `agencyId`, agency Id.
         *   `advertiserId`, advertiser Id.
-        *   `segmentationType`, 
-        *   `segmentationId`,
-        
-[PasteDataRequest]:https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
+        *   `segmentationType`, the segmentation type that this availability is
+        for (its default value is `FLOODLIGHT`).
+        *   `segmentationId`, the numeric segmentation identifier.
 
 *   *Sample Data file content:*
 
@@ -634,7 +647,7 @@ Transfer Data on        | Pub/Sub
 Require Service Account | NO
 Request Type            | HTTP Request to RESTful endpoint
 \# Records per request  | 2,000
-QPS                     | 1
+QPS                     | -
 Reference               | [Overview: Offline Conversion Imports][offline_conversions_overview]
 
 [google_ads_api]:https://opteo.com/dev/google-ads-api#upload-conversionclick
@@ -656,15 +669,17 @@ Reference               | [Overview: Offline Conversion Imports][offline_convers
 ```
 
 *   Fields' definition:
-    *   `customerId`, Google Ads Customer account Id 
-    *   `loginCustomerId`, Login customer account Id (MCC Account Id)
+    *   `customerId`, Google Ads Customer account Id.
+    *   `loginCustomerId`, Login customer account Id (MCC Account Id).
     *   `developerToken`, Developer token to access the API.
-    *   `conversion_action`, Resource name of the conversion action in the format `customers/${customerId}/conversionActions/${conversionActionId}`
+    *   `conversion_action`, Resource name of the conversion action in the
+    format `customers/${customerId}/conversionActions/${conversionActionId}`.
     *   `conversion_value`, The default value of the conversion for the advertiser
-    *   `currency_code`, The default currency associated with conversion value; ISO 4217 3 character currency code e.g. EUR, USD
+    *   `currency_code`, The default currency associated with conversion value;
+    ISO 4217 3 character currency code e.g. EUR, USD.
 
 Tip: For more details see
-[Upload click conversions](https://developers.google.com/google-ads/api/reference/rpc/v4/ClickConversion)
+[Upload click conversions](https://developers.google.com/google-ads/api/reference/rpc/v7/ClickConversion)
 
 *   *Sample Data file content:*
 
@@ -674,3 +689,112 @@ Attributed to a Google Click Identifier (`gclid`):
 {"conversion_date_time":"2020-01-01 03:00:00-18:00", "conversion_value":"20", "gclid":"EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
 ```
 
+### 4.8. ACM: Google Ads Customer Match upload via API
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | ACM
+Data Format             | JSONL
+Authentication          | OAuth
+What Tentacles does     | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_node].
+**Usage Scenarios**     | Customer Match lets you use your online and offline data to reach and re-engage with your customers across Search, Shopping, Gmail, YouTube, and Display.
+Transfer Data on        | Pub/Sub
+Require Service Account | NO
+Request Type            | HTTP Request to RESTful endpoint
+\# Records per request  | 100
+QPS                     | -
+Reference               | [Overview: Customer Match][customer_match_overview]
+
+[google_ads_node]:https://github.com/Opteo/google-ads-api
+[customer_match_overview]:https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "customerMatchConfig": {
+    "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+    "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+    "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+    "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE]",
+    "operation": "create|remove"
+  }
+}
+```
+
+*   Fields' definition:
+    *   `developerToken`, Developer token to access the API.
+    *   `customer_id`, Google Ads Customer account Id
+    *   `login_customer_id`, Login customer account Id (MCC Account Id)
+    *   `list_id`, User List id for customer match audience
+    *   `list_type`, Must be one of the following: hashed_email, hashed_phone_number, mobile_id, third_party_user_id or address_info; [Read more about id types][user_identifier]
+    *   `operation`, Can be either create or remove in single file; [Read more about operation][user_data_operation]
+
+[user_identifier]:https://developers.google.com/google-ads/api/reference/rpc/v7/UserIdentifier
+[user_data_operation]:https://developers.google.com/google-ads/api/reference/rpc/v7/UserDataOperation
+
+Tip: For more details see
+[User Data Service](https://developers.google.com/google-ads/api/reference/rpc/v7/UserDataService)
+
+*   *Sample Data file content:*
+
+```json
+{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+```
+
+### 4.9. MP_GA4: Measurement Protocol (Google Analytics 4)
+
+API Specification       | Value
+----------------------- | --------------------------------------------------
+API Code                | MP_GA4
+Data Format             | JSONL
+Authentication          | No need
+What Tentacles does     | Merging the **data** with the **configuration** to build the requests and sent them to Google Analytics 4.
+**Usage Scenarios**     | Uploading offline conversions/events
+Transfer Data on        | Pub/Sub
+Require Service Account | NO
+Request Type            | HTTP Post
+\# Records per request  | 1
+QPS                     | -
+Reference               | [Measurement Protocol (Google Analytics 4) Reference][mp_ga4_doc]
+
+[mp_ga4_doc]: https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference#payload_post_body
+
+*   *Sample configuration piece:*
+
+```json
+{
+  "qps": 20,
+  "numberOfThreads": 20,
+  "mpGa4Config":{
+    "queryString": {
+      "firebase_app_id": "[YOUR_APP_ID]",
+      "api_secret": "[YOUR_API_SECRET]"
+    },
+    "requestBody": {
+      "non_personalized_ads": false,
+      "events": [
+        {
+          "name": "[YOUR_EVENT_NAME]",
+          "params": {}
+        }
+      ]
+    }
+  }
+}
+```
+
+Note: Optional `qps` and `numberOfThreads` are used to control the sending
+speed. `qps` is the 'queries per second' and stands for how many requests will
+be sent simultaneously.
+
+Tip: All these properties names in configuration `mpGa4Config` or data file can
+be find in
+[Measurement Protocol (GA4) Parameter Reference](https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference#payload_post_body).
+
+*   *Sample Data file content:*
+
+```json
+{"app_instance_id":"cbd7d1056fexxxxxxxxxxxxxx08ff","timestamp_micros":1617508786220000}
+```

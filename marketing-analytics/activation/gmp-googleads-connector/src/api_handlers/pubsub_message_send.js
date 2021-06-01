@@ -47,7 +47,7 @@ exports.defaultOnGcs = false;
  *
  * @typedef {{
  *   topic:string,
- *   message:string|undefined,
+ *   message:string|object|undefined,
  *   attributes:{string,string}|undefined,
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
@@ -80,7 +80,9 @@ const sendDataInternal = (pubsub, records, messageId, config) => {
   const getSendSingleMessageFn = async (lines, batchId) => {
     if (lines.length !== 1) throw Error('Wrong number of Pub/Sub messages.');
     const args = JSON.parse(lines[0]);
-    const message = replaceParameters(config.message || '', args, true);
+    const originalMessage = typeof (config.message) === 'object'
+        ? JSON.stringify(config.message) : config.message;
+    const message = replaceParameters(originalMessage || '', args, true);
     const attributes = JSON.parse(
         replaceParameters(JSON.stringify(config.attributes || {}), args, true));
     let retryTimes = 0;

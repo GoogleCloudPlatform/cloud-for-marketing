@@ -45,9 +45,11 @@ GOOGLE_CLOUD_APIS["pubsub.googleapis.com"]="Cloud Pub/Sub API"
 # Description of external APIs.
 INTEGRATION_APIS_DESCRIPTION=(
   "Google Analytics Measurement Protocol"
+  "Google Analytics 4 Measurement Protocol"
   "Google Analytics Data Import"
   "Campaign Manager Conversions Upload"
   "Search Ads 360 Conversions Upload"
+  "Google Ads API for Customer Match Upload"
   "Google Ads API for Click Conversions Upload"
   "Google Sheets API for Google Ads Conversions Upload based on Google Sheets"
   "SFTP Upload for Search Ads 360 Business Data Upload"
@@ -57,9 +59,11 @@ INTEGRATION_APIS_DESCRIPTION=(
 # All build-in external APIs.
 INTEGRATION_APIS=(
   "N/A"
+  "N/A"
   "analytics.googleapis.com"
   "dfareporting.googleapis.com doubleclicksearch.googleapis.com"
   "doubleclicksearch.googleapis.com"
+  "googleads.googleapis.com"
   "googleads.googleapis.com"
   "sheets.googleapis.com"
   "N/A"
@@ -70,9 +74,11 @@ INTEGRATION_APIS=(
 # subscriptions for different APIs.
 INTEGRATION_APIS_CODE=(
   "MP"
+  "MP_GA4"
   "GA"
   "CM"
   "SA"
+  "ACM"
   "ACLC"
   "GS"
   "SFTP"

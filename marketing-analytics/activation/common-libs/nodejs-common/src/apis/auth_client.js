@@ -111,7 +111,7 @@ class AuthClient {
     const key = JSON.parse(fs.readFileSync(keyFile).toString());
     console.log(`Get OAuth token with Email: ${key.client_id}`);
     const oAuth2Client = new OAuth2Client(key.client_id, key.client_secret);
-    oAuth2Client.setCredentials(key.token);
+    oAuth2Client.setCredentials({refresh_token: key.token.refresh_token});
     return oAuth2Client;
   }
 

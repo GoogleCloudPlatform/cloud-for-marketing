@@ -101,3 +101,12 @@ exports.googleads = require('./google_ads.js');
  * @const {{AdsDataHub:!AdsDataHub}}
  */
 exports.adsdatahub = require('./ads_data_hub.js');
+
+/**
+ * APIs integration class for Measurement Protocol Google Analytics 4.
+ * @const {{
+ *   MeasurementProtocolGA4:!MeasurementProtocolGA4,
+ *   MeasurementProtocolGA4Config: !MeasurementProtocolGA4Config,
+ * }}
+ */
+exports.measurementprotocolga4 = require('./measurement_protocol_ga4.js');
