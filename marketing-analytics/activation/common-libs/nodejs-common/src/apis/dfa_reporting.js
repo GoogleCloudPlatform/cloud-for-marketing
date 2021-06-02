@@ -33,7 +33,7 @@ const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/dfareporting',
   'https://www.googleapis.com/auth/dfatrafficking',
 ]);
-const API_VERSION = 'v3.3';
+const API_VERSION = 'v3.5';
 
 /**
  * Configuration for preparing conversions for Campaign Manager, includes:
@@ -97,23 +97,20 @@ class DfaReporting {
    * @param {string} accountId Campaign Manager UserProfile ID.
    * @return {!Promise<string>}
    */
-  getProfileId(accountId) {
-    return this.instance.userProfiles.list()
-        .then(({data: {items}}) =>
-            items.filter((profile) => profile.accountId === accountId))
-        .then((profiles) => {
-          if (profiles.length === 0) {
-            return Promise.reject(
-                `Fail to find profile of current user for CM account ${
-                    accountId}`);
-          } else {
-            const profile = profiles[0];
-            this.logger.debug(`Find UserProfile: ${profile.profileId}[${
-                profile.userName}] for account: ${profile.accountId}[${
-                profile.accountName}]`);
-            return profile.profileId;
-          }
-        });
+  async getProfileId(accountId) {
+    const {data: {items}} = await this.instance.userProfiles.list();
+    const profiles = items.filter(
+        (profile) => profile.accountId === accountId
+    );
+    if (profiles.length === 0) {
+      throw new Error(`Fail to find profile of current user for CM account ${
+          accountId}`);
+    } else {
+      const {profileId, userName, accountId, accountName,} = profiles[0];
+      this.logger.debug(`Find UserProfile: ${profileId}[${userName}] for`
+          + ` account: ${accountId}[${accountName}]`);
+      return profileId;
+    }
   }
 
   /**
@@ -131,7 +128,7 @@ class DfaReporting {
      * @param {string} batchId The tag for log.
      * @return {!Promise<boolean>}
      */
-    return (lines, batchId) => {
+    return async (lines, batchId) => {
       /** @type {function} Gets the conversion elements from the data object. */
       const filterObject = getFilterFunction(PICKED_PROPERTIES);
       const time = new Date().getTime();
@@ -156,31 +153,29 @@ class DfaReporting {
       if (config.idType === 'encryptedUserId') {
         requestBody.encryptionInfo = config.encryptionInfo;
       }
-      return this.instance.conversions.batchinsert({
-            profileId: config.profileId,
-            requestBody: requestBody,
-          })
-          .then((response) => {
-            const failed = response.data.hasFailures;
-            if (failed) {
-              console.error(`Dfareporting[${batchId}] has failures.`);
-              const errorMessages = response.data.status
-                  .filter((record) => typeof record.errors !== 'undefined')
-                  .map((record) => {
-                    this.logger.debug(record);
-                    return record.errors.map(
-                        (error) => error.message).join(',');
-                  });
-              console.error(errorMessages.join('\n'));
-            }
-            this.logger.debug('Configuration: ', config);
-            this.logger.debug('Response: ', response);
-            return !failed;
-          })
-          .catch((error) => {
-            console.error(`Dfareporting[${batchId}] failed.`, error);
-            return false;
-          });
+      try {
+        const response = await this.instance.conversions.batchinsert({
+          profileId: config.profileId,
+          requestBody: requestBody,
+        });
+        const failed = response.data.hasFailures;
+        if (failed) {
+          console.error(`Dfareporting[${batchId}] has failures.`);
+          const errorMessages = response.data.status
+              .filter((record) => typeof record.errors !== 'undefined')
+              .map((record) => {
+                this.logger.debug(record);
+                return record.errors.map((error) => error.message).join(',');
+              });
+          console.error(errorMessages.join('\n'));
+        }
+        this.logger.debug('Configuration: ', config);
+        this.logger.debug('Response: ', response);
+        return !failed;
+      } catch (error) {
+        console.error(`Dfareporting[${batchId}] failed.`, error);
+        return false;
+      }
     };
   };
 
@@ -188,12 +183,11 @@ class DfaReporting {
    * Lists all UserProfiles.
    * @return {!Promise<!Array<string>>}
    */
-  listUserProfiles() {
-    return this.instance.userProfiles.list().then(({data: {items}}) => {
-      return items.map(({profileId, userName, accountId, accountName}) => {
-        return `Profile: ${profileId}[${userName}] Account: ${
-            accountId}[${accountName}]`;
-      });
+  async listUserProfiles() {
+    const {data: {items}} = await this.instance.userProfiles.list();
+    return items.map(({profileId, userName, accountId, accountName}) => {
+      return `Profile: ${profileId}[${userName}] `
+          + `Account: ${accountId}[${accountName}]`;
     });
   }
 
@@ -228,16 +222,14 @@ class DfaReporting {
    * }} config
    * @return {!Promise<string>} FileId of report run.
    */
-  runReport(config) {
-    return this.getProfileForOperation_(config)
-        .then((profileId) => {
-              return this.instance.reports.run({
-                profileId,
-                reportId: config.reportId,
-                synchronous: false,
-              });
-            }
-        ).then((response) => response.data.id);
+  async runReport(config) {
+    const profileId = await this.getProfileForOperation_(config);
+    const response = await this.instance.reports.run({
+      profileId,
+      reportId: config.reportId,
+      synchronous: false,
+    });
+    return response.data.id;
   }
 
   /**
@@ -254,21 +246,17 @@ class DfaReporting {
    * }} config
    * @return {!Promise<(string|undefined)>} FileId of report run.
    */
-  getReportFileUrl(config) {
-    return this.getProfileForOperation_(config)
-        .then((profileId) => {
-              return this.instance.reports.files.get({
-                profileId,
-                reportId: config.reportId,
-                fileId: config.fileId,
-              });
-            }
-        ).then((response) => {
-          const data = response.data;
-          if (data.status === 'PROCESSING') return;
-          if (data.status === 'REPORT_AVAILABLE') return data.urls.apiUrl;
-          throw new Error(`Unsupport report status: ${data.status}`);
-        });
+  async getReportFileUrl(config) {
+    const profileId = await this.getProfileForOperation_(config);
+    const response = await this.instance.reports.files.get({
+      profileId,
+      reportId: config.reportId,
+      fileId: config.fileId,
+    });
+    const {data} = response;
+    if (data.status === 'PROCESSING') return;
+    if (data.status === 'REPORT_AVAILABLE') return data.urls.apiUrl;
+    throw new Error(`Unsupported report status: ${data.status}`);
   }
 
   //TODO(lushu) check the response for very big file.
@@ -277,16 +265,14 @@ class DfaReporting {
    * @param {string} url
    * @return {!Promise<string>}
    */
-  downloadReportFile(url) {
-    return this.auth.getRequestHeaders()
-        .then((headers) => {
-          return request({
-            method: 'GET',
-            headers,
-            url,
-          });
-        })
-        .then((response) => response.data);
+  async downloadReportFile(url) {
+    const headers = await this.auth.getRequestHeaders();
+    const response = await request({
+      method: 'GET',
+      headers,
+      url,
+    });
+    return response.data;
   }
 }
 

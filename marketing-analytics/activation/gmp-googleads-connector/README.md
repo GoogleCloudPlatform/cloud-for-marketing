@@ -414,7 +414,8 @@ Reference               | [Overview: DCM/DFA Reporting and Trafficking API's Con
     "conversion": {
       "floodlightConfigurationId": "[YOUR-FL-CONFIG-ID]",
       "floodlightActivityId": "[YOUR-FL-ACTIVITY-ID]",
-      "quantity": 1
+      "quantity": 1,
+      "ordinal": "[UNIX_EPOCH]"
     },
     "customVariables": [
       "U2"
@@ -444,9 +445,13 @@ Reference               | [Overview: DCM/DFA Reporting and Trafficking API's Con
         not required.
     *   `encryptionInfo`, only required as the `idType` is `encryptedUserId`
 
-Note: Campaign Manager offline conversions can be attributed to a click, a
-device, or a user ID. For each request, there should be one and only one
-attribution type. That's defined by `idType`.
+Note:
+* Campaign Manager offline conversions can be attributed to a click, a device,
+or a user ID. For each request, there should be one and only one attribution
+type. That's defined by `idType`.
+* By default, the ordinal is set to the run-time Unix epoch timestamp. For more
+information on how the ordinal is used for conversion de-duplication, see [the
+FAQ](https://developers.google.com/doubleclick-advertisers/guides/conversions_faq#ordinal).
 
 Tip: For more details of a request, see
 [Upload conversions](https://developers.google.com/doubleclick-advertisers/guides/conversions_upload)
