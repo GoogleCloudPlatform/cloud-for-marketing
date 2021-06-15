@@ -16,7 +16,7 @@
 *.iml
 **/.DS_Store
 config*.json
-README.md
+*.md
 node_modules
 package-lock.json
 tests

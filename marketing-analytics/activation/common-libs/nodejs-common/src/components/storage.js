@@ -123,31 +123,29 @@ class StorageFile {
    * @return {!Promise<number>} The position of the last line breaker between
    *     the start and end points.
    */
-  getLastLineBreaker(start, end, checkPoint = -1) {
+  async getLastLineBreaker(start, end, checkPoint = -1) {
     /**
      * How many characters to look back to find a possbile line breaker. If no
      * link break in this range, it will extend to find the last one.
      */
     const possibleLineBreakRange = 1000;
     if (checkPoint < 0 || checkPoint > end) {
-      checkPoint =
-          Math.max(start, end - possibleLineBreakRange + 1);
+      checkPoint = Math.max(start, end - possibleLineBreakRange + 1);
     }
-    return this.loadContent(checkPoint, end).then((content) => {
-      const index = content.lastIndexOf(LINE_BREAKER);
-      if (index >= 0) {
-        return checkPoint + index;
-      }
-      if (checkPoint > start) {
-        return this.getLastLineBreaker(
-            start, end,
-            Math.max(start, checkPoint - possibleLineBreakRange));
-      } else {
-        console.error(`Filename ${this.fileName}, from ${start} to ${
-            end}. Error: there is no line breaker in ${content}.`);
-        throw new Error('No line breaker found in the line');
-      }
-    });
+    const content = await this.loadContent(checkPoint, end);
+    const index = Buffer.from(content).lastIndexOf(LINE_BREAKER);
+    if (index >= 0) {
+      return checkPoint + index;
+    }
+    if (checkPoint > start) {
+      return this.getLastLineBreaker(
+          start, end,
+          Math.max(start, checkPoint - possibleLineBreakRange));
+    } else {
+      console.error(`Filename ${this.fileName}, from ${start} to ${
+          end}. Error: there is no line breaker in ${content}.`);
+      throw new Error('No line breaker found in the line');
+    }
   }
 
   /**
