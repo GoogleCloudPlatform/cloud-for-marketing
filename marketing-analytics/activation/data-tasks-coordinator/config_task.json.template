@@ -1,0 +1,90 @@
+{
+  "load_job": {
+    "type": "load",
+    "source": {
+      "bucket": "${file.bucket}",
+      "name": "${file.name}",
+      "fileNamePattern": "[ANY_STRING_PATTERN_IN_FILENAME]"
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
+      },
+      "tableSchema": {
+        "schema": {
+          "fields": [
+            {
+              "mode": "NULLABLE",
+              "name": "[YOUR_BIGQUERY_TABLE_COLUMN_1_NAME]",
+              "type": "[YOUR_BIGQUERY_TABLE_COLUMN_1_TYPE]"
+            },
+            {
+              "mode": "NULLABLE",
+              "name": "[YOUR_BIGQUERY_TABLE_COLUMN_2_NAME]",
+              "type": "[YOUR_BIGQUERY_TABLE_COLUMN_2_TYPE]"
+            }
+          ]
+        }
+      }
+    },
+    "options": {
+      "sourceFormat": "CSV",
+      "writeDisposition": "WRITE_TRUNCATE",
+      "skipLeadingRows": 1,
+      "autodetect": false
+    },
+    "next": [
+      "query_job_sql"
+    ]
+  },
+  "query_job_sql": {
+    "type": "query",
+    "source": {
+      "sql": "[YOUR_QUERY_SQL]"
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
+      },
+      "writeDisposition": "WRITE_TRUNCATE"
+    },
+    "next": "export_job"
+  },
+  "query_job_gcs": {
+    "type": "query",
+    "source": {
+      "file": {
+        "bucket": "[YOUR_BUCKET_FOR_SQL_FILE]",
+        "name": "[YOUR_SQL_FILE_FULL_PATH_NAME]"
+      }
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
+      },
+      "writeDisposition": "WRITE_TRUNCATE"
+    }
+  },
+  "export_job": {
+    "type": "export",
+    "source": {
+      "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+      "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+      "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
+    },
+    "destination": {
+      "bucket": "[YOUR_BUCKET_FOR_EXPORTED_FILE]",
+      "name": "[YOUR_FULL_PATH_NAME_FOR_EXPORTED_FILE]"
+    },
+    "options": {
+      "destinationFormat": "NEWLINE_DELIMITED_JSON",
+      "printHeader": false
+    }
+  }
+}
