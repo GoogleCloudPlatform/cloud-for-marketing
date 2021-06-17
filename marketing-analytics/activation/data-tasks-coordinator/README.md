@@ -21,7 +21,7 @@ from Cloud Storage to BigQuery.
 [`Data pipeline`](https://en.wikipedia.org/wiki/Pipeline_(computing)): A series
 of connected data processing tasks. The output of one task is the input of the
 next one. The tasks of a pipeline are often executed in parallel or in
-time-sliced fashion. 
+time-sliced fashion.
 
 [`Event-driven programming`](
 https://en.wikipedia.org/wiki/Event-driven_programming): A programming paradigm
@@ -30,15 +30,15 @@ programming threads, determine the flow of a program's execution.
 
 ### 1.2. To start a task
 
-A `task` can be triggered by a Pub/Sub message. 
+A `task` can be triggered by a Pub/Sub message.
 
 In most cases, a Cloud Scheduler job created by `deploy.sh` will send those
 messages regularly to trigger the first task. After that, Sentinel will send
-messages to trigger next tasks. 
+messages to trigger next tasks.
 
- * Message attribute: `taskId`
- * Message body: the JSON string of the parameter object that will be passed
-into the task to start.
+* Message attribute: `taskId`
+* Message body: the JSON string of the parameter object that will be passed into
+  the task to start.
 
 Task definitions and sql files support parameters in this format:
 `${parameterName}`. The placeholders will be replaced with the value of the
@@ -75,20 +75,21 @@ Properties:
 
 1. `foo` is the task name.
 1. `type`, task type. Different types define the details of the task also have
-different configurations.
+   different configurations.
 1. `source`, `destination` and `options` are configurations. Refer to the
-detailed tasks for more information.
+   detailed tasks for more information.
 1. `next`, defines what next task(s) will be started after the current one
-completed, in this case, task `bar` will be started after `foo`.
+   completed, in this case, task `bar` will be started after `foo`.
 
 See `config_task.json.template` for templates of tasks.
 
 ### 1.4. To install the solution
 
 In a [Cloud Shell](https://cloud.google.com/shell/):
- 1. clone the source code;
- 1. enter the source code folder, edit the task configuration JSON file;
- 1. run `chmod a+x ./deploy.sh; ./deploy.sh`.
+
+1. clone the source code;
+1. enter the source code folder, edit the task configuration JSON file;
+1. run `chmod a+x ./deploy.sh; ./deploy.sh`.
 
 ## 2. Task Configuration Examples
 
@@ -98,43 +99,43 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
 
 ```json
 {
- "load_job": {
-   "type": "load",
-   "source": {
-     "bucket": "[YOUR_STORAGE_BUCKET_ID]",
-     "name": "[YOUR_FILENAME"]
-   },
-   "destination": {
-     "table": {
-       "projectId": "[YOUR_CLOUD_PROJECT_ID]",
-       "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
-       "tableId": "[YOUR_BIGQUERY_TABLE_ID]",
-       "location": "[YOUR_BIGQUERY_LOCATION_ID]"
-     },
-     "tableSchema": {
-       "schema": {
-         "fields": [
-           {
-             "mode": "NULLABLE",
-             "name": "[YOUR_BIGQUERY_TABLE_COLUMN_1_NAME]",
-             "type": "[YOUR_BIGQUERY_TABLE_COLUMN_1_TYPE]"
-           },
-           {
-             "mode": "NULLABLE",
-             "name": "[YOUR_BIGQUERY_TABLE_COLUMN_2_NAME]",
-             "type": "[YOUR_BIGQUERY_TABLE_COLUMN_2_TYPE]"
-           }
-         ]
-       }
-     }
-   },
-   "options": {
-     "sourceFormat": "CSV",
-     "writeDisposition": "WRITE_TRUNCATE",
-     "skipLeadingRows": 1,
-     "autodetect": false
-   }
- }
+  "load_job": {
+    "type": "load",
+    "source": {
+      "bucket": "[YOUR_STORAGE_BUCKET_ID]",
+      "name": "[YOUR_FILENAME]"
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "[YOUR_BIGQUERY_TABLE_ID]",
+        "location": "[YOUR_BIGQUERY_LOCATION_ID]"
+      },
+      "tableSchema": {
+        "schema": {
+          "fields": [
+            {
+              "mode": "NULLABLE",
+              "name": "[YOUR_BIGQUERY_TABLE_COLUMN_1_NAME]",
+              "type": "[YOUR_BIGQUERY_TABLE_COLUMN_1_TYPE]"
+            },
+            {
+              "mode": "NULLABLE",
+              "name": "[YOUR_BIGQUERY_TABLE_COLUMN_2_NAME]",
+              "type": "[YOUR_BIGQUERY_TABLE_COLUMN_2_TYPE]"
+            }
+          ]
+        }
+      }
+    },
+    "options": {
+      "sourceFormat": "CSV",
+      "writeDisposition": "WRITE_TRUNCATE",
+      "skipLeadingRows": 1,
+      "autodetect": false
+    }
+  }
 }
 ```
 
@@ -142,27 +143,28 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
 
 ```json
 {
- "load_job": {
-   "type": "load",
-   "source": {
-     "bucket": "[YOUR_STORAGE_BUCKET_ID]",
-     "name": "[YOUR_FILENAME"]
-   },
-   "destination": {
-     "table": {
-       "projectId": "[YOUR_CLOUD_PROJECT_ID]",
-       "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
-       "tableId": "targetTable$${partitionDay}",
-       "location": "[YOUR_BIGQUERY_LOCATION_ID]"
-     }
-   },
-   "options": {
-     "sourceFormat": "CSV",
-     "writeDisposition": "WRITE_TRUNCATE",
-     "skipLeadingRows": 1,
-     "autodetect": true
-   }
- }
+  "load_job": {
+    "type": "load",
+    "source": {
+      "bucket": "[YOUR_STORAGE_BUCKET_ID]",
+      "name": "[YOUR_FILENAME]"
+      ]
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "targetTable$${partitionDay}",
+        "location": "[YOUR_BIGQUERY_LOCATION_ID]"
+      }
+    },
+    "options": {
+      "sourceFormat": "CSV",
+      "writeDisposition": "WRITE_TRUNCATE",
+      "skipLeadingRows": 1,
+      "autodetect": true
+    }
+  }
 }
 ```
 
@@ -173,18 +175,18 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
 ```json
 {
   "query_job_sql": {
-   "type": "query",
-   "source": {
-     "sql": "[YOUR_QUERY_SQL]"
-   },
-   "destination": {
-     "table": {
-       "projectId": "[YOUR_CLOUD_PROJECT_ID]",
-       "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
-       "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
-     },
-     "writeDisposition": "WRITE_TRUNCATE"
-   }
+    "type": "query",
+    "source": {
+      "sql": "[YOUR_QUERY_SQL]"
+    },
+    "destination": {
+      "table": {
+        "projectId": "[YOUR_CLOUD_PROJECT_ID]",
+        "datasetId": "[YOUR_BIGQUERY_DATASET_ID]",
+        "tableId": "[YOUR_BIGQUERY_TABLE_ID]"
+      },
+      "writeDisposition": "WRITE_TRUNCATE"
+    }
   }
 }
 ```
@@ -240,6 +242,7 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
 ```
 
 #### 2.3.2. Export a file to trigger Tentacles (usually after a ‘Query’ task)
+
 ```json
 {
   "export_for_tentacles": {
