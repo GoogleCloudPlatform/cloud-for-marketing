@@ -102,8 +102,10 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
   "load_job": {
     "type": "load",
     "source": {
-      "bucket": "[YOUR_STORAGE_BUCKET_ID]",
-      "name": "[YOUR_FILENAME]"
+      "file": {
+        "bucket": "[YOUR_STORAGE_BUCKET_ID]",
+        "name": "[YOUR_FILENAME]"
+      }
     },
     "destination": {
       "table": {
@@ -146,9 +148,10 @@ In a [Cloud Shell](https://cloud.google.com/shell/):
   "load_job": {
     "type": "load",
     "source": {
-      "bucket": "[YOUR_STORAGE_BUCKET_ID]",
-      "name": "[YOUR_FILENAME]"
-      ]
+      "file": {
+        "bucket": "[YOUR_STORAGE_BUCKET_ID]",
+        "name": "[YOUR_FILENAME]"
+      }
     },
     "destination": {
       "table": {
