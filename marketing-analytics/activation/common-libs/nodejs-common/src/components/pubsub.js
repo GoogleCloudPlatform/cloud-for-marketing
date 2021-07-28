@@ -46,15 +46,17 @@ class EnhancedPubSub {
    * @param {string} topicName Topic name.
    * @return {!Promise<!Topic>} The topic.
    */
-  getOrCreateTopic(topicName) {
+  async getOrCreateTopic(topicName) {
     const topic = this.pubsub.topic(topicName);
-    return topic.exists()
-        .then(([topicExists]) => {
-          if (topicExists) return topic.get();
-          console.log(`Topic[${topicName}] doesn't exist. Create now.`);
-          return this.pubsub.createTopic(topicName);
-        })
-        .then(([newOrExistingTopic]) => newOrExistingTopic);
+    const [topicExists] = await topic.exists();
+    let newOrExistingTopic;
+    if (topicExists) {
+      [newOrExistingTopic] = await topic.get();
+    } else {
+      console.log(`Topic[${topicName}] doesn't exist. Create now.`);
+      [newOrExistingTopic] = await this.pubsub.createTopic(topicName);
+    }
+    return newOrExistingTopic;
   };
 
   /**
@@ -66,18 +68,20 @@ class EnhancedPubSub {
    * @param {CreateSubscriptionOptions?} options Configuration object.
    * @return {!Promise<!Subscription>} The subscription.
    */
-  getOrCreateSubscription(topicName, subscriptionName, options) {
-    return this.getOrCreateTopic(topicName).then((topic) => {
-      const subscription = this.pubsub.topic(topicName).subscription(
-          subscriptionName);
-      return subscription.exists()
-          .then(([subscriptionExists]) => {
-            if (subscriptionExists) return subscription.get();
-            console.log(`Sub[${subscriptionName}] doesn't exist. Create now.`);
-            return topic.createSubscription(subscriptionName, options);
-          })
-          .then(([newOrExistingSubscription]) => newOrExistingSubscription);
-    });
+  async getOrCreateSubscription(topicName, subscriptionName, options) {
+    const subscription = this.pubsub.topic(topicName).subscription(
+        subscriptionName);
+    const [subscriptionExists] = await subscription.exists();
+    let newOrExistingSubscription;
+    if (subscriptionExists) {
+      [newOrExistingSubscription] = await subscription.get();
+    } else {
+      console.log(`Sub[${subscriptionName}] doesn't exist. Create now.`);
+      const topic = await this.getOrCreateTopic(topicName);
+      [newOrExistingSubscription] = await topic.createSubscription(
+          subscriptionName, options);
+    }
+    return newOrExistingSubscription;
   };
 
   /**
@@ -92,27 +96,26 @@ class EnhancedPubSub {
    * 3. To get the original message back: `Buffer.from(data,
    * 'base64').toString()`. It will returns the string 'hello world'.
    *
-   * @param {string} topicName The Pub/Sub topic name.
+   * @param {string|Topic} topic The Pub/Sub topic name or object.
    * @param {string} message The message string.
    * @param {?Object<string,string>=} attributes The attributes of the
    *     message.
    * @return {!Promise<string>} Message ID.
    */
-  publish(topicName, message, attributes = {}) {
-    return this.getOrCreateTopic(topicName).then((topic) => {
-      const bytes = Buffer.from(message);
-      return topic.publish(bytes, attributes)
-          .then((messageId) => {
-            console.log(`[Pubsub] Send message[${messageId}] to [${
-                topicName}] with ${bytes.length} bytes.`);
-            return messageId;
-          })
-          .catch((error) => {
-            console.error(
-                `Fail to publish to topic[${topicName}]', ${message}`);
-            console.error('ERROR:', error);
-          });
-    });
+  async publish(topic, message, attributes = {}) {
+    const confirmedTopic = typeof topic === 'string'
+        ? await this.getOrCreateTopic(topic) : topic;
+    const name = confirmedTopic.name;
+    const bytes = Buffer.from(message);
+    try {
+      const messageId = await confirmedTopic.publish(bytes, attributes);
+      console.log(
+          `[Pubsub] Send message[${messageId}] to [${name}] with ${bytes.length} bytes.`);
+      return messageId;
+    } catch (error) {
+      console.error(`Fail to publish to topic[${confirmedTopic}]', ${message}`);
+      console.error('ERROR:', error);
+    }
   };
 
   /**

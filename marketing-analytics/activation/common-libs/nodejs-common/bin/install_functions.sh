@@ -889,14 +889,15 @@ can't be the trigger source here."
 # Globals:
 #   CONFIG_FOLDER_NAME
 # Arguments:
-#   None
+#   Folder name, default value ${CONFIG_FOLDER_NAME}
 #######################################
 confirm_folder() {
   (( STEP += 1 ))
-  printf '%s\n' "Step ${STEP}: Confirming ${CONFIG_FOLDER_NAME} folder..."
-  local loaded_value="${!CONFIG_FOLDER_NAME}"
+  local folderName=${1-"${CONFIG_FOLDER_NAME}"}
+  printf '%s\n' "Step ${STEP}: Confirming ${folderName} folder..."
+  local loaded_value="${!folderName}"
   local default_value
-  default_value=$(printf '%s' "${CONFIG_FOLDER_NAME}" | \
+  default_value=$(printf '%s' "${folderName}" | \
 tr '[:upper:]' '[:lower:]')
 
   local folder=${loaded_value:-${default_value}}
@@ -906,14 +907,14 @@ occupying a bucket exclusively, you must provide a folder name. This solution \
 only takes the files under that folder. After it takes the files, Cloud \
 Functions moves the files to the folder 'processed/'.
 EOF
-  printf '%s' "Enter the ${CONFIG_FOLDER_NAME} folder name [${folder}]: "
+  printf '%s' "Enter the ${folderName} folder name [${folder}]: "
   local input
   read -r input
   folder=${input:-"${folder}"}
   if [[ ! ${folder} =~ ^.*/$ ]]; then
     folder="${folder}/"
   fi
-  declare -g "${CONFIG_FOLDER_NAME}=${folder}"
+  declare -g "${folderName}=${folder}"
   printf '%s\n\n' "OK. Continue with monitored folder [${folder}]."
 }
 

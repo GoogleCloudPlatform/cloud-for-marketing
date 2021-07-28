@@ -42,6 +42,17 @@ const API_VERSION = 'v3';
 let DataImportConfig;
 
 /**
+ * The configuration to delete uploaded data files.
+ *   'max' stands for how many data files will be kept;
+ *   'ttl' stands for how many days an uploaded file could be kept.
+ * @typedef {{
+ *   max:number|undefined,
+ *   ttl:number|undefined,
+ * }}
+ */
+let DataImportClearConfig;
+
+/**
  * Google Analytics API v3 stub.
  */
 class Analytics {
@@ -68,7 +79,7 @@ class Analytics {
    * @return {!Promise<boolean>} Promise returning whether data import
    *     succeeded.
    */
-  uploadData(data, config, batchId = 'unnamed') {
+  async uploadData(data, config, batchId = 'unnamed') {
     const uploadConfig = Object.assign(
         {
           media: {
@@ -77,44 +88,35 @@ class Analytics {
           }
         },
         config);
-    return this.instance.management.uploads.uploadData(uploadConfig)
-        .then((response) => {
-          this.logger.debug('Configuration: ', config);
-          this.logger.debug('Upload Data: ', data);
-          this.logger.debug('Response: ', response);
-          const job = /** @type {Schema$Upload} */ response.data;
-          const jobId = job.id;
-          console.log(`Task [${batchId}] creates GA Data import job: ${jobId}`);
-          return job;
-        })
-        .then((job) => {
-          const jobConfig = Object.assign(
-              {uploadId: (/** @type {Schema$Upload} */job).id}, config);
-          return Promise
-              .race([
-                this.checkJobStatus(jobConfig),
-                wait(8 * 60 * 1000, job),  // wait up to 8 minutes here
-              ])
-              .then((job) => {
-                switch ((/** @type {Schema$Upload} */ job).status) {
-                  case 'FAILED':
-                    console.error('GA Data Import failed', job);
-                    return false;
-                  case 'COMPLETED':
-                    console.log(`GA Data Import job[${(
-                        /** @type {Schema$Upload} */job).id}] completed.`);
-                    this.logger.debug('Response: ', job);
-                    return true;
-                  case 'PENDING':
-                    console.log('GA Data Import pending.', job);
-                    console.log('Still will return true here.');
-                    return true;
-                  default:
-                    console.error('Unknown results of GA Data Import: ', job);
-                    return false;
-                }
-              });
-        });
+    const response = await this.instance.management.uploads.uploadData(
+        uploadConfig);
+    this.logger.debug('Configuration: ', config);
+    this.logger.debug('Upload Data: ', data);
+    this.logger.debug('Response: ', response);
+    const job = /** @type {Schema$Upload} */ response.data;
+    const uploadId = (/** @type {Schema$Upload} */job).id;
+    console.log(`Task [${batchId}] creates GA Data import job: ${uploadId}`);
+    const jobConfig = Object.assign({uploadId}, config);
+    const result = await Promise.race([
+      this.checkJobStatus(jobConfig),
+      wait(8 * 60 * 1000, job),  // wait up to 8 minutes here
+    ]);
+    switch ((/** @type {Schema$Upload} */ result).status) {
+      case 'FAILED':
+        this.logger.error('GA Data Import failed', job);
+        return false;
+      case 'COMPLETED':
+        this.logger.info(`GA Data Import job[${uploadId}] completed.`);
+        this.logger.debug('Response: ', job);
+        return true;
+      case 'PENDING':
+        this.logger.info('GA Data Import pending.', job);
+        this.logger.info('Still will return true here.');
+        return true;
+      default:
+        this.logger.error('Unknown results of GA Data Import: ', job);
+        return false;
+    }
   }
 
   /**
@@ -124,33 +126,105 @@ class Analytics {
    *     Job.
    * @return {!Promise<!Schema$Upload>} Updated data import Job status.
    */
-  checkJobStatus(jobConfig) {
-    return this.instance.management.uploads.get(jobConfig)
-        .then(({data: job}) => {
-          if (job.status !== 'PENDING') return job;
-          this.logger.debug(`GA Data Import Job[${
-              jobConfig.uploadId}] is not finished. Wait 10 sec...`);
-          // GA Data Import is an asynchronous job. Waits some time (10 seconds)
-          // here to get the updated status.
-          return wait(10 * 1000).then(() => this.checkJobStatus(jobConfig));
-        });
+  async checkJobStatus(jobConfig) {
+    const {data: job} = await this.instance.management.uploads.get(jobConfig);
+    if (job.status !== 'PENDING') return job;
+    this.logger.debug(
+        `GA Data Import Job[${jobConfig.uploadId}] is not finished.`);
+    this.logger.debug('  Wait 10 sec...');
+    // GA Data Import is an asynchronous job. Waits some time (10 seconds)
+    // here to get the updated status.
+    await wait(10 * 1000);
+    return this.checkJobStatus(jobConfig);
+
   }
 
   /**
    * Lists all accounts.
    * @return {!Promise<!Array<string>>}
    */
-  listAccounts() {
-    return this.instance.management.accounts.list().then(
-        (response) => response.data.items.map(
-            (account) => `Account id: ${account.name}[${account.id}]`
-        ));
+  async listAccounts() {
+    const response = await this.instance.management.accounts.list();
+    return response.data.items.map(
+        (account) => `Account id: ${account.name}[${account.id}]`
+    );
   }
+
+  /**
+   * Lists all uploads.
+   * @param {!DataImportConfig} config GA data import configuration.
+   * @return {!Promise<!Array<Object>>}
+   */
+  async listUploads(config) {
+    const response = await this.instance.management.uploads.list(config);
+    return response.data.items;
+  }
+
+  /**
+   * Delete the uploaded data files based on the options.
+   * @param {!DataImportConfig} config GA data import configuration.
+   * @param {!DataImportClearConfig} options
+   * @return {Promise<void>}
+   */
+  async deleteUploadedData(config, options) {
+    const toDelete = await this.getUploadsToDelete_(config, options);
+    if (toDelete.length === 0) {
+      this.logger.debug('There are no uploads needs to be deleted.');
+      return;
+    }
+    const customDataImportUids = toDelete.map((upload) => upload.id);
+    const request = Object.assign({}, config, {
+      resource: {customDataImportUids},
+    });
+    await this.instance.management.uploads.deleteUploadData(request);
+    this.logger.debug('Delete uploads: ', customDataImportUids);
+  }
+
+  /**
+   * Returns the uploaded data files to delete based on the options.
+   * @param {!DataImportConfig} config GA data import configuration.
+   * @param {!DataImportClearConfig} options
+   * @return {!Promise<!Array<{
+   *   id: string,
+   *   kind: 'analytics#upload',
+   *   accountId: string,
+   *   customDataSourceId: string,
+   *   status: string,
+   *   uploadTime: string,
+   *   errors: !Array<string>,
+   * }>>}
+   * @private
+   */
+  async getUploadsToDelete_(config, options) {
+    /** @const {Array} */ const uploads = await this.listUploads(config);
+    let toDelete = [];
+    if (uploads) {
+      // Sorts the uploads
+      uploads.sort(({uploadTime: first}, {uploadTime: second}) => {
+        return Date.parse(first) - Date.parse(second);
+      });
+      // Gets expired uploads.
+      if (options.ttl) {
+        const cutOff = Date.now() - options.ttl * 24 * 3600 * 1000;
+        toDelete = uploads.filter(
+            (upload) => Date.parse(upload.uploadTime) < cutOff);
+      }
+      // If there is a number limit, remove more uploads if exceeds.
+      if (options.max && uploads.length - toDelete.length > options.max) {
+        const leftUpdates = uploads.slice(toDelete.length);
+        toDelete = toDelete.concat(
+            leftUpdates.slice(0, leftUpdates.length - options.max));
+      }
+    }
+    return toDelete;
+  }
+
 }
 
 module.exports = {
   Analytics,
   DataImportConfig,
+  DataImportClearConfig,
   API_VERSION,
   API_SCOPES,
 };

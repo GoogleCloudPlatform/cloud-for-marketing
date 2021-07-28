@@ -69,13 +69,14 @@ exports.PubSubMessageConfig = PubSubMessageConfig;
  * @return {!Promise<boolean>} Whether 'records' have been sent out without any
  *     errors.
  */
-const sendDataInternal = (pubsub, records, messageId, config) => {
+const sendDataInternal = async (pubsub, records, messageId, config) => {
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const numberOfThreads =
       getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, numberOfThreads, qps);
+  const topic = await pubsub.getOrCreateTopic(config.topic);
   /** This function send out one message with the given data. */
   const getSendSingleMessageFn = async (lines, batchId) => {
     if (lines.length !== 1) throw Error('Wrong number of Pub/Sub messages.');
@@ -90,8 +91,7 @@ const sendDataInternal = (pubsub, records, messageId, config) => {
       // Wait sometime (1s, 2s, 3s, ...) before each retry.
       if (retryTimes > 0) await wait(retryTimes * 1000);
       try {
-        const messageId = await pubsub.publish(config.topic, message,
-            attributes);
+        const messageId = await pubsub.publish(topic, message, attributes);
         console.log(`Send ${lines[0]} to ${config.topic} as ${messageId}.`);
         return true;
       } catch (error) {

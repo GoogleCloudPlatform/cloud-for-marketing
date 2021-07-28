@@ -169,50 +169,42 @@ const initPubsub = (topicPrefix, apiList) => initPubsubImpl(topicPrefix,
  * @param {string|undefined=} bucket Bucket name for a GCS file.
  * @return {!Promise<undefined>}
  */
-const localApiRequester = (file, bucket = undefined) => {
+const localApiRequester = async (file, bucket = undefined) => {
   const fs = require('fs');
   const attributes = getAttributes(file);
   console.log(`Test file [${file}] has attributes:`, attributes);
-  const getMessageData = new Promise((resolve, reject) => {
-    if (attributes.gcs === 'true') {
-      console.log(`API[${attributes.api}] is GCS based...`);
-      if (bucket) {
-        console.log(`... and this test is set on GCS file`);
-        const storageFile = new StorageFile.getInstance(bucket, file);
-        return storageFile.getFile().exists().then((fileExists) => {
-          if (fileExists) {
-            resolve(JSON.stringify({bucket: bucket, file: file}));
-          } else {
-            reject(`${file} doesn't exist on ${bucket}.`);
-          }
-        });
+  let messageData;
+  if (attributes.gcs === 'true') {
+    console.log(`API[${attributes.api}] is GCS based...`);
+    if (bucket) {
+      console.log(`... and this test is set on GCS file`);
+      const storageFile = new StorageFile.getInstance(bucket, file);
+      const fileExists = await storageFile.getFile().exists();
+      if (fileExists) {
+        messageData = JSON.stringify({bucket, file});
+      } else {
+        throw new Error(`${file} doesn't exist on ${bucket}.`);
       }
+    } else {
       console.log(`... this test is set on local file.`);
-    } else {
-      console.log(
-          `API[${attributes.api} is PS based, tests based on local file.`);
     }
-    if (fs.existsSync(file)) {
-      resolve(fs.readFileSync(file).toString());
-    } else {
-      reject(`${file} doesn't exist.`);
-    }
-  });
-  return getMessageData.then((messageData) => {
-    const context = {eventId: 'test-demo-message'};
-    const message = {
-      attributes,
-      data: Buffer.from(messageData).toString('base64'),
-    };
-    const callback = () => console.log(`After send out requests from ${file}.`);
-    return FirestoreAccessBase.isNativeMode()
-        .then((nativeMode) => (nativeMode) ? DataSource.FIRESTORE
-            : DataSource.DATASTORE)
-        .then(
-            (dataSource) => getTentacles('test', dataSource).getApiRequester()(
-                message,
-                context, callback));
-  });
+  } else {
+    console.log(
+        `API[${attributes.api} is PS based, tests based on local file.`);
+  }
+  if (fs.existsSync(file)) {
+    messageData = fs.readFileSync(file).toString();
+  } else {
+    throw new Error(`${file} doesn't exist.`);
+  }
+  const context = {eventId: 'test-demo-message'};
+  const message = {
+    attributes,
+    data: Buffer.from(messageData).toString('base64'),
+  };
+  const callback = () => console.log(`After send out requests from ${file}.`);
+  /** @const {Tentacles} */ const tentacles = await guessTentacles();
+  return tentacles.getApiRequester()(message, context, callback);
 };
 
 /**

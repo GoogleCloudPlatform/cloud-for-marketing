@@ -44,7 +44,7 @@ get_dataset_location() {
 #######################################
 confirm_dataset_with_location(){
   local datasetName=$1
-  local location=$2
+  local location=$(printf "$2" | tr [:upper:] [:lower:])
   local defaultValue="${!datasetName}"
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Checking or creating a BigQuery dataset in \
@@ -55,7 +55,7 @@ location [${location}] ..."
     read -r dataset
     dataset=${dataset:-$defaultValue}
     local result
-    result=$(get_dataset_location "${dataset}")
+    result=$(get_dataset_location "${dataset}" | tr [:upper:] [:lower:])
     if [[ "${result}" == "${location}" ]]; then
       printf '%s\n' "OK. The dataset [${dataset}] exists in the location \
 [${location}] ."

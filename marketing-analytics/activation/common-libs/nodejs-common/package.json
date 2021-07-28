@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/nodejs-common",
-  "version": "0.7.2",
+  "version": "0.7.6",
   "description": "A NodeJs common library for solutions based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",

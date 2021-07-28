@@ -34,8 +34,7 @@ PROJECT_NAMESPACE="${SOLUTION_NAME}"
 CONFIG_FILE="./config.json"
 
 # Parameter name used by functions to load and save config.
-CONFIG_FOLDER_NAME="OUTBOUND"
-CONFIG_ITEMS=("PROJECT_NAMESPACE" "GCS_BUCKET" "${CONFIG_FOLDER_NAME}")
+CONFIG_ITEMS=("PROJECT_NAMESPACE" "GCS_BUCKET" "OUTBOUND")
 
 # The Google Cloud APIs that will be used in Tentacles.
 GOOGLE_CLOUD_APIS["firestore.googleapis.com"]="Cloud Firestore API"
@@ -167,7 +166,7 @@ process.argv.slice(2))" "${PROJECT_NAMESPACE}"  "${SELECTED_APIS_CODES[@]}"
 # Globals:
 #   PROJECT_NAMESPACE
 #   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
+#   OUTBOUND
 # Arguments:
 #   None
 #######################################
@@ -175,7 +174,7 @@ deploy_cloud_functions_initiator(){
   local cf_flag=()
   cf_flag+=(--entry-point=initiate)
   cf_flag+=(--trigger-bucket="${GCS_BUCKET}")
-  cf_flag+=(--set-env-vars=TENTACLES_OUTBOUND="${!CONFIG_FOLDER_NAME}")
+  cf_flag+=(--set-env-vars=TENTACLES_OUTBOUND="${OUTBOUND}")
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 1. '${PROJECT_NAMESPACE}_init' is triggered by new files \
 from Cloud Storage bucket [${GCS_BUCKET}]."
@@ -187,8 +186,6 @@ from Cloud Storage bucket [${GCS_BUCKET}]."
 # Deploy Cloud Functions 'Transporter'.
 # Globals:
 #   PROJECT_NAMESPACE
-#   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
 # Arguments:
 #   None
 #######################################
@@ -207,8 +204,6 @@ from Pub/Sub topic [${PROJECT_NAMESPACE}-trigger]."
 # Deploy Cloud Functions 'Api Requester'.
 # Globals:
 #   PROJECT_NAMESPACE
-#   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
 # Arguments:
 #   None
 #######################################
@@ -231,7 +226,7 @@ from Pub/Sub topic [${PROJECT_NAMESPACE}-push]."
 #   CF_RUNTIME
 #   PROJECT_NAMESPACE
 #   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
+#   OUTBOUND
 #   SA_KEY_FILE
 # Arguments:
 #   None
@@ -394,7 +389,7 @@ node -e "require('./index.js').localApiRequester(process.argv[1])" "$@"
 # to update the API configuration first if you made any modifications.
 # Globals:
 #   CONFIG_FILE
-#   CONFIG_FOLDER_NAME
+#   OUTBOUND
 # Arguments:
 #   File to be sent out, a path.
 #######################################
@@ -403,7 +398,7 @@ copy_file_to_gcs(){
   local bucket
   bucket=$(get_value_from_json_file "${CONFIG_FILE}" "GCS_BUCKET")
   local folder
-  folder=$(get_value_from_json_file "${CONFIG_FILE}" "${CONFIG_FOLDER_NAME}")
+  folder=$(get_value_from_json_file "${CONFIG_FILE}" "OUTBOUND")
   local target="gs://${bucket}/${folder}"
   echo "Copy local file to target folder in Cloud Storage to start process."
   printf '%s\n' "  Source: $1"
@@ -430,7 +425,8 @@ DEFAULT_INSTALL_TASKS=(
   confirm_namespace confirm_project confirm_region
   confirm_integration_api confirm_auth_method
   check_permissions enable_apis
-  create_bucket confirm_folder
+  create_bucket
+  "confirm_folder OUTBOUND"
   save_config
   create_subscriptions
   do_authentication
