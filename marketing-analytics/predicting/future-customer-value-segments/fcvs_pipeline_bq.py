@@ -58,6 +58,7 @@ class RuntimeOptions(pipeline_options.PipelineOptions):
         parser.add_value_provider_argument(
             f'--{c._OPTION_CALIBRATION_START_DATE}')
         parser.add_value_provider_argument(f'--{c._OPTION_CALIBRATION_END_DATE}')
+        parser.add_value_provider_argument(f'--{c._OPTION_COHORT_START_DATE}')
         parser.add_value_provider_argument(f'--{c._OPTION_COHORT_END_DATE}')
         parser.add_value_provider_argument(f'--{c._OPTION_HOLDOUT_END_DATE}')
         parser.add_value_provider_argument(
@@ -282,6 +283,7 @@ def run(argv=None):
                         'fields': [
                             {'name': 'calibration_start_date', 'type': 'STRING'},
                             {'name': 'calibration_end_date', 'type': 'STRING'},
+                            {'name': 'cohort_start_date', 'type': 'STRING'},
                             {'name': 'cohort_end_date', 'type': 'STRING'},
                             {'name': 'holdout_end_date', 'type': 'STRING'},
                             {'name': 'model_time_granularity', 'type': 'STRING'},

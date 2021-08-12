@@ -108,6 +108,15 @@
       "regexes": [
         "^[0-9]{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
       ],
+      "name": "cohort_start_date",
+      "label": "Cohort Start Date",
+      "is_optional": true,
+      "helpText": "[Default calculated from input data] Use YYYY-MM-DD format for this date. If empty it will be automatically calculated from the input data. If specified you must specify also the other dates corresponding to the calibration and holdout periods to be used for model validation."
+    },
+    {
+      "regexes": [
+        "^[0-9]{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$"
+      ],
       "name": "cohort_end_date",
       "label": "Cohort End Date",
       "is_optional": true,

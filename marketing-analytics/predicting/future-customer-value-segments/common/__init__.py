@@ -339,6 +339,8 @@ def limit_dates_boundaries(dates, options):
                 False,
             _OPTION_CALIBRATION_START_DATE:
                 parse_date_yyyymmdd(options[_OPTION_CALIBRATION_START_DATE]),
+            _OPTION_COHORT_START_DATE:
+                parse_date_yyyymmdd(options[_OPTION_COHORT_START_DATE]),
             _OPTION_COHORT_END_DATE:
                 parse_date_yyyymmdd(options[_OPTION_COHORT_END_DATE]),
             _OPTION_CALIBRATION_END_DATE:
@@ -352,6 +354,8 @@ def limit_dates_boundaries(dates, options):
                 True,
             _OPTION_CALIBRATION_START_DATE:
                 dates['min_date'],
+            _OPTION_COHORT_START_DATE:
+                dates['min_date'],
             _OPTION_COHORT_END_DATE:
                 dates['min_date'] + dt.timedelta(days=dates['cohort_days']),
             _OPTION_CALIBRATION_END_DATE:
@@ -362,8 +366,7 @@ def limit_dates_boundaries(dates, options):
 
     limit_dates.update(
         holdout_start_date=limit_dates[_OPTION_CALIBRATION_END_DATE] +
-                           dt.timedelta(days=1),
-        cohort_start_date=limit_dates[_OPTION_CALIBRATION_START_DATE])
+                           dt.timedelta(days=1))
 
     return [limit_dates]
 
@@ -1563,6 +1566,7 @@ def calculate_model_fit_validation_to_text(model_params, options):
     param_output = f"""Modeling Dates
 Calibration Start Date: {model_params['calibration_start_date']}
 Calibration End Date: {model_params['calibration_end_date']}
+Cohort Start Date: {model_params['cohort_start_date']}
 Cohort End Date: {model_params['cohort_end_date']}
 Holdout End Date: {model_params['holdout_end_date']}
 
@@ -1638,6 +1642,7 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
     validation_params = {
         'calibration_start_date': date_to_str(dates[_OPTION_CALIBRATION_START_DATE]),
         'calibration_end_date': date_to_str(dates[_OPTION_CALIBRATION_END_DATE]),
+        'cohort_start_date': date_to_str(dates[_OPTION_COHORT_START_DATE]),
         'cohort_end_date': date_to_str(dates[_OPTION_COHORT_END_DATE]),
         'holdout_end_date': date_to_str(dates[_OPTION_HOLDOUT_END_DATE]),
         'model_time_granularity': options[_OPTION_MODEL_TIME_GRANULARITY].capitalize(),
