@@ -122,6 +122,7 @@ Contains information regarding the validation of the model. See an example below
 Modeling Dates
 Calibration Start Date: 1997-01-01
 Calibration End Date: 1997-10-01
+Cohort Start Date: 1997-01-01
 Cohort End Date: 1997-01-31
 Holdout End Date: 1998-06-30
 
@@ -131,7 +132,7 @@ Frequency Model: BG/NBD
 Customers modeled for validation: 7814 (33.25% of total customers)
 Transactions observed for validation: 23497 (34.8% of total transactions)
 
-Mean Absolute Percent Error (MAPE): 2.43%
+Validation Mean Absolute Percent Error (MAPE): 2.43%
 ```
 
 ***repeat_transactions_over_time.png and repeat_cumulative_transactions_over_time.png***

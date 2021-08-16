@@ -1182,7 +1182,8 @@ def calc_full_fit_period(calibration_start_date, holdout_end_date,
     """
     return int(
         math.ceil((holdout_end_date - calibration_start_date).days /
-                  time_divisor)) + 3  # Just in case, doesn't hurt
+                  time_divisor)) + 3  # 3: to account for February / leap years
+                                      # Has no negative side-effect
 
 
 def expected_cumulative_transactions(frequency_model, t_cal, t_tot):
@@ -1528,7 +1529,7 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
 
     model_params['validation_mape'] = round(mape, 2)
 
-    # return tuple that includes the MAPE, which will be used for a
+    # return tuple that includes the validation MAPE, which will be used for a
     # threshold check
     return model_params
 
@@ -1651,7 +1652,7 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
 
     # Let's check to see if the transaction frequency error is within
     # the allowed threshold.  If so, continue the calculation.  If not,
-    # send an email explaining why and stop all calculations.
+    # fail with an error and stop all calculations.
     error = None
     if model_params['validation_mape'] > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
         model_params['invalid_mape'] = True
