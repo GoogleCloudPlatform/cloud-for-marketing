@@ -28,6 +28,7 @@ const {cloudfunctions: {convertEnvPathToAbsolute}} = require(
 const {guessSentinel} = require('./src/sentinel.js');
 const {
   uploadTaskConfig,
+  checkGoogleAdsReports,
   startTaskFromLocal,
   startTaskThroughPubSub,
 } = require('./src/sentinel_helper.js');
@@ -77,6 +78,7 @@ module.exports = {
   monitorStorage,
   coordinateTask,
   uploadTaskConfig,
+  checkGoogleAdsReports,
   startTaskFromLocal,
   startTaskThroughPubSub,
 };

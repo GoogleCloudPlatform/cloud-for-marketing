@@ -82,6 +82,18 @@ class TaskManager {
   };
 
   /**
+   * Returns the topic to coordinate tasks.
+   * @param {string=} topicPrefix
+   * @return {Topic} Pub/sub topic.
+   */
+  async getMonitorTopic(topicPrefix = this.namespace) {
+    if (this.topic) return this.topic;
+    const topicName = this.getMonitorTopicName(topicPrefix);
+    this.topic = await this.pubsub.getOrCreateTopic(topicName);
+    return this.topic;
+  };
+
+  /**
    * Starts a group of tasks with given attributes and parameters.
    * @param {(!TaskGroup|undefined)} taskGroup Next tasks.
    * @param {{string,string}=} defaultAttributes Message attributes.
@@ -115,9 +127,9 @@ class TaskManager {
    * @param {Object<string,string>} attributes Message attributes.
    * @return {!Promise<string>} Message Id.
    */
-  sendTaskMessage(parameters, attributes) {
-    return this.pubsub.publish(this.getMonitorTopicName(), parameters,
-        attributes);
+  async sendTaskMessage(parameters, attributes) {
+    const topic = await this.getMonitorTopic();
+    return this.pubsub.publish(topic, parameters, attributes);
   }
 }
 

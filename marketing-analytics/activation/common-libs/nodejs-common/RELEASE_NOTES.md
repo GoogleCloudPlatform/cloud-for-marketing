@@ -1,6 +1,16 @@
 Release Notes
 ===
 
+0.8.1 (2021-08-12)
+---
+
+### Refactor 'location' confirmation when creating dataset or bucket.
+
+0.7.7 (2021-08-06)
+---
+
+### Support timezone input/confirmation.
+
 0.7.6 (2021-07-24)
 ---
 

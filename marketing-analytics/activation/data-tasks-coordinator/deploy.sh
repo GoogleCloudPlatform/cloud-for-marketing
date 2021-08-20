@@ -34,8 +34,7 @@ PROJECT_NAMESPACE="${SOLUTION_NAME}"
 CONFIG_FILE="./config.json"
 
 # Parameter name used by functions to load and save config.
-CONFIG_FOLDER_NAME="INBOUND"
-CONFIG_ITEMS=("PROJECT_NAMESPACE" "GCS_BUCKET" "${CONFIG_FOLDER_NAME}")
+CONFIG_ITEMS=("PROJECT_NAMESPACE" "REGION" "GCS_BUCKET" "INBOUND")
 
 # The Google Cloud APIs that will be used in Sentinel.
 GOOGLE_CLOUD_APIS["firestore.googleapis.com"]="Cloud Firestore API"
@@ -153,7 +152,7 @@ filter. Updating..."
   serviceAccount=$(gcloud logging sinks describe "${sinkName}" \
 --format="get(writerIdentity)")
   while :;do
-    printf '\n%s\n' "  Checking the role of the sink's service account \
+    printf '%s\n' "  Checking the role of the sink's service account \
 [${serviceAccount}]..."
     existingRole=$(gcloud projects get-iam-policy "${GCP_PROJECT}" \
 --flatten=bindings --filter="bindings.members:${serviceAccount} AND \
@@ -195,16 +194,18 @@ confirm_monitor_bucket() {
 task which will automatically load incoming files to BigQuery. To enable that, \
 a Cloud Storage Bucket and a folder in it are required.
 EOF
-  printf '\n%s' "Are you going to enable 'Load' task? [Y/n]: "
+  printf '%s' "Are you going to enable 'Load' task? [Y/n]: "
   local continue
   read -r continue
   continue=${continue:-"Y"}
-  if [[ ${continue} = "Y" || ${continue} = "y" ]]; then
+  if [[ ${continue} == "Y" || ${continue} == "y" ]]; then
     printf '%s\n\n' "OK. Cloud Storage monitor selected."
-    create_bucket
-    confirm_folder
+    confirm_located_bucket
+    quit_if_failed $?
+    confirm_folder INBOUND
   else
-    printf '%s\n\n' "Skipped to create Cloud Storage monitor."
+    printf '%s\n' "Skipped to create Cloud Storage monitor."
+    INBOUND=''
   fi
 }
 
@@ -252,7 +253,7 @@ Pub/Sub topic [${PROJECT_NAMESPACE}-monitor]."
 # Globals:
 #   PROJECT_NAMESPACE
 #   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
+#   INBOUND
 # Arguments:
 #   None
 #######################################
@@ -260,7 +261,7 @@ deploy_cloud_functions_storage_monitor(){
   local cf_flag=()
   cf_flag+=(--entry-point=monitorStorage)
   cf_flag+=(--trigger-bucket="${GCS_BUCKET}")
-  cf_flag+=(--set-env-vars=SENTINEL_INBOUND="${!CONFIG_FOLDER_NAME}")
+  cf_flag+=(--set-env-vars=SENTINEL_INBOUND="${INBOUND}")
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 2. '${PROJECT_NAMESPACE}_gcs' is triggered by new files from \
 Cloud Storage bucket [${GCS_BUCKET}]."
@@ -273,7 +274,7 @@ Cloud Storage bucket [${GCS_BUCKET}]."
 # Globals:
 #   REGION
 #   GCS_BUCKET
-#   CONFIG_FOLDER_NAME
+#   INBOUND
 # Arguments:
 #   None
 # Returns:
@@ -283,13 +284,39 @@ deploy_sentinel() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Starting to deploy Sentinel..."
   printf '%s\n' "Sentinel is composed of Cloud Functions."
-  ensure_region
-  printf '%s\n' "OK. Cloud Functions will be deployed to ${REGION}."
+  printf '%s\n' "The Cloud Functions will be deployed to ${REGION}."
 
   deploy_cloud_functions_task_coordinator
-  if [[ -n ${GCS_BUCKET} && -n ${!CONFIG_FOLDER_NAME} ]]; then
+  if [[ -n "${GCS_BUCKET}" && -n "${INBOUND}" ]]; then
     deploy_cloud_functions_storage_monitor
   fi
+}
+
+#######################################
+# Create a Cloud Scheduler Job which target Pub/Sub. Current Cloud Console does
+# not support attributes. For example:
+#   ./deploy.sh create_cron_task test-export
+# Globals:
+#   PROJECT_NAMESPACE
+# Arguments:
+#   Schedule taskId, a string.
+#   Cron time, a string, e.g. '0 6 * * *'
+#   Time zone, a string, e.g. 'Australia/Sydney'
+#   Message body, a JSON string of parameters.
+#   Job name, optional, default is PROJECT_NAMESPACE-taskId
+#######################################
+create_cron_task() {
+  check_authentication
+  quit_if_failed $?
+  check_firestore_existence
+  local jobName="${5-"${PROJECT_NAMESPACE}-${1}"}"
+  create_or_update_cloud_scheduler_for_pubsub \
+    "${jobName}" \
+    "${2}" \
+    "${3}" \
+    "${PROJECT_NAMESPACE}-monitor" \
+    "${4}" \
+    "taskId=${1}"
 }
 
 #######################################
@@ -303,16 +330,11 @@ deploy_sentinel() {
 set_internal_task() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Starting to create or update Cloud Scheduler \
-for Sentinel status check task..."
-  local job_name=${PROJECT_NAMESPACE}-intrinsic-cronjob
-  create_or_update_cloud_scheduler_for_pubsub \
-    $job_name \
-    "*/5 * * * *" \
-    "Australia/Sydney" \
-    ${PROJECT_NAMESPACE}-monitor \
-    '{"intrinsic": "status_check"}' \
-    taskId=system
-  printf '\n'
+job for Sentinel status check task..."
+  local jobName
+  jobName="${PROJECT_NAMESPACE}-intrinsic-cronjob"
+  create_cron_task "system" "*/5 * * * *" "UTC" '{"intrinsic":"status_check"}'\
+    "${jobName}"
 }
 
 #######################################
@@ -328,9 +350,9 @@ post_installation() {
   printf '%s\n' "Step ${STEP}: Post-installation checks..."
   check_firestore_existence
   printf '%s\n' "[ok] Firestore/Datastore is ready."
-  if [[ ${NEED_AUTHENTICATION} = 'true' ]]; then
+  if [[ ${NEED_AUTHENTICATION} == 'true' ]]; then
     local account="YOUR_OAUTH_EMAIL"
-    if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
+    if [[ ${NEED_SERVICE_ACCOUNT} == 'true' ]]; then
       account=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
     fi
 #TODO add details of different APIs.
@@ -367,120 +389,124 @@ EOF
 #   Optional string for the configuration file path and name.
 #######################################
 update_task_config() {
-  printf '%s\n' "=========================="
-  printf '%s\n' "Update Task configurations in into Firestore/Datastore."
+  check_firestore_existence
   check_authentication
   quit_if_failed $?
-  check_firestore_existence
-
-  local task_config
-  if [[ -n $1 ]]; then
-    task_config=$1
-  else
-    local default_config_file='./config_task.json'
-    printf '%s' "Please input the configuration file [${default_config_file}]:"
-    read -r task_config
-    task_config=${task_config:-"${default_config_file}"}
+  local configFile
+  configFile="${1}"
+  while [[ ! -s "${configFile}" ]]; do
+    local defaultConfigFile='./config_task.json'
+    printf '%s' "Enter the configuration file [${defaultConfigFile}]: "
+    read -r configFile
+    configFile=${configFile:-"${defaultConfigFile}"}
     printf '\n'
-  fi
+  done
+  printf '%s\n' "Updating Task configurations in into Firestore..."
   node -e "require('./index.js').uploadTaskConfig(require(process.argv[1]), \
-require(process.argv[2]), '${PROJECT_NAMESPACE}')" "${task_config}" \
-  "${CONFIG_FILE}"
+    require(process.argv[2]), '${PROJECT_NAMESPACE}')" "${configFile}" \
+    "${CONFIG_FILE}"
+}
+
+#######################################
+# Checks whether Sentinel can generate BigQuery schema for the report data
+# based on the Google Ads report definition.
+# Globals:
+#   None
+# Arguments:
+#   Folder of JSON files, default value "./"
+#   Google Ads developer token
+#######################################
+check_googleads_reports() {
+  cat <<EOF
+==========================
+Checks whether Sentinel can generate BigQuery schema for the Google Ads report
+data based on the report definition.
+Note: This function doesn't support recursive folders.
+
+EOF
+  if [[ ! -f "$(pwd)/${OAUTH2_TOKEN_JSON}" ]]; then
+    do_oauth
+  fi
+  local developerToken
+  developerToken="${2}"
+  while [[ -z "${developerToken}" ]]; do
+    printf '%s' "Enter the Google Ads developer token: "
+    read -r developerToken
+    printf '\n'
+  done
+  printf '%s\n' "  Setting environment variable of auth: ${auth}"
+  printf '%s\n' "Start analyzing [${2}]..."
+  local auth
+  auth="OAUTH2_TOKEN_JSON=$(pwd)/${OAUTH2_TOKEN_JSON}"
+  env "${auth}" node -e "require('./index.js').checkGoogleAdsReports(\
+    process.argv[1], process.argv[2])" "${developerToken}" "${1-"./"}"
 }
 
 #######################################
 # Start a task directly, not through Cloud Pub/Sub.
-# Please note: the task configuration is still expected to be on Cloud. You need
-# to update task config first if you modified any.
+# Please note: the task configuration is still expected to be on Cloud. The task
+# configuration needs to be updated to Firestore for any modification.
 # Globals:
 #   None
 # Arguments:
 #   task Id, a string
-#   a stringified JSON object of parameters, e.g. '{"partitionDay":"20191001"}'
+#   a JSON string of parameter object, e.g. '{"partitionDay":"20191001"}'
 #######################################
 start_task_locally() {
   cat <<EOF
 ==========================
 Invoke task based locally. However the task configuration is still expected to \
-be on Cloud. You need to update task config first if you modified any.
+be on Cloud. The task configuration needs to be updated to Firestore for any
+modification.
 EOF
   check_authentication
   quit_if_failed $?
   check_firestore_existence
-  OAUTH2_TOKEN_JSON="${BASE_DIR}/${OAUTH2_TOKEN_JSON}" \
-  API_SERVICE_ACCOUNT="${BASE_DIR}/${SA_KEY_FILE}" \
-  node -e "require('./index.js').startTaskFromLocal(process.argv[1], \
-  process.argv[2], '${PROJECT_NAMESPACE}')" "$@"
+  local auth
+  if [[ -f "$(pwd)/${OAUTH2_TOKEN_JSON}" ]]; then
+    auth="OAUTH2_TOKEN_JSON=$(pwd)/${OAUTH2_TOKEN_JSON}"
+  elif [[ -f "$(pwd)/${SA_KEY_FILE}" ]]; then
+    auth="API_SERVICE_ACCOUNT=$(pwd)/${SA_KEY_FILE}"
+  fi
+  printf '%s\n' "  Setting environment variable of auth: ${auth}"
+  env "${auth}" node -e "require('./index.js').startTaskFromLocal(\
+    process.argv[1], process.argv[2], '${PROJECT_NAMESPACE}')" "$@"
 }
 
 #######################################
 # Start a task by sending out a message to the target Pub/Sub topic.
-# Please note: the task configuration is still expected to be on Cloud. You need
-# to update task config first if you modified any.
+# Please note: the task configuration is still expected to be on Cloud. The task
+# configuration needs to be updated to Firestore for any modification.
 # Globals:
 #   PROJECT_NAMESPACE
 # Arguments:
 #   Task Id, a string
-#   A stringified JSON object of parameters, e.g. '{"partitionDay":"20191001"}'
+#   A JSON string of parameters, e.g. '{"partitionDay":"20191001"}'
 #   Prefix of the topic name
 #######################################
 start_task_remotely() {
   cat <<EOF
 ==========================
 Invoke task based remotely by sending out a message to the target Pub/Sub topic.
-The task configuration is still expected to be on Cloud. You need to update \
-task config first if you modified any.
+The task configuration is still expected to be on Cloud. The task configuration
+needs to be updated to Firestore for any modification.
 EOF
   check_authentication
   quit_if_failed $?
-  check_firestore_existence
   node -e "require('./index.js').startTaskThroughPubSub(process.argv[1], \
 process.argv[2],'${PROJECT_NAMESPACE}')" "$@"
 }
 
 #######################################
-# Create a Cloud Schedular Job which target Pub/Sub. Current Cloud Console does
-# not support attributes. For example:
-#   ./deploy.sh create_cron_task test-export
+# Synchronize folder 'sql' to the target Storage bucket.
+# For compatibility.
 # Globals:
-#   PROJECT_NAMESPACE
+#   None
 # Arguments:
-#   Task name, a string.
-#######################################
-create_cron_task() {
-  check_authentication
-  quit_if_failed $?
-  check_firestore_existence
-  local job_name=${PROJECT_NAMESPACE}-$1
-  create_or_update_cloud_scheduler_for_pubsub \
-    $job_name \
-    "0 6 * * *" \
-    "Australia/Sydney" \
-    ${PROJECT_NAMESPACE}-monitor \
-    '{"today": "${today}","yesterday":"${yesterday}"}' \
-    taskId=$1
-}
-
-#######################################
-# Copy a local folder (default: 'sql/') to the target Storage bucket.
-# Globals:
-#   CONFIG_FILE
-# Arguments:
-#   Folder name, a string.
+#   None
 #######################################
 copy_sql_to_gcs() {
-  cat <<EOF
-==========================
-Copy a local folder (default: 'sql/') to the target Storage bucket. Can be used
-to copy sql files to Cloud Storage.
-EOF
-  local folder=$1
-  folder="${folder:=sql}"
-  local target
-  target="gs://$(get_value_from_json_file "${CONFIG_FILE}" "GCS_BUCKET")"
-  printf '%s\n' "Copy integration data files to target folder in Cloud \
-Storage: ${target}"
-  gsutil -m rsync "${folder}" "${target}/${folder}"
+  copy_to_gcs "sql"
 }
 
 DEFAULT_INSTALL_TASKS=(
@@ -488,9 +514,13 @@ DEFAULT_INSTALL_TASKS=(
   load_config
   check_in_cloud_shell
   prepare_dependencies
-  confirm_namespace confirm_project confirm_region
-  confirm_external_tasks confirm_auth_method
-  check_permissions enable_apis
+  confirm_namespace
+  confirm_project
+  confirm_region
+  confirm_external_tasks
+  confirm_auth_method
+  check_permissions
+  enable_apis
   create_sink
   confirm_monitor_bucket
   save_config

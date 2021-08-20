@@ -75,8 +75,9 @@ class ReportTask extends BaseTask {
     /** @type {StorageFileConfig} */
     const destination = this.config.destination;
     const {bucket, name} = destination;
+    const report = this.getReport();
     try {
-      const content = await this.getReport().getContent(this.parameters);
+      const content = await report.getContent(this.parameters);
       console.log('Got result from report');
       const storageFile = StorageFile.getInstance(
           bucket,
@@ -107,8 +108,15 @@ class ReportTask extends BaseTask {
       }
       return {parameters: this.appendParameter({reportFile: {bucket, name,}})};
     } catch (error) {
-      console.error('Retry for ReportTask error: ', error.toString());
-      throw new RetryableError(error.toString());
+      if (report.isFatalError(error.toString())) {
+        console.error(
+          'Fail immediately without retry for ReportTask error: ',
+          error.toString());
+        throw error;
+      } else {
+        console.error('Retry for ReportTask error: ', error.toString());
+        throw new RetryableError(error.toString());
+      }
     }
   }
 

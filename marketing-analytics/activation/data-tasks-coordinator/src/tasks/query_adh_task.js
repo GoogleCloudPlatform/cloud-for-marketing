@@ -109,7 +109,7 @@ class QueryAdhTask extends BaseTask {
 
     // Request the newly created operation too soon will result in 404 error.
     // TODO(xinxincheng): change to graceful wait once confirm the above issue.
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 60000));
 
     const {done, error} = await this.getAdhInstance_(
         this.config.adhConfig).getQueryStatus(param);

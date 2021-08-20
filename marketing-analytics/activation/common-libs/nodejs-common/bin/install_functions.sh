@@ -43,6 +43,49 @@ DEBUG="false"
 # StackDriver Logging will be used to replace Console.log when this is true.
 IN_GCP="true"
 
+# Bucket Locations. https://cloud.google.com/storage/docs/locations
+# The list has the same locations as Dataset locations except grouping way.
+# https://cloud.google.com/bigquery/docs/locations
+# So put it here for reuse in selection location for bucket and dataset.
+NORTH_AMERICA=(
+  "Montréal (northamerica-northeast1)"
+  "Toronto (northamerica-northeast2)"
+  "Iowa (us-central1)"
+  "South Carolina (us-east1)"
+  "Northern Virginia (us-east4)"
+  "Oregon (us-west1)"
+  "Los Angeles (us-west2)"
+  "Salt Lake City (us-west3)"
+  "Las Vegas (us-west4)"
+)
+SOUTH_AMERICA=(
+  "São Paulo (southamerica-east1)"
+)
+EUROPE=(
+  "Warsaw (europe-central2)"
+  "Finland (europe-north1)"
+  "Belgium (europe-west1)"
+  "London (europe-west2)"
+  "Frankfurt (europe-west3)"
+  "Netherlands (europe-west4)"
+  "Zürich (europe-west6)"
+)
+ASIA=(
+  "Taiwan (asia-east1)"
+  "Hong Kong (asia-east2)"
+  "Tokyo (asia-northeast1)"
+  "Osaka (asia-northeast2)"
+  "Seoul (asia-northeast3)"
+  "Mumbai (asia-south1)"
+  "Delhi (asia-south2)"
+  "Singapore (asia-southeast1)"
+  "Jakarta (asia-southeast2)"
+)
+AUSTRALIA=(
+  "Sydney (australia-southeast1)"
+  "Melbourne (australia-southeast2)"
+)
+
 # The APIs that will be used in this solution which means need to be enabled.
 declare -A GOOGLE_CLOUD_APIS
 GOOGLE_CLOUD_APIS=(
@@ -101,53 +144,6 @@ GOOGLE_SERVICE_ACCOUNT_PERMISSIONS=(
   ["Service Account Admin"]="iam.serviceAccounts.create"
   ["Service Account Key Admin"]="iam.serviceAccounts.create"
 )
-
-# Storage regions.
-STORAGE_REGIONS=(
-  "Multi-regional"
-  "North America"
-  "South America"
-  "Europe"
-  "Asia"
-  "Australia"
-)
-
-# Region location list.
-STORAGE_REGIONS_PARAMETER=(
-  "MULTI_REGIONAL"
-  "NORTH_AMERICA"
-  "SOUTH_AMERICA"
-  "EUROPE"
-  "ASIA"
-  "AUSTRALIA"
-)
-MULTI_REGIONAL=("ASIA" "EU" "US")
-NORTH_AMERICA=(
-  "northamerica-northeast1"
-  "us-central1"
-  "us-east1"
-  "us-east4"
-  "us-west1"
-  "us-west2"
-)
-SOUTH_AMERICA=("southamerica-east1")
-EUROPE=(
-  "europe-north1"
-  "europe-west1"
-  "europe-west2"
-  "europe-west3"
-  "europe-west4"
-  "europe-west6"
-)
-ASIA=(
-  "asia-east1"
-  "asia-east2"
-  "asia-northeast1"
-  "asia-northeast2"
-  "asia-south1"
-  "asia-southeast1"
-)
-AUSTRALIA=("australia-southeast1")
 
 # Preparation functions.
 #######################################
@@ -338,6 +334,42 @@ with a letter and is not longer than 20 characters."
 }
 
 #######################################
+# Confirm the timezone that this instance will use. Usually this will be used
+# to create the Cloud Schedule jobs.
+# Globals:
+#   TIMEZONE
+# Arguments:
+#   None
+#######################################
+confirm_timezone() {
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Confirming the timezone..."
+  local timezoneVariableName defaultValue
+  timezoneVariableName="${1:-"TIMEZONE"}"
+  defaultValue="${!timezoneVariableName}"
+  while :; do
+    printf '%s' "Enter the project timezone [${defaultValue}]: "
+    read -r timezone
+    timezone=${timezone:-$defaultValue}
+    local result=$(node -e "try{
+      Intl.DateTimeFormat(undefined, {timeZone: '${timezone}'});
+      console.log(0);
+    } catch(e){
+       console.log(1);
+    }")
+    if [[ ${result} -eq 0 ]]; then
+      declare -g "${timezoneVariableName}=${timezone}"
+      break
+    else
+      printf '%s\n' "[${timezone}] is not a valid timezone. Check the column \
+'TZ database name' in the List of \
+https://en.wikipedia.org/wiki/List_of_tz_database_time_zones for a valid one."
+    fi
+  done
+  printf '%s\n' "OK. This solution will use the timezone [${timezone}]."
+}
+
+#######################################
 # Confirm the Google Cloud project.
 # Globals:
 #   GCP_PROJECT
@@ -351,7 +383,7 @@ confirm_project() {
   printf '%s\n' "Step ${STEP}: Confirming the Google Cloud project..."
   while :; do
     printf '%s' "Enter the ID for the Google Cloud project where you want this \
-solution installed: [${GCP_PROJECT}]"
+solution installed [${GCP_PROJECT}]: "
     local input result
     read -r input
     input=${input:-"${GCP_PROJECT}"}
@@ -369,42 +401,44 @@ solution installed: [${GCP_PROJECT}]"
 }
 
 #######################################
-# Confirm and set env variable for the region for Cloud Functions.
+# Confirm and set env variable for the region for Cloud Functions, Cloud Storage
+# or BigQuery.
 # Globals:
 #   SOLUTION_NAME
 #   REGION
 # Arguments:
-#   None
+#   Region variable name, default value 'REGION'
 #######################################
 confirm_region() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Select the region to use for deploying \
 ${SOLUTION_NAME}."
   cat <<EOF
-This solution uses Cloud Functions and Cloud Storage. Based on your \
+This solution uses Cloud Functions, Cloud Storage or BigQuery. Based on your \
 requirements, select the region to use for deployment. Because of latency and \
 pricing considerations, we recommend you use the same region for Cloud \
 Functions and Cloud Storage. See \
 https://cloud.google.com/functions/docs/locations/ for more information.
 EOF
-  set_region
+  select_functions_location $*
   printf '%s\n' "OK. ${REGION} will be used for deployment."
 }
 
 #######################################
-# Set the env variable 'REGION' as the deploy target for Cloud Functions.
+# Set the env variable (default 'REGION') as the deploy target for Cloud
+# Functions. It could be used for Cloud Storage or BigQuery as well.
 # Globals:
 #   PROJECT_NAMESPACE
 #   REGION
 # Arguments:
-#   None
+#   Region variable name, default value 'REGION'
 #######################################
-set_region() {
-  local locations_response
-  locations_response=$(gcloud functions regions list)
-  local locations
-  locations=($(printf "${locations_response}"|grep "projects"|sed \
-'s/projects\/.*\/locations\///'))
+select_functions_location() {
+  local regionVariableName defaultValue locations
+  regionVariableName="${1:-"REGION"}"
+  defaultValue="${!regionVariableName}"
+  locations=($(gcloud functions regions list | grep "projects"|sed \
+    's/projects\/.*\/locations\///'))
   local region
   while :; do
     local exist_functions
@@ -413,7 +447,7 @@ set_region() {
     if [[ ${#exist_functions[@]} -gt 0 ]]; then
       local exist_region
       exist_region=$(printf "${exist_functions[0]}" | cut -d, -f2 | uniq)
-      printf '%s\n' "Related Cloud Functions are already installed in region: \
+      printf '%s\n' "Current application has already been installed in region: \
 ${exist_region}."
       local i
       for i in "${!exist_functions[@]}"; do
@@ -424,7 +458,7 @@ in the region '${exist_region}'? [Y/n]: "
       local continue
       read -r continue
       continue=${continue:-"Y"}
-      if [[ ${continue} = "Y" || ${continue} = "y" ]]; then
+      if [[ ${continue} == "Y" || ${continue} == "y" ]]; then
         region=${exist_region}
         break
       else
@@ -432,7 +466,7 @@ in the region '${exist_region}'? [Y/n]: "
 Functions for that region. Do you want to continue? [N/y]: "
         local confirm_delete
         read -r confirm_delete
-        if [[ ${confirm_delete} = "Y" || ${confirm_delete} = "y" ]]; then
+        if [[ ${confirm_delete} == "Y" || ${confirm_delete} == "y" ]]; then
           for i in "${!exist_functions[@]}"; do
             local exist_function
             exist_function=$(printf "${exist_functions[$i]}" | cut -d, -f1)
@@ -455,19 +489,7 @@ Functions:"
       done
     fi
   done
-  REGION="${region}"
-}
-
-#######################################
-# Make sure the global $REGION has a value. This is used before deploy Cloud
-# Functions.
-# Globals:
-#   REGION
-#######################################
-ensure_region() {
-  while [[ -z ${REGION} ]]; do
-    set_region
-  done
+  declare -g "${regionVariableName}=${region}"
 }
 
 #######################################
@@ -494,7 +516,7 @@ confirm_apis() {
   local input=()
   IFS=', ' read -r -a input
 
-  if [[ ${#input[@]} = 0 || ${input[0]} = '*' ]]; then
+  if [[ ${#input[@]} == 0 || ${input[0]} == '*' ]]; then
     for ((i=0; i<${#INTEGRATION_APIS_DESCRIPTION[@]}; i+=1)); do
       input["${i}"]="${i}"
     done
@@ -527,7 +549,6 @@ enable API list."
 need to be enabled."
     fi
   done
-  printf '\n'
 }
 
 #######################################
@@ -549,11 +570,11 @@ confirm_auth_method() {
   printf '%s\n' "Step ${STEP}: Checking authentication method for selected \
 API(s):"
   if [[ ${NEED_AUTHENTICATION} != 'true' ]]; then
-    printf '%s\n\n'  "OK. No authentication is required."
+    printf '%s\n'  "OK. No authentication is required."
     return 0
   fi
-  if [[ ${NEED_OAUTH} = 'true' ]]; then
-    printf '%s\n\n'  "OK. OAuth is required by selected API(s)."
+  if [[ ${NEED_OAUTH} == 'true' ]]; then
+    printf '%s\n'  "OK. OAuth is required by selected API(s)."
     return 0
   fi
   printf '%s\n' "Selected API(s) require authentication. Please select \
@@ -564,7 +585,7 @@ authentication method:"
       break
     fi
   done
-  if [[ ${auth} = 'OAuth' ]]; then
+  if [[ ${auth} == 'OAuth' ]]; then
     NEED_OAUTH="true"
     printf '%s\n' "... OAuth is selected."
   else
@@ -576,7 +597,6 @@ authentication method:"
     done
     printf '%s\n' "... Service Account is selected."
   fi
-  printf '\n'
 }
 
 #######################################
@@ -590,7 +610,7 @@ authentication method:"
 #   0 if all permissions are granted, 1 if not.
 #######################################
 check_permissions() {
-    (( STEP += 1 ))
+  (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Checking current user's access..."
   local role error
   for role in "${!GOOGLE_CLOUD_PERMISSIONS[@]}"; do
@@ -709,133 +729,278 @@ enable_apis() {
 }
 
 #######################################
-# Confirm or create a Cloud Storage bucket with a given location.
+# Set the env variable as the location for BigQuery.
 # Globals:
-#   GCP_PROJECT
+#   None
 # Arguments:
-#   Bucket name
-#   Location
+#   Region variable name.
 #######################################
-confirm_bucket_with_location() {
-  local gcsName=$1
-  local location=$2
-  local defaultValue="${!gcsName}"
+select_dataset_location() {
+  # Dataset locations definition.
+  # See https://cloud.google.com/bigquery/docs/locations
+  local DATASET_REGIONS=(
+    "Multi-regional"
+    "Americas"
+    "Europe"
+    "Asia Pacific"
+  )
+  # Region location list.
+  local DATASET_REGIONS_PARAMETER=(
+    "MULTI_REGIONAL"
+    "AMERICAS"
+    "EUROPE"
+    "ASIA_PACIFIC"
+  )
+  local MULTI_REGIONAL=(
+    "Data centers within member states of the European Union (EU)"
+    "Data centers in the United States (US)"
+  )
+  local AMERICAS=(
+    "${NORTH_AMERICA[@]}"
+    "${SOUTH_AMERICA[@]}"
+  )
+  local ASIA_PACIFIC=(
+    "${ASIA[@]}"
+    "${AUSTRALIA[@]}"
+  )
+  if [[ -z "${1}" ]]; then
+    printf '%s\n' "Error. Need a variable name for dataset location."
+    return 1
+  fi
+  local regionVariableName
+  regionVariableName="${1}"
+  printf '%s\n' "Select the region of the dataset location:"
+  local location locationType
+  select location in "${DATASET_REGIONS[@]}"; do
+    if [[ -n "${location}" ]]; then
+      if [[ "${REPLY}" == 1 ]]; then
+        locationType="MULTI_REGIONAL"
+      else
+        locationType="REGIONAL"
+      fi
+      cat <<EOF
+Selected location[${location}]'s type is ${locationType}. See \
+https://cloud.google.com/bigquery/docs/locations#locations_or_region_types for \
+more information about the locations or region types.
+
+Continue to select the location for the BigQuery dataset. See
+https://cloud.google.com/bigquery/docs/locations#regional-locations for more
+information about locations. Enter your selection, or enter 0 to return to \
+location type selection:
+EOF
+      declare -n options="${DATASET_REGIONS_PARAMETER["$((REPLY-1))"]}"
+      local selectedLocation
+      select selectedLocation in "${options[@]}"; do
+        if [[ -n "${selectedLocation}" ]]; then
+          local location
+          location=$(echo "${selectedLocation}" | cut -d\( -f2 | cut -d\) -f1)
+          echo "Select region: ${location}"
+          break 2
+        elif [[ "${REPLY}" == 0 ]]; then
+          break
+        else
+          printf '%s\n' "Select the location or enter 0 to return to \
+location type selection:"
+        fi
+      done
+    fi
+    printf '%s\n' "Select the BigQuery Dataset region or press Enter to
+refresh the list:"
+  done
+  declare -g "${regionVariableName}=${location}"
+}
+
+#######################################
+# Confirm or create a BigQuery dataset with a given location variable.
+# If the location variable has value, then it will create the dataset with this
+# location; otherwise it will let the user to select the location and set to
+# the variable, then continue to create the dataset.
+# Globals:
+#   DATASET
+#   REGION
+# Arguments:
+#   Dataset variable name, default value 'DATASET'
+#   Location variable name, default value 'REGION'
+#   If the second location var is unset, use this var as default value
+#######################################
+confirm_located_dataset(){
+  local datasetName defaultValue locationName location
+  datasetName="${1:-"DATASET"}"
+  locationName="${2:-"REGION"}"
+  defaultValue="${!datasetName}"
+  # If the location variable has no value, use 'select_x_location' to select it.
+  location=$(printf "${!locationName}" | tr [:upper:] [:lower:])
+  if [[ -z "${location}" && -n "${3}" ]]; then
+    local defaultValueFrom
+    defaultValueFrom="${3}"
+    location="${!defaultValueFrom}"
+  fi
+
   (( STEP += 1 ))
-  printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket in \
-location [${location}] ..."
-  while :; do
-    printf '%s' "Enter the name of your Cloud Storage bucket [${defaultValue}]: "
-    local bucket
-    read -r bucket
-    bucket=${bucket:-$defaultValue}
-    local bucket_str="gs://${bucket}/"
-    local result
-    result="$(gsutil ls -Lb -p "${GCP_PROJECT}" "${bucket_str}" 2>&1 | grep \
-"Location constraint" | cut -d: -f2 |tr -d '[:space:]' |tr [:upper:] [:lower:])"
-    if [[ "${result}" == "${location}" ]]; then
-      printf '%s\n' "OK. The bucket [${bucket}] exists in the location \
-[${location}] ."
-      declare -g "${gcsName}=${bucket}"
-      break
-    elif [[ -n "${result}" ]]; then
-      printf '%s\n' "  The bucket [${bucket}]'s location is [${result}]. \
-Continuing to enter another bucket..."
-      continue
+  if [[ -z "${location}" ]]; then
+    printf '%s\n' "Step ${STEP}: Checking or creating a BigQuery dataset..."
+    if [[ "${locationName}" == "REGION" ]]; then
+      select_functions_location ${locationName}
     else
-      gsutil mb -l "${location}" "${bucket_str}"
+      select_dataset_location ${locationName}
+    fi
+    location="${!locationName}"
+  else
+    printf '%s\n' "Step ${STEP}: Checking or creating a BigQuery dataset in \
+location ["${location}"] ..."
+  fi
+  declare -g "${locationName}=${location}"
+  while :; do
+    printf '%s' "Enter the name of your dataset [${defaultValue}]: "
+    local dataset
+    read -r dataset
+    dataset="${dataset:-$defaultValue}"
+    if [[ -z "${dataset}" ]]; then
+      continue
+    fi
+    local datasetMetadata
+    datasetMetadata="$(bq --format json --dataset_id "${dataset}" show 2>&1)"
+    # Dataset exists.
+    if [[ "${datasetMetadata}" != *"BigQuery error in show operation"* ]]; then
+      local currentLocation
+      currentLocation="$(get_value_from_json_string "${datasetMetadata}" \
+        "location" | tr [:upper:] [:lower:])"
+      if [[ "${currentLocation}" == "${location}" ]]; then
+        printf '%s\n' "OK. The dataset [${dataset}] exists in the location \
+[${location}] ."
+        break
+      fi
+      printf '%s' "  The dataset [${dataset}] exists in the location \
+[${currentLocation}] . "
+      # If the location var is 'REGION', then no other location is allowed.
+      if [[ "${locationName}" == "REGION" ]]; then
+        printf '%s\n' "Continuing to enter another dataset..."
+        continue
+      fi
+      printf '%s' "Do you want to continue with it? [N/y]: "
+      local confirmContinue
+      read -r confirmContinue
+      if [[ ${confirmContinue} == "Y" || ${confirmContinue} == "y" ]]; then
+        # Update the env var if confirmed.
+        declare -g "${locationName}=${currentLocation}"
+        break
+      else
+        printf '%s\n' "Continuing to enter another dataset..."
+        continue
+      fi
+    else # Dataset doesn't exist.
+      bq --location="${location}" mk "${dataset}"
       if [[ $? -gt 0 ]]; then
-        printf '%s\n' "Failed to create the bucket [${bucket}]. Try again."
+        printf '%s\n' "Failed to create the dataset [${dataset}]. Try again."
         continue
       else
-        printf '%s\n' "OK. The bucket [${bucket}] has been created in the \
+        printf '%s\n' "OK. The dataset [${dataset}] has been created in the \
 location [${location}] ."
-        declare -g "${gcsName}=${bucket}"
         break
       fi
     fi
   done
-  printf '\n'
+  declare -g "${datasetName}=${dataset}"
 }
 
 #######################################
-# Confirm or create a Cloud Storage bucket for this project.
+# Deprecated. Use 'confirm_located_dataset' instead.
+# Kept here for compatibility.
+# Confirm or create a BigQuery dataset with a given location.
 # Globals:
-#   SOLUTION_NAME
-#   GCS_BUCKET
-#   GCP_PROJECT
-#   REGION
-#   STORAGE_REGIONS
-#   STORAGE_REGIONS_PARAMETER
+#   DATASET
 # Arguments:
-#   None
+#   Dataset env name
+#   Location value
 #######################################
-create_bucket() {
-  (( STEP += 1 ))
-  printf '%s\n' "Step ${STEP}: Entering a Cloud Storage Bucket name..."
-  cat <<EOF
-  This solution checks for new files added to this bucket. Event-driven \
-architecture like this reduces the interval between scheduled checks and \
-simplifies the solution. See \
-https://cloud.google.com/functions/docs/calling/storage for more information.
+confirm_dataset_with_location() {
+  local datasetName locationName
+  datasetName="${1:-"DATASET"}"
+  locationName="${datasetName}_LOCATION"
+  declare -g "${locationName}=${2}"
+  confirm_located_dataset ${datasetName} ${locationName}
+}
 
-You can use an existing bucket or create a new one here.
-EOF
-#  generate default Bucket name
-  local default_bucket_name
-  default_bucket_name=$(get_default_bucket_name "${GCP_PROJECT}")
-  GCS_BUCKET=${GCS_BUCKET:-$default_bucket_name}
-# available buckets in current project
-  local all_buckets
-  all_buckets="$(gsutil ls)";
-  while :; do
-    printf '%s' "Enter the name of your existing Cloud Storage bucket \
-[${GCS_BUCKET}]: "
-    local bucket
-    read -r bucket
-    bucket=${bucket:-$GCS_BUCKET}
-    local bucket_str="gs://${bucket}/"
-    if [[ ${all_buckets} == *"${bucket_str}"* ]]; then
-      printf '%s\n' "OK. The bucket [${bucket}] exists in your current \
-project, [${GCP_PROJECT}]."
-      GCS_BUCKET=${bucket}
-      break
-    fi
-    printf '%s\n' "  Checking the existence of Cloud Storage bucket \
-[$bucket]..."
-    local result
-    result="$(gsutil ls -p "${GCP_PROJECT}" "${bucket_str}" 2>&1)"
-    if [[ ${result} =~ .*(BucketNotFoundException: 404 ).* ]]; then
-      printf '%s\n' "  [$bucket] doesn't exist. Continuing to create the \
-bucket..."
-      if [[ -n ${REGION} ]]; then
-        printf '%s' "Would you like to create the Cloud Storage bucket \
-[$bucket] at '${REGION}'? [Y/n]: "
-        local user_region
-        read -r user_region
-        user_region=${user_region:-"Y"}
-        if [[ ${user_region} = "Y" || ${user_region} = "y" ]]; then
-          printf '%s\n' "  Attempting to create the bucket [${bucket}] at \
-${REGION}..."
-          gsutil mb -c REGIONAL -l "${REGION}" "${bucket_str}"
-          if [[ $? -gt 0 ]]; then
-            printf '%s\n' "Failed to create the bucket [${bucket}]. Try again."
-            continue
-          else
-            GCS_BUCKET=${bucket}
-            break
-          fi
-        fi
+#######################################
+# Get the metadata of the given Storage bucket. It will return one of the
+# following information in a JSON string:
+# 1. error.code 404 Not existent
+# 2. error.code 403 No access for current user.
+# 3. metadata, including 'projectNumber' and 'location',
+# Globals:
+#   None
+# Arguments:
+#   Bucket name
+# Returns:
+#   Bucket location
+#######################################
+get_bucket_metadata() {
+  local accessToken request bucketMetadata
+  accessToken=$(gcloud auth print-access-token)
+  request=(
+    -s
+    "https://storage.googleapis.com/storage/v1/b/$1"
+    -H "Accept: application/json"
+    -H "Authorization: Bearer ${accessToken}"
+  )
+  bucketMetadata=$(curl "${request[@]}")
+  printf '%s' "${bucketMetadata}"
+}
+
+#######################################
+# Set the env variable as the location for Cloud Storage bucket.
+# Globals:
+#   None
+# Arguments:
+#   Region variable name.
+#######################################
+select_bucket_location() {
+  # Storage regions.
+  local STORAGE_REGIONS=(
+    "Multi-regional"
+    "Dual-regional"
+    "North America"
+    "South America"
+    "Europe"
+    "Asia"
+    "Australia"
+  )
+  # Region location list.
+  local STORAGE_REGIONS_PARAMETER=(
+    "MULTI_REGIONAL"
+    "DUAL_REGIONAL"
+    "NORTH_AMERICA"
+    "SOUTH_AMERICA"
+    "EUROPE"
+    "ASIA"
+    "AUSTRALIA"
+  )
+  local MULTI_REGIONAL=(
+    "Data centers in Asia (ASIA)"
+    "Data centers within member states of the European Union (EU)"
+    "Data centers in the United States (US)"
+  )
+  local DUAL_REGIONAL=(
+    "ASIA-NORTHEAST1 and ASIA-NORTHEAST2 (ASIA1)"
+    "EUROPE-NORTH1 and EUROPE-WEST4 (EUR4)"
+    "US-CENTRAL1 and US-EAST1 (NAM4)"
+  )
+  if [[ -z "${1}" ]]; then
+    printf '%s\n' "Error. Need a variable name for bucket location."
+    return 1
+  fi
+  local regionVariableName
+  regionVariableName="${1}"
+  printf '%s\n' "Select the region for Cloud Storage:"
+  local region class
+  select region in "${STORAGE_REGIONS[@]}"; do
+    if [[ -n "${region}" ]]; then
+      if [[ "${REPLY}" == 1 ]]; then
+        class="MULTI_REGIONAL"
+      else
+        class="REGIONAL"
       fi
-      printf '%s\n' "Select the region for Cloud Storage:"
-      local region class
-      select region in "${STORAGE_REGIONS[@]}"; do
-        if [[ -n "${region}" ]]; then
-          if [[ $REPLY = 1 ]]; then
-            class="MULTI_REGIONAL"
-          else
-            class="REGIONAL"
-          fi
-          cat <<EOF
+      cat <<EOF
 Selected region [${region}] class is ${class}. See \
 https://cloud.google.com/storage/docs/storage-classes for more information \
 about the storage classes that Cloud Storage offers.
@@ -845,43 +1010,152 @@ https://cloud.google.com/storage/docs/locations for more information about \
 bucket locations. Enter your selection, or enter 0 to return to region \
 selection:
 EOF
-          declare -n options="${STORAGE_REGIONS_PARAMETER["$((REPLY-1))"]}"
+      declare -n options="${STORAGE_REGIONS_PARAMETER["$((REPLY-1))"]}"
+      local selectedLocation
+      select selectedLocation in "${options[@]}"; do
+        if [[ -n "${selectedLocation}" ]]; then
           local location
-          select location in "${options[@]}"; do
-            if [[ -n "${location}" ]]; then
-              printf '%s\n' "  Attempting to create the bucket [${bucket}] at \
-${location}..."
-              gsutil mb -c "${class}" -l "${location}" "${bucket_str}"
-              if [[ $? -gt 0 ]]; then
-                printf '%s\n' "Failed to create bucket [${bucket}]. Try again."
-                break 2
-              else
-                GCS_BUCKET=${bucket}
-                break 3
-              fi
-            elif [[ ${REPLY} = 0 ]]; then
-              break
-            else
-              printf '%s\n' "Select the location or enter 0 to return to \
+          location=$(echo "${selectedLocation}" | cut -d\( -f2 | cut -d\) -f1)
+          echo "Select region: ${location}"
+          break 3
+        elif [[ "${REPLY}" == 0 ]]; then
+          break
+        else
+          printf '%s\n' "Select the location or enter 0 to return to \
 region selection:"
-            fi
-          done
         fi
-        printf '%s\n' "Select the Cloud Storage region or press Enter to \
-refresh the list:"
       done
-    elif [[ ${result} =~ .*(AccessDeniedException: 403 ).* ]]; then
-      printf '%s\n' "  The bucket [${bucket}] exists, and the current account \
-cannot access it."
-      GCS_BUCKET="${default_bucket_name}"
-    else
-      printf '%s\n' "  The bucket [${bucket}] exists in another project, so it \
-can't be the trigger source here."
-      GCS_BUCKET="${default_bucket_name}"
     fi
-    printf '%s\n' "Please try another bucket name."
+    printf '%s\n' "Select the Cloud Storage region or press Enter to \
+refresh the list:"
   done
-  printf '%s\n\n' "OK. ${SOLUTION_NAME} will monitor the bucket [${GCS_BUCKET}]."
+  declare -g "${regionVariableName}=${location}"
+}
+
+#######################################
+# Confirm or create a Cloud Storage bucket with a given location.
+# If the location variable has value, then it will create the bucket with this
+# location; otherwise it will let the user to select the location and set to
+# the variable, then continue to create the bucket.
+# Globals:
+#   GCP_PROJECT
+# Arguments:
+#   Bucket name var, default value 'GCS_BUCKET'
+#   Location var name, default value 'REGION'
+#   If the second location var is unset, use this var as default value
+#######################################
+confirm_located_bucket() {
+  local gcsName defaultValue defaultBucketName locationName location
+  gcsName="${1:-"GCS_BUCKET"}"
+  locationName="${2:-"REGION"}"
+  defaultValue="${!gcsName}"
+  defaultBucketName=$(get_default_bucket_name "${GCP_PROJECT}")
+  defaultValue="${defaultValue:-${defaultBucketName}}"
+  # If the location variable has no value, use 'set_region' to select it.
+  location=$(printf "${!locationName}" | tr [:upper:] [:lower:])
+  if [[ -z "${location}" && -n "${3}" ]]; then
+    local defaultValueFrom
+    defaultValueFrom="${3}"
+    location="${!defaultValueFrom}"
+  fi
+
+  (( STEP += 1 ))
+  if [[ -z "${location}" ]]; then
+    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket..."
+    if [[ "${locationName}" == "REGION" ]]; then
+      select_functions_location ${locationName}
+    else
+      select_bucket_location ${locationName}
+    fi
+    location="${!locationName}"
+  else
+    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket in \
+location [${location}] ..."
+  fi
+  declare -g "${locationName}=${location}"
+  while :; do
+    printf '%s' "Enter the name of your Cloud Storage bucket [${defaultValue}]: "
+    local bucket
+    read -r bucket
+    bucket="${bucket:-$defaultValue}"
+    if [[ -z "${bucket}" ]]; then
+      continue
+    fi
+    local bucketMetadata projectNumber
+    bucketMetadata="$(get_bucket_metadata "${bucket}")"
+    projectNumber="$(get_value_from_json_string "${bucketMetadata}" "projectNumber")"
+    # No project number means it doesn't exist or no access to it.
+    if [[ -z "${projectNumber}" ]]; then
+      local errorCode
+      errorCode=$(get_value_from_json_string "${bucketMetadata}" "error.code")
+      if [[ ${errorCode}  == '404' ]]; then
+        gsutil mb -l "${location}" "gs://${bucket}/"
+        if [[ $? -gt 0 ]]; then
+          printf '%s\n' "Failed to create the bucket [${bucket}]. Try again."
+          continue
+        else
+          printf '%s\n' "OK. The bucket [${bucket}] has been created in the \
+location [${location}] ."
+          break
+        fi
+      fi
+      local errorMessage
+      errorMessage="$(get_value_from_json_string "${bucketMetadata}" "error.message")"
+      printf '%s\n' "  ${errorMessage} Continuing to enter another bucket..."
+      continue
+    else
+      local currentLocation currentProjectNumber
+      currentLocation="$(get_value_from_json_string "${bucketMetadata}" \
+        "location" | tr [:upper:] [:lower:])"
+      currentProjectNumber="$(get_project_number)"
+      if [[ "${projectNumber}" != "${currentProjectNumber}" ]]; then
+        printf '%s\n' "  The bucket [${bucket}] belongs to another Cloud \
+Project. Continuing to enter another bucket..."
+        continue
+      fi
+      if [[ "${currentLocation}" == "${location}" ]]; then
+        printf '%s\n' "OK. The bucket [${bucket}] exists in the location \
+[${location}] ."
+        break
+      fi
+      printf '%s' "  The bucket [${bucket}] exists in the location \
+[${currentLocation}] . "
+      if [[ "${locationName}" == "REGION" ]]; then
+        printf '%s\n' "Continuing to enter another bucket..."
+        continue
+      fi
+      printf '%s' "Do you want to continue with it? [N/y]: "
+      local confirmContinue
+      read -r confirmContinue
+      if [[ ${confirmContinue} == "Y" || ${confirmContinue} == "y" ]]; then
+        # Update the env var if confirmed.
+        declare -g "${locationName}=${currentLocation}"
+        break
+      else
+        printf '%s\n' "Continuing to enter another bucket..."
+        continue
+      fi
+    fi
+  done
+  declare -g "${gcsName}=${bucket}"
+}
+
+#######################################
+# Deprecated. Use 'confirm_located_bucket' instead.
+# Kept here for compatibility.
+# Confirm or create a Cloud Storage bucket with a given location.
+# Globals:
+#   GCS_BUCKET
+# Arguments:
+#   Bucket env name
+#   Location value
+#######################################
+confirm_bucket_with_location() {
+  local gcsName locationName
+  gcsName="${1:-"GCS_BUCKET"}"
+  locationName="${gcsName}_LOCATION"
+  declare -g "${locationName}=${2}"
+  confirm_located_bucket ${gcsName} ${locationName}
 }
 
 #######################################
@@ -915,7 +1189,7 @@ EOF
     folder="${folder}/"
   fi
   declare -g "${folderName}=${folder}"
-  printf '%s\n\n' "OK. Continue with monitored folder [${folder}]."
+  printf '%s\n' "OK. Continue with monitored folder [${folder}]."
 }
 
 #######################################
@@ -942,9 +1216,9 @@ save_config() {
   printf '%s' "  to '${CONFIG_FILE}'. Confirm? [Y/n]: "
   local input
   read -r input
-  if [[ -z ${input} || ${input} = 'y' || ${input} = 'Y' ]];then
+  if [[ -z ${input} || ${input} == 'y' || ${input} == 'Y' ]];then
     printf '%s' "${json_str}" > "${CONFIG_FILE}"
-    printf '%s\n\n' "OK. Saved to ${CONFIG_FILE}."
+    printf '%s\n' "OK. Saved to ${CONFIG_FILE}."
     return 0
   else
     printf '%s\n' "User cancelled.";
@@ -964,10 +1238,10 @@ save_config() {
 #   None
 #######################################
 do_authentication(){
-  if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
+  if [[ ${NEED_SERVICE_ACCOUNT} == "true" ]]; then
     download_service_account_key
   fi
-  if [[ ${NEED_OAUTH} = 'true' ]]; then
+  if [[ ${NEED_OAUTH} == "true" ]]; then
     do_oauth
   fi
 }
@@ -1009,7 +1283,7 @@ Would you like to create a new key to overwrite it? [N/y]: "
   local input
   read -r input
   input=${input:-"${default_value}"}
-  if [[ ${input} = 'y' || ${input} = 'Y' ]];then
+  if [[ ${input} == 'y' || ${input} == 'Y' ]];then
     printf '%s\n' "Downloading a new key file for [${email}]..."
     gcloud iam service-accounts keys create "${SA_KEY_FILE}" --iam-account \
 "${email}"
@@ -1072,7 +1346,7 @@ Would you like to create a new service account? [N/y]: "
     read -r input
     input=${input:-"${SA_NAME}"}
     IFS='@' read -a sa_elements <<< "${input}"
-    if [[ ${#sa_elements[@]} = 1 ]]; then
+    if [[ ${#sa_elements[@]} == 1 ]]; then
       echo "  Append default suffix to service account name and get: ${email}"
       sa="${input}"
       email="${sa}@${suffix}"
@@ -1156,7 +1430,7 @@ with scopes:"
     local input
     read -r input
     input=${input:-"${default_value}"}
-    if [[ ${input} = 'n' || ${input} = 'N' ]];then
+    if [[ ${input} == 'n' || ${input} == 'N' ]];then
       printf '%s\n' "OK. Confirmed to use current OAuth token."
       return 0
     fi
@@ -1217,7 +1491,7 @@ EOF
 -d "client_secret=${client_secret}" "${OAUTH_BASE_URL}token")
     auth_error=$(node -e "console.log(!!JSON.parse(process.argv[1]).error)" \
 "${auth_response}")
-    if [[ ${auth_error} = "true" ]]; then
+    if [[ ${auth_error} == "true" ]]; then
       printf '%s\n' "Error happened in redeem the authentication code: \
 ${auth_response}"
       continue
@@ -1246,7 +1520,6 @@ EOF
 #   Array of flags to deploy the Cloud Functions.
 #######################################
 set_cloud_functions_default_settings() {
-  ensure_region
   local -n default_cf_flag=$1
   default_cf_flag+=(--region="${REGION}")
   default_cf_flag+=(--no-allow-unauthenticated)
@@ -1297,16 +1570,27 @@ create_or_update_cloud_scheduler_for_pubsub(){
   scheduler_flag+=(--message-body="$5")
   local exist_job
   exist_job=($(gcloud scheduler jobs list --filter="name~${1}" \
---format="csv[no-heading](name,REGION)"))
-  local action
+--format="value(state)"))
+  local action needPause
   if [[ ${#exist_job[@]} -gt 0 ]]; then
     action="update"
     scheduler_flag+=(--update-attributes=$6)
+    if [[ "${exist_job[0]}" == "PAUSED" ]]; then
+      gcloud scheduler jobs resume "${1}"
+      if [[ $? -gt 0 ]]; then
+        printf '%s\n' "Failed to resume paused Cloud Scheduler job [${1}]."
+        return 1
+      fi
+      needPause="true"
+    fi
   else
     action="create"
     scheduler_flag+=(--attributes=$6)
   fi
-  gcloud scheduler jobs ${action} pubsub $1 "${scheduler_flag[@]}"
+  gcloud scheduler jobs ${action} pubsub "$1" "${scheduler_flag[@]}"
+  if [[ "${needPause}" == "true" ]]; then
+      gcloud scheduler jobs pause "${1}"
+  fi
 }
 
 #######################################
@@ -1404,6 +1688,57 @@ run_default_function() {
 # Utilities functions
 
 #######################################
+# Copy a local file or synchronize a local folder to the target Storage bucket.
+# Globals:
+#   CONFIG_FILE
+# Arguments:
+#   File or folder name, a string.
+#   Cloud Storage link, default value is 'gs://${GCS_BUCKET}'
+#######################################
+copy_to_gcs() {
+  local source bucket target
+  source="${1}"
+  bucket="$(get_value_from_json_file "${CONFIG_FILE}" "GCS_BUCKET")"
+  target="${2-"gs://${bucket}"}"
+  if [[ -d "${source}" ]]; then
+    printf '%s\n' "  Synchronizing local folder [${source}] to target \
+[${target}]..."
+    gsutil -m rsync "${source}" "${target}/${source}"
+  else
+    printf '%s\n' "  Copying local file [${source}] to target [${target}]..."
+    gsutil cp "${source}" "${target}"
+  fi
+}
+
+#######################################
+# Get a value from a given JSON string.
+# Globals:
+#   None
+# Arguments:
+#   JSON string, 'dot' is the delimiter of embedded property names.
+#   Property name.
+# Returns:
+#   The value.
+#######################################
+get_value_from_json_string() {
+  local script
+  read -d '' script << EOF
+const properties = process.argv[2].split('.');
+const currentLocation = properties.reduce((previous, currentProperty) => {
+  return previous[currentProperty];
+}, JSON.parse(process.argv[1]));
+let output;
+if (typeof currentLocation !== 'object'){
+  output = currentLocation;
+} else{
+  output = JSON.stringify(currentLocation);
+}
+console.log(output ? output : '');
+EOF
+  node -e "${script}" "$@"
+}
+
+#######################################
 # Load a value from a given JSON file.
 # Globals:
 #   None
@@ -1414,22 +1749,13 @@ run_default_function() {
 #   The value.
 #######################################
 get_value_from_json_file() {
-  if [[ -s $1 ]];then
-    local script
-    read -d '' script << EOF
-const properties = process.argv[2].split('.');
-const result = properties.reduce((previous, currentProperty) => {
-  return previous[currentProperty];
-}, require(process.argv[1]));
-let output;
-if (typeof result !== 'object'){
-  output = result;
-} else{
-  output = JSON.stringify(result);
-}
-console.log(output);
-EOF
-    node -e "${script}" "$@"
+  if [[ -s "${1}" ]];then
+    local json
+    json="$(cat "${1}")"
+    printf "$(get_value_from_json_string "${json}" "${2}")"
+  else
+    printf '%s\n' "Failed to find file ${1} ."
+    return 1
   fi
 }
 
@@ -1445,6 +1771,22 @@ EOF
 #######################################
 get_default_bucket_name() {
   printf '%s' "${PROJECT_NAMESPACE}-$(printf '%s' "$1" | cut -d : -f 2)"
+}
+
+#######################################
+# Get the project number of the given project.
+# Globals:
+#   GCP_PROJECT
+# Arguments:
+#   Project Id, default environment GCP_PROJECT
+# Returns:
+#   The project number.
+#######################################
+get_project_number() {
+  local projectId
+  projectId=${1-"${GCP_PROJECT}"}
+  printf '%s' "$(gcloud projects describe "${projectId}" \
+    --format='value(projectNumber)')"
 }
 
 #######################################

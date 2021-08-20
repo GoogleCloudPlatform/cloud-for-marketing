@@ -112,14 +112,15 @@ const sendDataInternal = async (analytics, message, messageId, config) => {
   try {
     const {bucket, file} = JSON.parse(message);
     if (bucket) {  // Data is a GCS file.
-      const file = await prepareFile(bucket, file, dataImportHeader);
-      uploadData = file.createReadStream();
+      const gcsFile = await prepareFile(bucket, file, dataImportHeader);
+      uploadData = gcsFile.createReadStream();
     } else {
       console.error('Could find bucket in message', message);
       return false;
     }
   } catch (error) {
-    console.log(`This is not a JSON string. GA Data Import's data not on GCS.`);
+    console.log('Incoming message: ', message);
+    console.error(error);
     if (dataImportHeader) {
       uploadData = dataImportHeader + '\n';
     }

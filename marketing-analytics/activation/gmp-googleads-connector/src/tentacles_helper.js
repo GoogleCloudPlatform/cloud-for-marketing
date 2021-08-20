@@ -165,11 +165,12 @@ const initPubsub = (topicPrefix, apiList) => initPubsubImpl(topicPrefix,
  * Storage (GCS) file to external API endpoints. The filename convention will
  * be followed.
  *
+ * @param {string} namespace Prefix of resources.
  * @param {string} file File name.
  * @param {string|undefined=} bucket Bucket name for a GCS file.
  * @return {!Promise<undefined>}
  */
-const localApiRequester = async (file, bucket = undefined) => {
+const localApiRequester = async (namespace, file, bucket = undefined) => {
   const fs = require('fs');
   const attributes = getAttributes(file);
   console.log(`Test file [${file}] has attributes:`, attributes);
@@ -203,7 +204,7 @@ const localApiRequester = async (file, bucket = undefined) => {
     data: Buffer.from(messageData).toString('base64'),
   };
   const callback = () => console.log(`After send out requests from ${file}.`);
-  /** @const {Tentacles} */ const tentacles = await guessTentacles();
+  /** @const {Tentacles} */ const tentacles = await guessTentacles(namespace);
   return tentacles.getApiRequester()(message, context, callback);
 };
 

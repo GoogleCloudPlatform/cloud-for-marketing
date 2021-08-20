@@ -90,6 +90,14 @@ class Report {
   }
 
   /**
+   * Checks the given error message is a fatal error that should fail
+   *  immediately without retry.
+   * @param {string} errorMessage
+   * @return {bool} Is a fatal error or not.
+   */
+  isFatalError(errorMessage) { return false; }
+
+  /**
    * Starts to generate a report.
    * @param {Object<string,string>=} parameters Parameters of this instance.
    *     For example, 'config' defines the account id, report id, but to run a

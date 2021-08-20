@@ -30,12 +30,25 @@ const {
 const {Report} = require('./base_report.js');
 const {getSchemaFields} = require('./googleads_report_helper.js');
 
+/**
+ * Error messages that the task should fail directly without retry process.
+ * @type {Array<string>}
+ */
+const FatalErrors = ['PERMISSION_DENIED: The caller does not have permission'];
+
 /** Google Ads Report class. */
 class GoogleAdsReport extends Report {
 
   constructor(config, ads = new GoogleAds(config.developerToken)) {
     super(config);
     this.ads = ads;
+  }
+
+  /** @override */
+  isFatalError(errorMessage) {
+    return FatalErrors.some(
+        (fatalErrorMessage) => errorMessage.indexOf(fatalErrorMessage) > -1
+    );
   }
 
   /** @override */

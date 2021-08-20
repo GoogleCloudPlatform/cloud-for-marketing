@@ -54,7 +54,7 @@ const GOOGLE_ADS_MESSAGES = {
     {name: 'topic', type: 'STRING',},
     {name: 'type', type: 'STRING',},
   ],
-  //https://developers.google.com/google-ads/api/reference/rpc/v7/AdGroupAdAssetPolicySummary
+  // https://developers.google.com/google-ads/api/reference/rpc/v7/AdGroupAdAssetPolicySummary
   AdGroupAdAssetPolicySummary: [
     {
       name: 'policy_topic_entries',
@@ -67,6 +67,25 @@ const GOOGLE_ADS_MESSAGES = {
     },
     {name: 'review_status', type: 'STRING',},
     {name: 'approval_status', type: 'STRING',},
+  ],
+  // https://developers.google.com/google-ads/api/reference/rpc/v7/ChangeEvent.ChangedResource
+  ChangedResource: [
+    {
+      name: 'campaign',
+      type: 'RECORD',
+      fields: [
+        {
+          name: 'target_cpa',
+          type: 'RECORD',
+          fields: [{name: 'target_cpa_micros', type: 'INT64'}],
+        },
+      ],
+    },
+    {
+      name: 'campaign_budget',
+      type: 'RECORD',
+      fields: [{name: 'amount_micros', type: 'INT64'}],
+    },
   ],
 };
 

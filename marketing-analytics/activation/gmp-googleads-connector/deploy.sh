@@ -34,7 +34,7 @@ PROJECT_NAMESPACE="${SOLUTION_NAME}"
 CONFIG_FILE="./config.json"
 
 # Parameter name used by functions to load and save config.
-CONFIG_ITEMS=("PROJECT_NAMESPACE" "GCS_BUCKET" "OUTBOUND")
+CONFIG_ITEMS=("PROJECT_NAMESPACE" "REGION" "GCS_BUCKET" "OUTBOUND")
 
 # The Google Cloud APIs that will be used in Tentacles.
 GOOGLE_CLOUD_APIS["firestore.googleapis.com"]="Cloud Firestore API"
@@ -237,8 +237,7 @@ deploy_tentacles() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Starting to deploy Tentacles..."
   printf '%s\n' "Tentacles is composed of three Cloud Functions."
-  ensure_region
-  printf '%s\n' "OK. Cloud Functions will be deployed to ${REGION}."
+  printf '%s\n' "The Cloud Functions will be deployed to ${REGION}."
 
   deploy_cloud_functions_initiator
   deploy_cloud_functions_transporter
@@ -258,9 +257,9 @@ post_installation() {
   printf '%s\n' "Step ${STEP}: Post-installation checks..."
   check_firestore_existence
   printf '%s\n' "OK. Firestore/Datastore is ready."
-  if [[ ${NEED_AUTHENTICATION} = 'true' ]]; then
+  if [[ ${NEED_AUTHENTICATION} == 'true' ]]; then
     local account="YOUR_OAUTH_EMAIL"
-    if [[ ${NEED_SERVICE_ACCOUNT} = 'true' ]]; then
+    if [[ ${NEED_SERVICE_ACCOUNT} == 'true' ]]; then
       account=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
     fi
     cat <<EOF
@@ -312,24 +311,21 @@ EOF
 #   Optional string for the configuration file path and name.
 #######################################
 update_api_config(){
-  printf '%s\n' "=========================="
-  printf '%s\n' "Update API configurations in Firestore/Datastore."
+  check_firestore_existence
   check_authentication
   quit_if_failed $?
-  check_firestore_existence
-
-  local api_config
-  if [[ -n $1 ]]; then
-    api_config=$1
-  else
-    local default_config_file='./config_api.json'
-    printf '%s' "Enter the configuration file [${default_config_file}]: "
-    read -r api_config
-    api_config=${api_config:-"${default_config_file}"}
+  local configFile
+  configFile="${1}"
+  while [[ ! -s "${configFile}" ]]; do
+    local defaultConfigFile='./config_api.json'
+    printf '%s' "Enter the configuration file [${defaultConfigFile}]: "
+    read -r configFile
+    configFile=${configFile:-"${defaultConfigFile}"}
     printf '\n'
-  fi
+  done
+  printf '%s\n' "Updating API integration configurations in into Firestore..."
   node -e "require('./index.js').uploadApiConfig(require(process.argv[1]), \
-'${PROJECT_NAMESPACE}')" "${api_config}"
+'${PROJECT_NAMESPACE}')" "${configFile}"
 }
 
 #######################################
@@ -346,12 +342,12 @@ trigger_transport(){
   quit_if_failed $?
 
   local api
-  if [[ -n $1 ]]; then
-    api=$1
+  if [[ -n "${1}" ]]; then
+    api="${1}"
   else
     printf '%s' "Enter the API to trigger: "
     read -r api
-    api=${api}
+    api="${api}"
     printf '\n'
   fi
   node -e "require('./index.js').triggerTransport('${api}', \
@@ -360,8 +356,8 @@ trigger_transport(){
 
 #######################################
 # Invoke the Cloud Function 'API requester' directly based on a local file.
-# Note: The API configuration is still expected to be on Google Cloud. You need
-# to update the API configuration first if you made any modifications.
+# Note: The API configuration is still expected to be on Google Cloud. The API
+# configuration needs to be updated to Firestore for any modification.
 # Globals:
 #   SA_KEY_FILE
 # Arguments:
@@ -371,47 +367,54 @@ run_test_locally(){
   printf '%s\n' "=========================="
   cat <<EOF
 Invoke the Cloud Function 'API requester' directly based on a local file.
-Note: The API configuration is still expected to be on Google Cloud. You need \
-to update the API configuration first if you made any modifications.
+Note: The API configuration is still expected to be on Google Cloud. The API
+configuration needs to be updated to Firestore for any modification.
 EOF
-  if [[ -f "${SA_KEY_FILE}" ]]; then
-    API_SERVICE_ACCOUNT="$(pwd)/${SA_KEY_FILE}"
-    printf '%s\n' "Use environment variable \
-API_SERVICE_ACCOUNT=${API_SERVICE_ACCOUNT}"
+  check_authentication
+  quit_if_failed $?
+  check_firestore_existence
+  local auth
+  if [[ -f "$(pwd)/${OAUTH2_TOKEN_JSON}" ]]; then
+    auth="OAUTH2_TOKEN_JSON=$(pwd)/${OAUTH2_TOKEN_JSON}"
+  elif [[ -f "$(pwd)/${SA_KEY_FILE}" ]]; then
+    auth="API_SERVICE_ACCOUNT=$(pwd)/${SA_KEY_FILE}"
   fi
-  DEBUG=true CODE_LOCATION='' API_SERVICE_ACCOUNT="${API_SERVICE_ACCOUNT}" \
-node -e "require('./index.js').localApiRequester(process.argv[1])" "$@"
+  printf '%s\n' "  Setting environment variable of auth: ${auth}"
+  env "${auth}" node -e "require('./index.js').localApiRequester(\
+    '${PROJECT_NAMESPACE}', process.argv[1])" "$@"
 }
 
 #######################################
 # Start process by copying a file to target folder.
-# Note: The API configuration is still expected to be on Google Cloud. You need
-# to update the API configuration first if you made any modifications.
+# Note: The API configuration is still expected to be on Google Cloud. The API
+# configuration needs to be updated to Firestore for any modification.
 # Globals:
 #   CONFIG_FILE
 #   OUTBOUND
 # Arguments:
 #   File to be sent out, a path.
 #######################################
-copy_file_to_gcs(){
+copy_file_to_start(){
   printf '%s\n' "=========================="
-  local bucket
+  cat <<EOF
+Copy local file(s) to Cloud Storage to start process.
+Note: The API configuration is still expected to be on Google Cloud. The API
+configuration needs to be updated to Firestore for any modification.
+EOF
+  local source bucket folder target
+  # gsutil support wildcard name. Use '*' to replace '[' here.
+  source="$(printf '%s' "${1}" | sed -r 's/\[/\*/g' )"
   bucket=$(get_value_from_json_file "${CONFIG_FILE}" "GCS_BUCKET")
-  local folder
-  folder=$(get_value_from_json_file "${CONFIG_FILE}" "OUTBOUND")
-  local target="gs://${bucket}/${folder}"
-  echo "Copy local file to target folder in Cloud Storage to start process."
-  printf '%s\n' "  Source: $1"
+  folder=$(get_value_from_json_file "${CONFIG_FILE}" "OUTBOUND" | sed -r 's/\/$//')
+  target="gs://${bucket}/${folder}"
+  printf '%s\n' "  Source: ${1}"
   printf '%s\n' "  Target: ${target}"
   printf '%s' "Confirm? [Y/n]: "
   local input
   read -n1 -s input
   printf '%s\n' "${input}"
-  if [[ -z ${input} || ${input} = 'y' || ${input} = 'Y' ]];then
-    # gsutil support wildcard name. Use '*' to replace '[' here.
-    local source
-    source="$(printf '%s' "$1" | sed -r 's/\[/\*/g' )"
-    gsutil cp ''"${source}"'' "${target}"
+  if [[ -z ${input} || ${input} == 'y' || ${input} == 'Y' ]]; then
+    copy_to_gcs "${source}" "${target}"
   else
     printf '%s\n' "User cancelled."
   fi
@@ -422,10 +425,14 @@ DEFAULT_INSTALL_TASKS=(
   load_config
   check_in_cloud_shell
   prepare_dependencies
-  confirm_namespace confirm_project confirm_region
-  confirm_integration_api confirm_auth_method
-  check_permissions enable_apis
-  create_bucket
+  confirm_namespace
+  confirm_project
+  confirm_region
+  confirm_integration_api
+  confirm_auth_method
+  check_permissions
+  enable_apis
+  "confirm_located_bucket GCS_BUCKET BUCKET_LOC REGION"
   "confirm_folder OUTBOUND"
   save_config
   create_subscriptions

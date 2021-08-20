@@ -79,7 +79,9 @@ class DataTransferTask extends BaseTask {
     const dataTransferConfigName = this.getDataTransferConfigName_();
     try {
       const [runsRes] = await client.startManualTransferRuns({
-        requestedRunTime: {},
+        requestedRunTime: {
+          seconds: Math.floor(Date.now() / 1000),
+        },
         parent: dataTransferConfigName,
       });
       const transferRuns = runsRes.runs;

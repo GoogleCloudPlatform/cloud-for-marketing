@@ -19,9 +19,13 @@
 
 'use strict';
 
+const fs = require('fs');
+const {join} = require('path');
 const {
+  api: {googleads: {GoogleAds}},
   firestore: {DataSource, FirestoreAccessBase},
 } = require('@google-cloud/nodejs-common');
+const {getSchemaFields} = require('./tasks/report/googleads_report_helper.js');
 const {TaskConfigDao} = require('./task_config/task_config_dao.js');
 const {guessSentinel} = require('./sentinel.js');
 
@@ -66,6 +70,126 @@ exports.uploadTaskConfig = (taskConfig, parameters = {},
     return Object.keys(tasks).reduce(reduceFn, Promise.resolve([]));
   });
 };
+/**
+ * Checks whether Sentinel can generate BigQuery schema for the report data
+ * based on the Google Ads report definition. There could be 3 kinds of error:
+ * 1. Non-existent fields. (typo)
+ * 2. Embedded fields is not exposed as a GoogleAdsField. In this case, those
+ *    fields are not supported in the report definition. Only its ancestor that
+ *    is a GoogleAdsField can be in the report definition. However, the report
+ *    data would be a JSON string with structure. To support the structure in
+ *    BigQuery, an explict definition of the JSON object with required
+ *    properties need be put in the file 'googleads_report_helper.js'.
+ * 3. Used those 'ancestor' field in previous case but without the structure
+ *    definition in 'googleads_report_helper.js'.
+ * @param developerToken
+ * @param folder
+ * @return {Promise<void>}
+ */
+exports.checkGoogleAdsReports = async (developerToken, folder = './') => {
+  //1. Get all fields
+  const files = fs.readdirSync(folder)
+      .filter((file) => file.endsWith('.json'));
+  console.log(`Analyzing json files in folder '${folder}': `, files);
+  const fields = [];
+  files.forEach((file) => {
+    const data = fs.readFileSync(join(folder, file));
+    const tasks = JSON.parse(data);
+    Object.keys(tasks).filter((taskId) => {
+      const task = tasks[taskId];
+      if (task.type === 'report') {
+        if (task.source.target === 'ADS') {
+          const {
+            metrics = [],
+            segments = [],
+            attributes = [],
+          } = task.source.config.reportQuery;
+          const adsFieldNames = segments.concat(metrics).concat(attributes);
+          adsFieldNames.forEach((field) => {
+            if (fields.indexOf(field) === -1) fields.push(field);
+          });
+        }
+      }
+    });
+  });
+  //2. Get GoogleAdsFields
+  const ads = new GoogleAds(developerToken);
+  const adsFields = await ads.searchMetaData(0, fields);
+  //3. if there are missing fields
+  if (adsFields.length < fields.length) {
+    const existentFields = adsFields.map((field) => field.name);
+    const missed = fields.filter(
+        (filter) => existentFields.indexOf(filter) < 0);
+    console.log(`Found ${existentFields.length} fields, missed: `, missed);
+    /**
+     * For an undeclared field, its ancestor needs to be figure out to guide the
+     * definition for schema, in 'googleads_report_helper.js'.
+     * @param {!Array<string>} fields
+     * @param {Object<string,Array<string>>} previousMappedFields
+     * @return {Promise<{}>}
+     */
+    const analyzeFields = async (fields, previousMappedFields = {}) => {
+      /**
+       * Parent fields array.
+       * By removing the last property of field name to get its parent.
+       */
+      const trimmedFields = [];
+      /** Map of parent fields to children fields. */
+      const mappedFields = {};
+      fields.forEach((field) => {
+        if (field.indexOf('.') === -1) {
+          console.log(
+              `Error. Could not find '${previousMappedFields[field]
+              || field}'.`);
+        } else {
+          const trimmedField = field.substring(0, field.lastIndexOf('.'));
+          if (trimmedFields.indexOf(trimmedField) === -1) {
+            trimmedFields.push(trimmedField);
+            mappedFields[trimmedField] = previousMappedFields[field] || [field];
+          } else {
+            mappedFields[trimmedField].push(
+                ...(previousMappedFields[field] || [field]));
+          }
+        }
+      });
+      const adsFields = await ads.searchMetaData(0, trimmedFields);
+      /** Map of Google Ads Type to field names. */
+      const mappedAdsFields = {};
+      adsFields.forEach((adsField) => {
+        const {type_url: typeUrl, name} = adsField;
+        if (!mappedAdsFields[typeUrl]) mappedAdsFields[typeUrl] = [];
+        mappedAdsFields[typeUrl].push(...mappedFields[name]);
+      });
+      // If there are still missing fields
+      if (adsFields.length < trimmedFields.length) {
+        const existentFields = adsFields.map((field) => field.name);
+        const missed = trimmedFields.filter(
+            (filter) => existentFields.indexOf(filter) < 0);
+        const parentMapped = await analyzeFields(missed, mappedFields);
+        // Merge parent mapped results to current one.
+        Object.keys(parentMapped).forEach((key) => {
+          if (!mappedAdsFields[key]) mappedAdsFields[key] = [];
+          mappedAdsFields[key].push(...parentMapped[key]);
+        });
+      }
+      return mappedAdsFields;
+    }
+    const mappedAdsFields = await analyzeFields(missed);
+    Object.keys(mappedAdsFields).forEach((key) => {
+      console.log(`ERROR: Check its validation or add ${key} to support: `,
+          mappedAdsFields[key]);
+    });
+  } else { // No missing Ads fields
+    const adsFieldsMap = {};
+    adsFields.forEach((field) => void (adsFieldsMap[field.name] = field));
+    try {
+      getSchemaFields(fields, adsFieldsMap);
+      console.log('OK. There is no missing definition for Google Ads reports.');
+    } catch (error) {
+      console.error('ERROR: ', error.message);
+    }
+  }
+}
 
 /**
  * Invokes 'start' of a Task directly to start a task from local environment.

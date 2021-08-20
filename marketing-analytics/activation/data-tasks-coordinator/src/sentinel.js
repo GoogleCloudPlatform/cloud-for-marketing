@@ -234,11 +234,16 @@ class Sentinel {
     let parametersStr;
     if (!data) {
       parametersStr = '{}';
-    } else if (data.indexOf('${') === -1) {
+    } else if (data.indexOf('${') === -1) { // No placeholder in parameters.
       parametersStr = data;
-    } else {
+    } else { // There are placeholders in parameters. Need default values.
+      const regex = /\${([^}]*)}/g;
+      const parameters = data.match(regex).map((match) => {
+        return match.substring(2, match.length - 1);
+      });
       const {timezone} = JSON.parse(data);
-      parametersStr = replaceParameters(data, getDefaultParameters(timezone));
+      parametersStr = replaceParameters(data,
+          getDefaultParameters(parameters, timezone));
     }
     const taskLog = {
       parameters: parametersStr,
@@ -296,8 +301,8 @@ class Sentinel {
           && attributes.payloadFormat === 'JSON_API_V1';
     } catch (error) {
       this.logger.error(
-        'Error when checking when the message is from BigQuery Data Transfer',
-        error
+          'Error when checking when the message is from BigQuery Data Transfer',
+          error
       );
       return false;
     }
@@ -558,30 +563,34 @@ class Sentinel {
     const jobId = payload.name;
     const jobStatus = payload.state;
     this.logger.debug(
-      `The JobId of Data Transfer Run: ${jobId} and the status is: ${jobStatus}`
+        `The JobId of Data Transfer Run: ${jobId} and the status is: ${jobStatus}`
     );
     const filter = {property: 'jobId', value: jobId};
     return this.taskLogDao
-      .list([filter])
-      .then((taskLogs) => {
-        if (taskLogs.length > 1) {
-          throw new Error(`Find more than one task with Job Id: ${jobId}`);
-        }
-        if (taskLogs.length === 1) {
-          const {id: taskLogId} = taskLogs[0];
-          if (jobStatus === DATATRANSFER_JOB_STATUS_DONE)
-            return this.finishTask_(taskLogId);
-          this.logger.info(`Job Status is not DONE: `, payload);
-          return this.taskLogDao.saveErrorMessage(taskLogId, job.errorStatus);
-        }
-        this.logger.debug(
-          `BigQuery Data Transfer JobId[${jobId}] is not a Sentinel Job.`
-        );
-      })
-      .catch((error) => {
-        this.logger.error(error);
-        throw error;
-      });
+        .list([filter])
+        .then((taskLogs) => {
+          if (taskLogs.length > 1) {
+            throw new Error(`Find more than one task with Job Id: ${jobId}`);
+          }
+          if (taskLogs.length === 1) {
+            const {id: taskLogId} = taskLogs[0];
+            if (jobStatus === DATATRANSFER_JOB_STATUS_DONE) {
+              return this.finishTask_(taskLogId);
+            }
+            this.logger.info(`Job Status is not DONE: `, payload);
+            return this.taskLogDao.saveErrorMessage(
+                taskLogId,
+                payload.errorStatus
+            );
+          }
+          this.logger.debug(
+              `BigQuery Data Transfer JobId[${jobId}] is not a Sentinel Job.`
+          );
+        })
+        .catch((error) => {
+          this.logger.error(error);
+          throw error;
+        });
   }
 }
 
@@ -608,44 +617,75 @@ const getDatePartition = (filename) => {
 };
 
 /**
- * Returns the start Unix timestamp in milliseconds of the give DateTime.
- * @param {DateTime} dateTime
- * @return {number} Unix timestamp in milliseconds
- */
-const getStartMilliSeconds = (dateTime) => {
-  return dateTime.set({
-    hour: 0,
-    minute: 0,
-    second: 0,
-    millisecond: 0,
-  }).toMillis();
-}
-
-/**
- * Returns the default parameter object. Currently, it contains:
- *   now - Date ISO String.
+ * Returns the default parameter object. Currently, it support following rules:
+ *   now - Date ISO String
  *   today - format 'YYYYMMDD'
- *   yesterday - format 'YYYYMMDD'
- *   hyphenated_today - format 'YYYY-MM-DD'
- *   hyphenated_yesterday - format 'YYYY-MM-DD'
- *   today_timestamp_ms - Unix milliseconds timestamp of the start of today.
- *   yesterday_timestamp_ms - Unix milliseconds timestamp of the start of yesterday.
+ *   today_set_X - set the day as X based on today's date, format 'YYYYMMDD'
+ *   today_sub_X - sub the X days based on today's date, format 'YYYYMMDD'
+ *   today_add_X - add the X days based on today's date, format 'YYYYMMDD'
+ *   Y_hyphenated - 'Y' could be any of previous date, format 'YYYY-MM-DD'
+ *   Y_timestamp_ms - 'Unix milliseconds timestamp of the start of  date 'Y'
+ *   yesterday - quick access as 'today_sub_1'. It can has follow ups as well,
+ *       e.g. yesterday_sub_X, yesterday_hyphenated, etc.
+ * Parameters get values ignoring their cases status (lower or upper).
+ * @param {Array<string>} parameters Names of default parameter.
  * @param {string=} timezone Default value is UTC.
  * @param {number=} unixMillis Unix timestamps in milliseconds. Default value is
  *     now. Used for test.
  * @return {{string: string}}
  */
-const getDefaultParameters = (timezone = 'UTC', unixMillis = Date.now()) => {
-  const now = DateTime.fromMillis(unixMillis, {zone: timezone});
+const getDefaultParameters = (parameters, timezone = 'UTC',
+    unixMillis = Date.now()) => {
+  /**
+   * Returns the value based on the given parameter name.
+   * @param {string=} parameter
+   * @return {string|number}
+   */
+  const getDefaultValue = (parameter) => {
+    let realParameter = parameter.toLocaleLowerCase();
+    const now = DateTime.fromMillis(unixMillis, {zone: timezone});
+    if (realParameter === 'now') return now.toISO(); // 'now' is a Date ISO String.
+    if (realParameter === 'today') return now.toFormat('yyyyMMdd');
+    realParameter = realParameter.replace(/^yesterday/, 'today_sub_1');
+    if (!realParameter.startsWith('today')) {
+      throw new Error(`Unknown default parameter: ${parameter}`);
+    }
+    const suffixes = realParameter.split('_');
+    let date = now;
+    for (let index = 1; index < suffixes.length; index++) {
+      if (suffixes[index] === 'hyphenated') return date.toISODate();
+      if (suffixes[index] === 'timestamp' && suffixes[index + 1] === 'ms') {
+        return date.startOf('days').toMillis();
+      }
+      const operator = suffixes[index];
+      let operationOfLib;
+      switch (operator) {
+        case 'add':
+          operationOfLib = 'plus';
+          break;
+        case 'set':
+          operationOfLib = 'set';
+          break;
+        case 'sub':
+          operationOfLib = 'minus';
+          break;
+        default:
+          throw new Error(
+              `Unknown operator in default parameter: ${parameter}`);
+      }
+      const day = suffixes[++index];
+      if (typeof day === "undefined") {
+        throw new Error(`Malformed of default parameter: ${parameter}`);
+      }
+      date = date[operationOfLib]({days: day});
+    }
+    return date.toFormat('yyyyMMdd');
+  }
+
   const result = {};
-  result.now = now.toISO();
-  result.hyphenated_today = now.toISODate();
-  result.today = now.toFormat('yyyyMMdd');
-  result.today_timestamp_ms = getStartMilliSeconds(now);
-  const yesterday = now.minus({days: 1});
-  result.hyphenated_yesterday = yesterday.toISODate();
-  result.yesterday = yesterday.toFormat('yyyyMMdd');
-  result.yesterday_timestamp_ms = getStartMilliSeconds(yesterday);
+  parameters.forEach((parameter) => {
+    result[parameter] = getDefaultValue(parameter);
+  })
   return result;
 };
 
