@@ -1,4 +1,4 @@
-# Copyright 2019 Google LLC
+# Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 from apache_beam.options import value_provider
 import lifetimes
+import lifetimes_ext
 
 _SEGMENT_PREDICTION_THRESHOLD = 100000
 
@@ -59,6 +60,7 @@ _OPTION_ROUND_NUMBERS = 'round_numbers'
 
 _MODEL_TYPE_BGNBD = 'BGNBD'
 _MODEL_TYPE_MBGNBD = 'MBGNBD'
+_MODEL_TYPE_BGBB = 'BGBB'
 _MODEL_TYPE_PNBD = 'PNBD'
 
 date_formats = {
@@ -1095,6 +1097,35 @@ def extract_bgnbd_params(model):
     return {'r': r, 'alpha': alpha, 'a': a, 'b': b}
 
 
+def fit_bgbb_model(data, penalizer_coef=0.0):
+    """Generates BG/BB model from the input data.
+
+    Args:
+        data: Pandas DataFrame containing the customers data.
+        penalizer_coef: The coefficient applied to an l2 norm on the parameters.
+
+    Returns:
+        The BG/BB model.
+    """
+    bbf = lifetimes_ext.BetaGeoBetaBinomFitter(penalizer_coef=penalizer_coef)
+    bbf.fit(data['frequency'], data['recency'], data['total_time_observed'])
+    return bbf
+
+
+def extract_bgbb_params(model):
+    """Extracts params from the BG/BB model
+
+    Args:
+        model: the BG/BB model.
+
+    Returns:
+        The alpha, beta, gamma and delta params of the BG/BB model.
+    """
+    alpha, beta, gamma, delta = model._unload_params(
+        'alpha', 'beta', 'gamma', 'delta')
+    return {'alpha': alpha, 'beta': beta, 'gamma': gamma, 'delta': delta}
+
+
 def fit_pnbd_model(data, penalizer_coef=0.0):
     """Generates Pareto/NBD model from the input data.
 
@@ -1186,10 +1217,11 @@ def calc_full_fit_period(calibration_start_date, holdout_end_date,
                                       # Has no negative side-effect
 
 
-def expected_cumulative_transactions(frequency_model, t_cal, t_tot):
-    """Calculates expected cumulative transaction for each interval.
+def expected_cumulative_transactions(model_type, frequency_model, t_cal, t_tot):
+    """Calculates expected cumulative transactions for each interval.
 
     Args:
+        model_type: Type of the model in use.
         frequency_model: Model fitted on customer's data.
         t_cal: NumPy array of Total Time Observed values.
         t_tot: Total number of periods to predict.
@@ -1209,19 +1241,25 @@ def expected_cumulative_transactions(frequency_model, t_cal, t_tot):
             expected_cumulative_transactions_output.append(0)
             continue
 
-        # Returns 1D array
-        exp_purchases = frequency_model.expected_number_of_purchases_up_to_time(
-            t=(interval - cust_birth[np.where(cust_birth <= interval)]))
+        if model_type == _MODEL_TYPE_BGBB:
+            exp_purchases = \
+                frequency_model.expected_number_of_transactions_in_first_n_periods(
+                n=interval)["model"].tolist()
+                # (frequency, model)
+        else:
+            exp_purchases = frequency_model.expected_number_of_purchases_up_to_time(
+                t=(interval - cust_birth[np.where(cust_birth <= interval)]))
 
         expected_cumulative_transactions_output.append(np.sum(exp_purchases))
 
     return np.around(np.array(expected_cumulative_transactions_output), 2)
 
 
-def predict_txs(frequency_model, t_cal, intervals):
+def predict_txs(model_type, frequency_model, t_cal, intervals):
     """Calculates transactions by time unit predictions.
 
     Args:
+        model_type: Type of the model in use.
         frequency_model: Model fitted on customer's data.
         t_cal: NumPy array of Total Time Observed values.
         intervals: Total number of periods to predict.
@@ -1230,7 +1268,7 @@ def predict_txs(frequency_model, t_cal, intervals):
         Pandas DataFrame containing predicted future total purchases
     """
     expected_cumulative = expected_cumulative_transactions(
-        frequency_model, t_cal, intervals)
+        model_type, frequency_model, t_cal, intervals)
     expected_incremental = expected_cumulative - np.delete(
         np.hstack(([0], expected_cumulative)), expected_cumulative.size - 1)
 
@@ -1436,7 +1474,7 @@ Customers modeled for validation: {model_params['num_customers_cohort']} \
 Transactions observed for validation: {model_params['num_transactions_validation']} \
 ({model_params['perc_transactions_validation']} % of total transactions)
 
-Validation Mean Absolute Percent Error (MAPE): {str(model_params['validation_mape'])}%"""
+Validation Mean Absolute Percent Error (MAPE): {model_params['validation_mape']}%"""
 
     return output_text
 
@@ -1452,8 +1490,7 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     Mean Absolute Percent Error (MAPE).
 
     Args:
-        model_type: String defining the type of model to be used, it can be
-            either 'BGNBD', 'MBGNBD' or 'PNBD'.
+        model_type: String defining the type of model to be used.
         cbs: Customer-by-sufficient-statistic (CBS) DataFrame.
         cal_start_date: Calibration start date.
         cal_end_date: Calibration end date.
@@ -1480,6 +1517,9 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     elif model_type == _MODEL_TYPE_MBGNBD:
         frequency_model = fit_mbgnbd_model(cbs, penalizer_coef)
         model_params['frequency_model'] = 'MBG/NBD'
+    elif model_type == _MODEL_TYPE_BGBB:
+        frequency_model = fit_bgbb_model(cbs, penalizer_coef)
+        model_params['frequency_model'] = 'BG/BB'
     elif model_type == _MODEL_TYPE_PNBD:
         frequency_model = fit_pnbd_model(cbs, penalizer_coef)
         model_params['frequency_model'] = 'Pareto/NBD'
@@ -1489,8 +1529,8 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     # Transactions by time unit predictions
     intervals = calc_full_fit_period(cal_start_date, hold_end_date,
                                      time_divisor)
-    predicted = predict_txs(frequency_model, cbs['total_time_observed'].values,
-                            intervals)
+    predicted = predict_txs(model_type, frequency_model,
+                            cbs['total_time_observed'].values, intervals)
 
     # Actual transactions per time unit
     txs = repeat_tx
@@ -1527,7 +1567,8 @@ def frequency_model_validation(model_type, cbs, cal_start_date, cal_end_date,
     ) / txs.iloc[median_line:, :]['repeat_transactions_cumulative'] * 100
     mape = error_by_time.abs().mean()
 
-    model_params['validation_mape'] = round(mape, 2)
+    model_params['validation_mape'] = (
+        'N/A' if model_type == _MODEL_TYPE_BGBB else str(round(mape, 2)))
 
     # return tuple that includes the validation MAPE, which will be used for a
     # threshold check
@@ -1654,7 +1695,10 @@ def calculate_model_fit_validation(_, options, dates, calcbs, repeat_tx,
     # the allowed threshold.  If so, continue the calculation.  If not,
     # fail with an error and stop all calculations.
     error = None
-    if model_params['validation_mape'] > float(options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD]):
+    if (
+            options[_OPTION_FREQUENCY_MODEL_TYPE] != _MODEL_TYPE_BGBB and
+            float(model_params['validation_mape']) > float(
+                options[_OPTION_TRANSACTION_FREQUENCY_THRESHOLD])):
         model_params['invalid_mape'] = True
         error = (
             f"Validation Mean Absolute Percent Error (MAPE) [{model_params['validation_mape']}%]"
@@ -1695,6 +1739,7 @@ Transactions observed: {prediction_params['transactions_observed']}
 Frequency Model: {prediction_params['frequency_model']}
 Model Parameters
 {model_params_to_string(prediction_params['bgnbd_model_params'] or
+                        prediction_params['bgbb_model_params'] or
                         prediction_params['paretonbd_model_params'])}
 Gamma-Gamma Parameters
 {model_params_to_string(prediction_params['gamma_gamma_params'])}"""
@@ -1756,6 +1801,7 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
 
         prediction_params['frequency_model'] = 'BG/NBD'
         prediction_params['bgnbd_model_params'] = bgnbd_params
+        prediction_params['bgbb_model_params'] = None
         prediction_params['paretonbd_model_params'] = None
 
     elif frequency_model_type == _MODEL_TYPE_MBGNBD:
@@ -1764,6 +1810,16 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
 
         prediction_params['frequency_model'] = 'MBG/NBD'
         prediction_params['bgnbd_model_params'] = mbgnbd_params
+        prediction_params['bgbb_model_params'] = None
+        prediction_params['paretonbd_model_params'] = None
+
+    elif frequency_model_type == _MODEL_TYPE_BGBB:
+        frequency_model = fit_bgbb_model(data, options[_OPTION_PENALIZER_COEF])
+        bgbb_params = extract_bgbb_params(frequency_model)
+
+        prediction_params['frequency_model'] = 'BG/BB'
+        prediction_params['bgnbd_model_params'] = None
+        prediction_params['bgbb_model_params'] = bgbb_params
         prediction_params['paretonbd_model_params'] = None
 
     elif frequency_model_type == _MODEL_TYPE_PNBD:
@@ -1771,15 +1827,21 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
         pnbd_params = extract_pnbd_params(frequency_model)
 
         prediction_params['frequency_model'] = 'Pareto/NBD'
-        prediction_params['paretonbd_model_params'] = pnbd_params
         prediction_params['bgnbd_model_params'] = None
+        prediction_params['bgbb_model_params'] = None
+        prediction_params['paretonbd_model_params'] = pnbd_params
 
     else:
         raise ValueError('Model type %s is not valid' % frequency_model_type)
 
     # Predict probability alive for customers
-    data['p_alive'] = frequency_model.conditional_probability_alive(
-        data['frequency'], data['recency'], data['total_time_observed'])
+    if frequency_model_type == _MODEL_TYPE_BGBB:
+        data['p_alive'] = frequency_model.conditional_probability_alive(
+            prediction_period, data['frequency'], data['recency'],
+            data['total_time_observed'])
+    else:
+        data['p_alive'] = frequency_model.conditional_probability_alive(
+            data['frequency'], data['recency'], data['total_time_observed'])
 
     # Predict future purchases (X weeks/days/months)
     if frequency_model_type == _MODEL_TYPE_PNBD:

@@ -1,4 +1,4 @@
-# Copyright 2019 Google LLC
+# Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -294,7 +294,7 @@ def run(argv=None):
                                     {'name': 'perc_customers_cohort', 'type': 'FLOAT'},
                                     {'name': 'num_transactions_validation', 'type': 'INTEGER'},
                                     {'name': 'perc_transactions_validation', 'type': 'FLOAT'},
-                                    {'name': 'validation_mape', 'type': 'FLOAT'},
+                                    {'name': 'validation_mape', 'type': 'STRING'},
                                 ]}
                         ]
                     },
@@ -401,6 +401,13 @@ def run(argv=None):
                                     {'name': 'b', 'type': 'FLOAT'},
                                     {'name': 'r', 'type': 'FLOAT'},
                                     {'name': 'alpha', 'type': 'FLOAT'}
+                                ]},
+                            {'name': 'bgbb_model_params', 'type': 'RECORD',
+                                'fields': [
+                                    {'name': 'alpha', 'type': 'FLOAT'},
+                                    {'name': 'beta', 'type': 'FLOAT'},
+                                    {'name': 'gamma', 'type': 'FLOAT'},
+                                    {'name': 'delta', 'type': 'FLOAT'}
                                 ]},
                             {'name': 'paretonbd_model_params',
                                 'type': 'RECORD',

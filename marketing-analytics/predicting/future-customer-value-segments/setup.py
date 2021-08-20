@@ -1,4 +1,4 @@
-# Copyright 2019 Google LLC
+# Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ setuptools.setup(
     name='Future-Customer-Value-Segments',
     version='0.0.1',
     install_requires=[
-        'Lifetimes==0.11.1',
+        'Lifetimes==0.11.3',
         'matplotlib==3.2.1',
     ],
     packages=setuptools.find_packages(),

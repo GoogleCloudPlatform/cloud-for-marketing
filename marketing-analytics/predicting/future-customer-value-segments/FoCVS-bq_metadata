@@ -85,12 +85,12 @@
     },
     {
       "regexes": [
-        "(BGNBD|MBGNBD|PNBD|)"
+        "(BGNBD|MBGNBD|BGBB|PNBD|)"
       ],
       "name": "frequency_model_type",
       "label": "Frequency Model Type",
       "is_optional": true,
-      "helpText": "[Default MBGNBD] \"BGNBD\", \"MBGNBD\" or \"PNBD\". BG/NBD (or MBG/NBD) vs Pareto/NBD frequency models."
+      "helpText": "[Default MBGNBD] \"BGNBD\", \"MBGNBD\", \"BGBB\", or \"PNBD\". BG/NBD (or MBG/NBD), Pareto/NBD or the experimental BG/BB (a.k.a Beta Bernoulli) frequency model."
     },
     {
       "regexes": [
@@ -108,7 +108,7 @@
       "name": "model_time_granularity",
       "label": "Model Time Granularity",
       "is_optional": true,
-      "helpText": "[Default Weekly] One of \"Daily\", \"Weekly\", \"Monthly\". What time granularity to run the model with. \"Daily\" is most frequently used for apps customers who have a very short period of time between repeat transactions."
+      "helpText": "[Default Weekly] One of \"Daily\", \"Weekly\", \"Monthly\". What time granularity to run the model with. \"Daily\" is most frequently used for apps customers who have a very short period of time between repeat transactions, while \"Monthly\" is more suited for discrete-time transaction analysis using the experimental BG/BB model."
     },
     {
       "regexes": [

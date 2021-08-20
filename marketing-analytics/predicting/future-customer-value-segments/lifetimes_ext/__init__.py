@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,20 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Simplify importing of extensions."""
+from .custom_beta_geo_beta_binom_fitter import BetaGeoBetaBinomFitter
 
-if [ -d "./output" ]
-then
-  rm -fr ./output
-fi
-mkdir ./output
-
-python fcvs_pipeline_csv.py --runner=DirectRunner \
-  --input_csv ./samples/input_cdnow.csv \
-  --output_folder ./output/ \
-  --customer_id_column_position 1 \
-  --transaction_date_column_position 2 \
-  --sales_column_position 4 \
-  --date_parsing_pattern YYYY-MM-DD \
-  --model_time_granularity weekly \
-  --penalizer_coef 0.0 \
-  --extra_dimension_column_position 3
+__all__ = (
+    "BetaGeoBetaBinomFitter",
+)
