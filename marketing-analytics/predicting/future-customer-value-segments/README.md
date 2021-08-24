@@ -5,18 +5,18 @@
 ## Overview
 
 Future-Customer-Value-Segments (FoCVS) is a configurable and privacy-safe
-solution for **calculating** and **predicting** customer lifetime value (pCLV) and
-**segmenting** customers by total value.
+solution for **calculating** and **predicting** customer lifetime value (pCLV)
+and **segmenting** customers by total value.
 
 It runs on Google Cloud Dataflow and can be deployed to any Google Cloud
 Platform (GCP) project. You can also run it on-prem / off of Google Cloud.
 
 There are two different versions of the pipeline:
 
-* CSV: read input data from, and store output as, CSV files in Google Cloud
-  Storage (GCS) / on-prem
-* BigQuery (BQ): read input data from, and store output in, Google Cloud
-  BigQuery tables
+* **CSV**: read input data from, and store output as, CSV files in Google
+    Cloud Storage (GCS) / on-prem.
+* **BigQuery (BQ)**: read input data from, and store output in, Google Cloud
+    BigQuery tables.
 
 ## Goals
 
@@ -27,8 +27,8 @@ want, using different input data or different parameters.
 
 ## How to use the solution
 
-The solution consists of Cloud Dataflow templates that can be run using different
-parameters to customize the execution of the pipeline.
+The solution consists of Cloud Dataflow templates that can be run using
+different parameters to customize the execution of the pipeline.
 The following steps explain how to install the Cloud Dataflow templates in
 a GCP project. Alternatively, the solution can also be run on-prem using Apache
 Beam.
@@ -46,8 +46,8 @@ Note: This solution requires Python 3.7.
 * Create a python3 virtual env `virtualenv env`
 * Activate the virtual env `source env/bin/activate`
 * Install python3 dependencies `pip install -r requirements.txt`
-* Create a GCS bucket (if one does not already exist) where the Dataflow templates
-  will be stored
+* Create a GCS bucket (if one does not already exist) where the Dataflow
+  templates will be stored
 * Set an environment variable with the name of the bucket
   `export PIPELINE_BUCKET=bucket_to_store_template`
 * Generate the templates by running `./generate_templates.sh`
@@ -59,7 +59,8 @@ Note: This solution requires Python 3.7.
 
 * Go to the Cloud Dataflow page
 * Click `+ Create Job From Template`
-* Give the job a name and select `Custom Template` under `Cloud Dataflow template`
+* Give the job a name and select `Custom Template` under
+  `Cloud Dataflow template`
 * Insert the desired template (CSV or BQ) GCS path
   (`<your_pipeline_bucket_name>/templates/FoCVS-<csv|bq>`)
 * Fill the Required Parameters
@@ -82,21 +83,23 @@ Note: This solution requires Python 3.7.
 ### Input Data
 
 The pipeline takes input data in the form of a CSV file or BigQuery table
-containing customer transactions (the file must contain a header describing the columns).
-It must contain the following fields:
+containing customer transactions (the file must contain a header describing the
+columns). It must contain the following fields:
 
-* **Customer ID** (an identifier for the customer, can be either a number or a string).
-* **Date of the transaction** (must be in one of the following formats:
+* **Customer ID:** an identifier for the customer, can be either a number or a
+  string).
+* **Date of the transaction:** must be in one of the following formats:
   'YYYY-MM-DD’, 'MM/DD/YY', 'MM/DD/YYYY’, 'DD/MM/YY', 'DD/MM/YYYY’, 'YYYYMMDD').
-* **Value of the transaction** (number)
-* **Extra dimension** *(Optional)* (can be a number or a string referring for
-  example to a category, marketing channel, geographic region or any other
-  property of the transaction).
+* **Value of the transaction:** decimal notation (e.g. 123.45).
+* **Extra dimension *(Optional)*:** can be a number or a string referring to,
+  for example, a category, marketing channel, geographic region or any other
+  property of the transaction and/or customer.
 
-Here is an example of input data from the [CDnow](https://en.wikipedia.org/wiki/CDNow)
-popular [transactions dataset](https://www.brucehardie.com/datasets/):
+Here is an example of input data from the
+[CDNow](https://en.wikipedia.org/wiki/CDNow) popular
+[transactions dataset](https://www.brucehardie.com/datasets/):
 
-``` txt
+``` csv
 customer_id,date,category,sales
 00001,1997-01-01,1,11.77
 00002,1997-01-12,1,12.00
@@ -105,6 +108,9 @@ customer_id,date,category,sales
 00003,1997-03-30,2,20.76
 00003,1997-04-02,2,19.54
 ```
+
+It is recommended to feed in at least 1 year of transactional
+data (ideally 18+ months).
 
 ### Output Data
 
@@ -135,14 +141,15 @@ Transactions observed for validation: 23497 (34.8% of total transactions)
 Validation Mean Absolute Percent Error (MAPE): 2.43%
 ```
 
-***repeat_transactions_over_time.png and repeat_cumulative_transactions_over_time.png***
+***repeat_transactions_over_time.png*** and
+***repeat_cumulative_transactions_over_time.png***
 
 <img src="images/repeat_transactions_over_time.png" alt="Transactions" width="300"/>
 <img src="images/repeat_cumulative_transactions_over_time.png"
 alt="Cumulative Transactions" width="309"/>
 
 Charts that help the user understand how well the model fits the input data.
-The vertical lines disecting the charts represent the difference between the
+The vertical lines dissecting the charts represent the difference between the
 _calibration_ and _prediction_ periods respectively.
 
 #### Prediction Reports
@@ -174,17 +181,22 @@ v: 11.435020413203247
 
 ***Prediction CSV Files (or BigQuery tables)***
 
-* **prediction_summary.csv** &mdash; prediction grouped by segment (useful to
-  identify the customer segment that provides the most value)
-* **prediction_summary_extra_dimension.csv** &mdash; prediction grouped by extra
-  dimension
-* **prediction_by_customer.csv** &mdash; prediction for each single customer
+* **prediction_summary.csv**: predictions grouped by segment (useful to
+  identify the customer segment that provides the most value).
+* **prediction_summary_extra_dimension.csv**: predictions grouped by extra
+  dimension.
+* **prediction_by_customer.csv**: prediction for each input customer.
 
-The following columns within those files contain the model prediction output data for the duration of the prediction period (one year by default):
+The following columns within those files contain the model prediction output
+data for the duration of the prediction period (one year by default):
 
 * **Probability Alive** (p_alive): Likelihood that a customer has not churned
 * **Predicted Purchases** (predicted_purchases): Predicted number of purchases
-* **Predicted Average Order Value** (future_aov): Predicted average monetary value per order
-* **Total Customer Value** (expected_value): Predicted future spend. This is analogous to `predicted_purchases * future_aov`
+* **Predicted Average Order Value** (future_aov): Predicted average monetary
+  value per order
+* **Total Customer Value** (expected_value): Predicted future spend. This is
+  analogous to `predicted_purchases * future_aov`
 
-Including the probability that a customer has not churned into the _Total Customer Value_ equation yields a more accurate pCLV score: `p_alive * expected_value`
+Including the probability that a customer has not churned into the _Total
+Customer Value_ equation yields a more accurate pCLV score: `p_alive *
+expected_value`.
