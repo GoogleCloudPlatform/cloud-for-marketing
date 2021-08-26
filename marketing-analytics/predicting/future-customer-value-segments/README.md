@@ -1,8 +1,6 @@
 # Future-Customer-Value-Segments (FoCVS)
 
-<center>
-  <img src="https://services.google.com/fh/files/helpcenter/focvs.png" alt="FoCVS Logo" height="225"/>
-</center>
+<img src="https://services.google.com/fh/files/helpcenter/focvs.png" alt="FoCVS Logo" height="225"/>
 
 ## Overview
 
