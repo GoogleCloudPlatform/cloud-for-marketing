@@ -684,13 +684,15 @@ def add_top_extra_dimension_to_fullcbs(entry, options, customer_extra_dim):
     Returns:
         Entry list with the extra_dimension appended to the end.
     """
+    result = (*entry,)
+
     if not options[_OPTION_EXTRA_DIMENSION_EXISTS]:
-        return [entry]
+        return [result]
 
     customer_id = entry[0]
     if customer_id in customer_extra_dim:
-        return [entry + (customer_extra_dim[customer_id],)]
-    return [entry]
+        return [result + (customer_extra_dim[customer_id],)]
+    return [result]
 
 
 def discard_if_no_extra_dimension(entry, options):
@@ -1787,8 +1789,6 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
         'customer_id', 'number_of_transactions', 'historical_aov', 'frequency',
         'recency', 'total_time_observed'
     ]
-    if options[_OPTION_EXTRA_DIMENSION_EXISTS]:
-        columns.append('extra_dimension')
 
     # Read in full CBS matrix
     data = pd.DataFrame(fullcbs, columns=columns)
@@ -1876,8 +1876,6 @@ def calculate_prediction(_, options, fullcbs, num_customers, num_txns):
         'historical_aov', 'expected_value', 'frequency', 'recency',
         'total_time_observed'
     ]
-    if options[_OPTION_EXTRA_DIMENSION_EXISTS]:
-        columns.append('extra_dimension')
     final_no_segments = data[columns]
 
     return [[final_no_segments.values, prediction_params]]

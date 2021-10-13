@@ -348,31 +348,34 @@ def run(argv=None):
                 lambda x: (x[0], x[1]))  # (customer_id, extra_dimension)
         )
 
-        fullcbs = (
-            fullcbs_without_extra_dimension
-            | beam.FlatMap(
-                c.add_top_extra_dimension_to_fullcbs, pvalue.AsSingleton(options),
-                pvalue.AsDict(customer_dimension_map)
-            )  # (customer_id, number_of_transactions, historical_aov,
-               #  frequency, recency, total_time_observed,
-               #  extra_dimension?)
-        )
-
         prediction = (
             pipeline
             | 'Create single elem Stream V' >> beam.Create([1])
             | beam.FlatMap(
-                c.calculate_prediction, pvalue.AsSingleton(options),
-                pvalue.AsIter(fullcbs), pvalue.AsSingleton(num_customers),
+                c.calculate_prediction,
+                pvalue.AsSingleton(options),
+                pvalue.AsIter(fullcbs_without_extra_dimension),
+                pvalue.AsSingleton(num_customers),
                 pvalue.AsSingleton(num_txns)
             )  # [customer_id, p_alive, predicted_purchases, future_aov,
                #  historical_aov, expected_value, frequency, recency,
-               #  total_time_observed, extra_dimension?], prediction_params
+               #  total_time_observed], prediction_params
+        )
+
+        prediction_by_customer_no_segments_no_extra_dimension = (
+            prediction
+            | beam.FlatMap(lambda x: x[0])  # Extract predictions by customer
         )
 
         prediction_by_customer_no_segments = (
-            prediction
-            | beam.FlatMap(lambda x: x[0])  # Extract predictions by customer
+            prediction_by_customer_no_segments_no_extra_dimension
+            | beam.FlatMap(
+                c.add_top_extra_dimension_to_fullcbs,
+                pvalue.AsSingleton(options),
+                pvalue.AsDict(customer_dimension_map)
+            )  # [customer_id, p_alive, predicted_purchases, future_aov
+               #  historical_aov, expected_value, frequency, recency,
+               #  total_time_observed, extra_dimension?]
         )
 
         _ = (
