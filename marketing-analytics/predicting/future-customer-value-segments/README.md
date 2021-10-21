@@ -202,3 +202,11 @@ data for the duration of the prediction period (one year by default):
 Including the probability that a customer has not churned into the _Total
 Customer Value_ equation yields a more accurate pCLV score: `p_alive *
 expected_value`.
+
+## Automating multiple runs
+
+The [Automation Colab Notebook](focvs_automation.ipynb) can be used to automate
+running the pipeline multiple times with different parameters. This is
+particularly useful when there is a need to run the pipeline for several extra
+dimensions while keeping all parameters intact - a process which is quite
+time-consuming if done through the GCP Dataflow UI.
