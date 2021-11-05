@@ -41,21 +41,16 @@ Note: This solution requires Python 3.7.
 
 #### GCP Steps
 
-* Navigate to GCP and open Cloud Shell
-* Set the project in which to install the Dataflow templates by running:
-  `gcloud config set project [PROJECT_ID]`
-* Clone this repo and `cd` into the *Future-Customer-Value-Segments* directory
-* Create a python3 virtual env `virtualenv env`
-* Activate the virtual env `source env/bin/activate`
-* Install python3 dependencies `pip install -r requirements.txt`
-* Create a GCS bucket (if one does not already exist) where the Dataflow
-  templates will be stored
-* Set an environment variable with the name of the bucket
-  `export PIPELINE_BUCKET=bucket_to_store_template`
-* Generate the templates by running `./generate_templates.sh`
-* Move template metadata to the same folder as the templates
-  `gsutil cp FoCVS-*_metadata gs://${PIPELINE_BUCKET}/templates`
-* Deactivate the virtual env `deactivate` and close cloud shell
+* Navigate to GCP
+* Create a GCS bucket (if one does not already exist) where the Dataflow runtime
+  environment and templates will be stored
+* Open [Cloud Shell](https://cloud.google.com/shell/docs/using-cloud-shell)
+* Set the project in which to install FoCVS by running:
+  `gcloud config set project <PROJECT_ID>`
+* Clone this repo and `cd` into the *future-customer-value-segments* directory
+* Execute the installation script, passing the GCS bucket name as an argument:
+  `./install.sh <GCS_BUCKET_NAME>`
+* Close Cloud Shell once the installation completes successfully.
 
 #### GCP Usage
 
@@ -67,6 +62,10 @@ Note: This solution requires Python 3.7.
   (`<your_pipeline_bucket_name>/templates/FoCVS-<csv|bq>`)
 * Fill the Required Parameters
 * Expand the "Optional Parameters" section if needed
+
+Alternatively, the [Automation Colab Notebook](#automation-colab-notebook) can
+be used to simplify this process, particularly for scenarios where several runs
+are planned.
 
 #### On-prem Steps
 
@@ -203,10 +202,12 @@ Including the probability that a customer has not churned into the _Total
 Customer Value_ equation yields a more accurate pCLV score: `p_alive *
 expected_value`.
 
-## Automating multiple runs
+## Automation Colab Notebook
 
-The [Automation Colab Notebook](focvs_automation.ipynb) can be used to automate
-running the pipeline multiple times with different parameters. This is
-particularly useful when there is a need to run the pipeline for several extra
-dimensions while keeping all parameters intact - a process which is quite
-time-consuming if done through the GCP Dataflow UI.
+The [focvs_automation.ipynb](focvs_automation.ipynb) notebook is a
+[Google Colaboratory](https://colab.research.google.com/) notebook that can be
+used to automate running the pipeline without using the GCP UI. This notebook is
+particularly useful when there is a need to run the pipeline several times with
+different parameters (e.g. multiple extra dimensions, different calibration
+and/or cohort dates, etc.) - a process which is quite time-consuming and
+error-prone if done through the GCP Dataflow UI.
