@@ -14,8 +14,7 @@
 # limitations under the License.
 
 
-if [ -d "./output" ]
-then
+if [ -d "./output" ]; then
   rm -fr ./output
 fi
 mkdir ./output

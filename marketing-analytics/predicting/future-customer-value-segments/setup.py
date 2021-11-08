@@ -16,7 +16,7 @@ import setuptools
 
 setuptools.setup(
     name='Future-Customer-Value-Segments',
-    version='0.0.1',
+    version='1.0.0',
     install_requires=[
         'Lifetimes==0.11.3',
         'matplotlib==3.2.1',

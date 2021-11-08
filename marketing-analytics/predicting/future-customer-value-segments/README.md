@@ -42,14 +42,49 @@ Note: This solution requires Python 3.7.
 #### GCP Steps
 
 * Navigate to GCP
-* Create a GCS bucket (if one does not already exist) where the Dataflow runtime
-  environment and templates will be stored
 * Open [Cloud Shell](https://cloud.google.com/shell/docs/using-cloud-shell)
 * Set the project in which to install FoCVS by running:
-  `gcloud config set project <PROJECT_ID>`
+
+  ```shell
+  gcloud config set project <PROJECT_ID>
+  ```
+
 * Clone this repo and `cd` into the *future-customer-value-segments* directory
-* Execute the installation script, passing the GCS bucket name as an argument:
-  `./install.sh <GCS_BUCKET_NAME>`
+* Execute the installation script, passing in the desired arguments:
+
+  Usage:
+
+  ```shell
+  install.sh  [-h] -b=<GCS_BUCKET> [-l=<GCS_LOCATION>] [-r=<DATAFLOW_REGION>]
+              [--create_bucket] [--no_install_dependencies]
+  ```
+
+  Options:
+
+  ```console
+  -h, --help            show this help message and exit
+  -b=<GCS_BUCKET>, --bucket=<GCS_BUCKET>
+                        name of the Google Cloud Storage bucket to use
+  -l=<GCS_LOCATION>, --location=<GCS_LOCATION>
+                        location to use for the GCS bucket. E.g. "us" or "EU".
+                        Refer to https://cloud.google.com/storage/docs/locations
+                        for more information
+  -r=<DATAFLOW_REGION>, --region=<DATAFLOW_REGION>
+                        region to use for the Dataflow runtime. E.g. "us-central1"
+                        or "EUROPE-WEST3". Refer to
+                        https://cloud.google.com/dataflow/docs/concepts/regional-endpoints
+                        for more information
+  -c, --create_bucket   create the GCS bucket specified by <GCS_BUCKET> at the
+                        location specifed by <GCS_LOCATION>. Outputs a warning if
+                        the bucket already exists
+  -n, --no_install_dependencies
+                        skip python dependencies installation and reuse the local
+                        virtual environment named 'focvs-env' that was created by
+                        a previous run of this installation script. This option is
+                        ignored if a 'focvs-env' local virtual environment could
+                        not be found
+  ```
+
 * Close Cloud Shell once the installation completes successfully.
 
 #### GCP Usage
