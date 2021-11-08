@@ -184,6 +184,15 @@
     },
     {
       "regexes": [
+        "^([0-9]*[.])?[0-9]+$"
+      ],
+      "name": "transaction_frequency_threshold",
+      "label": "Model Validation Error Threshold",
+      "is_optional": true,
+      "helpText": "[Default 15] Maximum allowed error percentage value (MAPE) for model validation. If the validation MAPE is larger than the value provided here, the pipeline will fail. Values larger than 15% generally indicate the model's inability to fit your data. Try selecting another customer cohort using the start and end date parameters, and/or applying a penalizer coefficient."
+    },
+    {
+      "regexes": [
         "^gs:\\/\\/[^\\n\\r]+\\/$"
       ],
       "name": "temp_gcs_location",
