@@ -7,7 +7,7 @@ The purpose of this demo is to showcase KFP with Vertex Pipelines.  The pipeline
 5) Generate an XGBoost model using XGB directly.  The only purpose of me doing this is to showcase alternative approaches. 
 6) Push the XGBoost model to a Vertex AI Endpoint. 
 
-In order to make this run, a few requirements or recommmendations:
+In order to make this run, a few requirements or recommendations:
 1) Using GCP's Vertex AI Workbench (Notebook Offering) will be the easiest way to run this code.  Otherwise, you will need to explicitly authenticate
 2) You will need to have access to or build a GCS Bucket
 3) You will need Google BigQuery. This will build a BigQuery View and 3 BigQuery Machine Learning models.
