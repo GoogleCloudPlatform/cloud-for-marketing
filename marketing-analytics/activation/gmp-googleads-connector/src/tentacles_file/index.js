@@ -19,7 +19,7 @@
 'use strict';
 const {firestore: {DataSource}} = require('@google-cloud/nodejs-common');
 
-const {TentaclesFile} = require('./tentacles_file.js');
+const {TentaclesFile, TentaclesFileEntity} = require('./tentacles_file.js');
 const {TentaclesFileDummy} = require('./tentacles_file_dummy.js');
 const {TentaclesFileOnFirestore} = require('./tentacles_file_firestore.js');
 
@@ -42,6 +42,7 @@ const getTentaclesFile = (dataSource = undefined, namespace = undefined) => {
 };
 
 module.exports = {
+  TentaclesFileEntity,
   TentaclesFile,
   getTentaclesFile,
 };

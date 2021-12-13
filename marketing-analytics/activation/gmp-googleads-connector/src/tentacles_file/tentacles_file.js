@@ -19,18 +19,32 @@
 'use strict';
 
 /**
+ * @typedef {{
+ *   name:string,
+ *   bucket:string,
+ *   fileSize:string,
+ *   updated:string,
+ *   error:(string|undefined),
+ *   attributes:{
+ *     api:(undefined|string),
+ *     config:(undefined|string),
+ *     dryRun:(undefined|string),
+ *     gcs:(undefined|string),
+ *     size:(undefined|string),
+ *     topic:(undefined|string),
+ *   }
+ * }}
+ */
+let TentaclesFileEntity;
+
+/**
  * Tentacles File interface to log incoming files.
  * @interface
  */
 class TentaclesFile {
   /**
    * Saves the file Entity based on the given event information.
-   * @param {{
-   *   name:string,
-   *   bucket:string,
-   *   size:number,
-   *   updated:!Date,
-   * }} file File data comes event.
+   * @param {!TentaclesFileEntity} file File data comes event.
    * @return {!Promise<string|number>} Saved File document/entity ID.
    */
   save(file) {}
@@ -44,4 +58,7 @@ class TentaclesFile {
   saveError(fileId, error) {}
 }
 
-module.exports = {TentaclesFile};
+module.exports = {
+  TentaclesFileEntity,
+  TentaclesFile,
+};

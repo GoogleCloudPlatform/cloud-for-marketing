@@ -37,7 +37,11 @@ const {KnotTask} = require('./knot_task.js');
  * @typedef {{
  *   type:TaskType.MULTIPLE,
  *   appendedParameters:(Object<string,string>|undefined),
- *   source:!StorageFileConfig,
+ *   source:{
+ *     csv:{header:string, records:string,},
+ *   }|{
+ *     file:!StorageFileConfig,
+ *   },
  *   destination:{
  *     taskId:string,
  *     target:'pubsub',
@@ -83,14 +87,16 @@ class MultipleTask extends KnotTask {
 
   /** @override */
   async doTask() {
-    /** @const {StorageFileConfig} */
-    const sourceFile = this.config.source;
-    /** @const {StorageFile} */
-    const storageFile = StorageFile.getInstance(
-        sourceFile.bucket, sourceFile.name,
-        {projectId: this.getCloudProject(sourceFile)});
-    const records = (await storageFile.loadContent()).split('\n')
-        .filter((record) => !!record); // filter out empty lines.
+    let records;
+    if (this.config.source.file) {
+      records = await this.getRecordsFromFile_(this.config.source.file);
+    } else if (this.config.source.csv) {
+      records = this.getRecordsFromCsv_(this.config.source.csv);
+    } else {
+      console.error('Unknown source for Multiple Task', this.config.source);
+      throw new Error('Unknown source for Multiple Task');
+    }
+    console.log(records);
     const numberOfTasks = records.length;
     if (numberOfTasks === 0) {
       return {parameters: this.appendParameter({numberOfTasks})};
@@ -138,6 +144,42 @@ class MultipleTask extends KnotTask {
       }
     };
     return managedSend(sendSingleMessage, records, `multiple_task_${tag}`);
+  }
+
+  /**
+   * Get records from a given Cloud Storage file.
+   * @param {!StorageFileConfig} sourceFile
+   * @return {Promise<!Array<string>>} Array of record (JSON string).
+   * @private
+   */
+  async getRecordsFromFile_(sourceFile) {
+    /** @const {StorageFile} */
+    const storageFile = StorageFile.getInstance(
+        sourceFile.bucket, sourceFile.name,
+        {projectId: this.getCloudProject(sourceFile)});
+    const records = (await storageFile.loadContent()).split('\n')
+        .filter((record) => !!record); // filter out empty lines.
+    return records;
+  }
+
+  /**
+   * Get records from a given Csv setting.
+   * @param {{
+   *       header:string,
+   *       records:string,
+   *     }} csv setting
+   * @return {Array<string>} Array of record (JSON string).
+   * @private
+   */
+  getRecordsFromCsv_({header, records}) {
+    const fields = header.split(',').map((field) => field.trim());
+    return records.split('\n').map((line) => {
+      const record = {}
+      line.split(',').forEach((value, index) => {
+        record[fields[index]] = value.trim();
+      });
+      return JSON.stringify(record);
+    });
   }
 
   /**

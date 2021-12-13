@@ -1,6 +1,50 @@
 Release Notes
 ===
+2.0.0 (2021-12-02)
+---
 
+### Visualization
+
+* A Data Studio dashboard is available to show the process and results of
+  Tentacles.
+
+### Authorization
+
+* Cloud Functions supports the extension of authorization scopes now:
+    * In the case of authorization based on service account, no explicit service
+      account nor the key file will be created by the installation script. The
+      default service account of Cloud Functions will be used.
+    * If there is an existing service account key in local, Tentacles will
+      continue deploying it and using it. There is no breaking behavior.
+    * If you want to remove the extra service account and the key file, you can
+      delete the key file and re-deploy Tentacles. In this way, you may need to
+      grant access to the new service account (subject to the target systems).
+      You can use the command `./deploy.sh print_service_account` to print out
+      the service account that will be used.
+
+### Cloud Functions Runtime
+
+* Nodejs14 is now the default Cloud Functions runtime.
+
+### Integrated APIs
+
+* Updated to the v9 of the Google Ads API.
+
+### Enhancements
+
+* Measurement Protocol for GA4 connector support nested objects merge.
+* Google Ads Conversions uploading supports customer variables.
+* Measurement Protocol, Measurement Protocol for GA4 and Google Ads Conversions
+  uploading now support 'debug' mode.
+
+---
+
+1.4.0 (2021-09-07)
+---
+
+### Integrated APIs
+
+* Updated to the v8 of the Google Ads API
 
 1.2.5 (2021-07-27)
 ---
@@ -26,6 +70,8 @@ Release Notes
 
 * [Unable to Install on GCP](https://github.com/GoogleCloudPlatform/cloud-for-marketing/issues/23)
 
+---
+
 0.1.2 (2020-12-18)
 ---
 
@@ -45,7 +91,7 @@ Features added and bugs fixed in v0.1.2.
 * Added Search Ads 360 conversions insert
 * Added Google Ads offline conversions upload through Google Ads API
 
-### Authentication methods
+### Authorization methods
 
 * Added OAuth. Google Ads API only supports OAuth, so if Google Ads API is
   selected, OAuth will be used to authenticate. Otherwise, users can select to

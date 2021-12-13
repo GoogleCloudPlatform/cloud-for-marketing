@@ -23,6 +23,7 @@ const {
     doubleclicksearch: {ReportRequest: Sa360ReportConfig},
     googleads: ReportQueryConfig,
     doubleclickbidmanager: {RequestBody: Dv360RequestBody},
+    youtube: {ListChannelsConfig, ListVideosConfig},
   }
 } = require('@google-cloud/nodejs-common');
 
@@ -54,10 +55,20 @@ let Dv360ReportConfig;
  *   customerId: string|undefined,
  *   loginCustomerId: string|undefined,
  *   reportQuery: ReportQueryConfig|undefined,
- *   rootClientIdToGetChildAcct: string|undefined,
  * }}
  */
 let AdsReportConfig;
+
+/**
+ * YouTube report configuration
+ * @typedef {{
+ *   target: string,
+ *   resultLimit: number|undefined,
+ *   reportQuery: ListChannelsConfig|ListVideosConfig|ListCommentThreadsConfig
+ *     |ListPlaylistConfig|ListSearchConfig,
+ * }}
+ */
+let YouTubeReportConfig;
 
 /**
  * Options for extracts BigQuery Table to Cloud Storage file(s).
@@ -73,6 +84,9 @@ let AdsReportConfig;
  * } | {
  *   target: 'ADS',
  *   config: AdsReportConfig,
+ * } | {
+ *   target: 'YT',
+ *   config: YouTubeReportConfig,
  * }}
  */
 let ReportConfig;

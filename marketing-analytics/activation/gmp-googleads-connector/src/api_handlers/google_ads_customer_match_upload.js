@@ -21,7 +21,7 @@
 
 const {
   api: {googleads: {GoogleAds, CustomerMatchConfig}},
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -64,8 +64,7 @@ exports.GoogleAdsCustomerMatchConfig = GoogleAdsCustomerMatchConfig;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsCustomerMatchConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
 const sendDataInternal = (googleAds, records, messageId, config) => {
   const recordsPerRequest =
@@ -85,8 +84,7 @@ exports.sendDataInternal = sendDataInternal;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsCustomerMatchConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
 const sendData = (records, messageId, config) => {
   const googleAds = new GoogleAds(config.developerToken);

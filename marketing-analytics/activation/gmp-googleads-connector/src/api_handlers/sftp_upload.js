@@ -20,8 +20,10 @@
 
 const SftpClient = require('ssh2-sftp-client');
 const path = require('path');
-const {storage: {StorageFile}, utils: {getLogger}} = require(
-    '@google-cloud/nodejs-common');
+const {
+  storage: {StorageFile},
+  utils: {getLogger, BatchResult},
+} = require('@google-cloud/nodejs-common');
 
 /** Placeholder for a timestamp in the name of a uploaded file. */
 const TIMESTAMP_PLACEHOLDER = 'TIMESTAMP';
@@ -74,17 +76,16 @@ exports.SftpConfig = SftpConfig;
  *     the file to be sent out, or a piece of data that need to be send out.
  * @param {string} messageId Pub/sub message ID as log tag.
  * @param {!SftpConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
-exports.sendData = (message, messageId, config) => {
+exports.sendData = async (message, messageId, config) => {
   const logger = getLogger('API.SFTP');
   logger.debug(`Init SFTP uploader with Debug Mode.`);
   let data;
   try {
     data = JSON.parse(message);
   } catch (error) {
-    console.log(`This is not a JSON string, SFTP uploading file not on GCS.`);
+    logger.info(`This is not a JSON string, SFTP uploading file not on GCS.`);
     data = message;
   }
   let sftpClient = new SftpClient();
@@ -93,12 +94,20 @@ exports.sendData = (message, messageId, config) => {
   if (data.bucket) {
     const storageFile = new StorageFile(data.bucket, data.file);
     output = storageFile.getFile().createReadStream();
-    const defaultFileName = path.basename(data.file)
-        .replace(/API\[(\w*)]/i, '$1')
-        .replace(/config\[(\w*)]/i, '$1')
-        .replace(/size\[(\w*)]/i, '$1')
-        .replace(/:/g, '-');
-    targetFile = (config.fileName) ? config.fileName : defaultFileName;
+    const {fileName} = config;
+    if (fileName) {
+      targetFile = fileName;
+    } else {
+      // Working out a better file name for SFTP servers because:
+      // 1. SFTP servers have stricter rules then Cloud Storage, e.g. no colon.
+      // 2. By removing those tags (API, config, etc.) but keeping the value,
+      // the filenames shown in SA360 can be clearer.
+      targetFile = path.basename(data.file)
+          .replace(/API[\[|{](\w-*)[\]|}]/i, '$1')
+          .replace(/config[\[|{](\w*)[\]|}]/i, '$1')
+          .replace(/size\[(\w*)[\]|}]/i, '$1')
+          .replace(/:/g, '-');
+    }
   } else {
     output = Buffer.from(data);
     targetFile = config.fileName || 'upload_by_tentacles_TIMESTAMP';
@@ -110,20 +119,19 @@ exports.sendData = (message, messageId, config) => {
   logger.debug(`Get message: ${message}`);
   logger.debug(`SFTP Configuration: `, config);
   logger.debug(`Output filename: ${targetFile}`);
-  return sftpClient.connect(config.sftp)
-      .then(() => {
-        console.log(`Open SFTP server: ${config.sftp.host}`);
-        return sftpClient.put(output, targetFile).then((result) => {
-          console.log('SFTP operation: ', result);
-          return true;
-        });
-      })
-      .catch((err) => {
-        console.error('catch error', err);
-        return false;
-      })
-      .then((output) => {
-        console.log(`SFTP upload [${messageId}]: ${output}`);
-        return sftpClient.end().then(() => output);
-      });
+  /** @type {BatchResult} */ const batchResult = {};
+  try {
+    await sftpClient.connect(config.sftp);
+    logger.debug(`Open SFTP server: ${config.sftp.host}`);
+    const result = await sftpClient.put(output, targetFile);
+    logger.debug('SFTP operation: ', result);
+    logger.debug(`SFTP upload [${messageId}]: ${output}`);
+    await sftpClient.end();
+    batchResult.result = true;
+  } catch (error) {
+    batchResult.result = false;
+    batchResult.errors = [error.message];
+    logger.error('catch error', error);
+  }
+  return batchResult;
 };

@@ -1,6 +1,37 @@
 Release Notes
 ===
 
+1.0.0 (2021-12-02)
+---
+
+### Change default behavior of service account authorization
+
+Remove steps to create a service account and download service account key file.
+Use the default service account of Cloud Functions.
+
+### Upgrade Cloud Functions runtime to Nodejs14
+
+Dependencies libraries update to latest stable version.
+
+### Update to the v9 of the Google Ads API
+
+### Connect to YouTube Data API
+
+0.9.1 (2021-09-08)
+---
+
+### Add Vertex AI API for batch prediction.
+
+0.9.0 (2021-09-07)
+---
+
+### Update to the v8 of the Google Ads API
+
+0.8.3 (2021-08-29)
+---
+
+### Add a bash function to get OAuth access token from the OAuth key file.
+
 0.8.1 (2021-08-12)
 ---
 

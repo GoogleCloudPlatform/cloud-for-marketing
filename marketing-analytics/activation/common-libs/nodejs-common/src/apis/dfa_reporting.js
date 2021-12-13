@@ -26,6 +26,7 @@ const {
   getLogger,
   getFilterFunction,
   SendSingleBatch,
+  BatchResult,
 } = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
@@ -64,7 +65,7 @@ let InsertConversionsConfig;
 /**
  * List of properties that will be take from the data file as elements of a
  * conversion.
- * See https://developers.google.com/doubleclick-advertisers/v3.3/conversions
+ * See https://developers.google.com/doubleclick-advertisers/rest/v3.5/Conversion
  * @type {Array<string>}
  */
 const PICKED_PROPERTIES = [
@@ -79,8 +80,14 @@ const PICKED_PROPERTIES = [
  * see https://developers.google.com/doubleclick-advertisers/service_accounts
  */
 class DfaReporting {
-  constructor() {
-    const authClient = new AuthClient(API_SCOPES);
+
+  /**
+   * @constructor
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
+   */
+  constructor(env = process.env) {
+    const authClient = new AuthClient(API_SCOPES, env);
     this.auth = authClient.getDefaultAuth();
     /** @const {!google.dfareporting} */
     this.instance = google.dfareporting({
@@ -126,7 +133,7 @@ class DfaReporting {
      * @param {!Array<string>} lines Data for single request. It should be
      *     guaranteed that it doesn't exceed quota limitation.
      * @param {string} batchId The tag for log.
-     * @return {!Promise<boolean>}
+     * @return {!Promise<BatchResult>}
      */
     return async (lines, batchId) => {
       /** @type {function} Gets the conversion elements from the data object. */
@@ -153,6 +160,11 @@ class DfaReporting {
       if (config.idType === 'encryptedUserId') {
         requestBody.encryptionInfo = config.encryptionInfo;
       }
+      /** @const {BatchResult} */
+      const batchResult = {
+        result: true,
+        numberOfLines: lines.length,
+      };
       try {
         const response = await this.instance.conversions.batchinsert({
           profileId: config.profileId,
@@ -160,24 +172,60 @@ class DfaReporting {
         });
         const failed = response.data.hasFailures;
         if (failed) {
-          console.error(`Dfareporting[${batchId}] has failures.`);
-          const errorMessages = response.data.status
-              .filter((record) => typeof record.errors !== 'undefined')
-              .map((record) => {
-                this.logger.debug(record);
-                return record.errors.map((error) => error.message).join(',');
-              });
-          console.error(errorMessages.join('\n'));
+          this.logger.warn(`CM [${batchId}] has failures.`);
+          this.extraFailedLines_(batchResult, response.data.status, lines);
         }
         this.logger.debug('Configuration: ', config);
         this.logger.debug('Response: ', response);
-        return !failed;
+        return batchResult;
       } catch (error) {
-        console.error(`Dfareporting[${batchId}] failed.`, error);
-        return false;
+        this.logger.error(`CM[${batchId}] failed.`, error);
+        batchResult.result = false;
+        batchResult.errors = [error.message || error.toString()];
+        return batchResult;
       }
     };
   };
+
+  /**
+   * Campaign Manager API returns an array of ConversionStatus for the status of
+   * uploaded conversions. If there are errors related to the conversion, then
+   * an array of 'ConversionError' named 'errors' will be available in the
+   * ConversionStatus object. This function extras failed lines and error
+   * messages based on the 'errors'.
+   * For 'ConversionStatus', see:
+   *   https://developers.google.com/doubleclick-advertisers/rest/v3.5/ConversionStatus
+   * For 'ConversionError', see:
+   *   https://developers.google.com/doubleclick-advertisers/rest/v3.5/ConversionStatus#ConversionError
+   * @param {!BatchResult} batchResult
+   * @param {!Array<!Schema$ConversionStatus>} statuses
+   * @param {!Array<string>} lines The original input data.
+   * @private
+   */
+  extraFailedLines_(batchResult, statuses, lines) {
+    batchResult.result = false;
+    batchResult.failedLines = [];
+    batchResult.groupedFailed = {};
+    const errors = new Set();
+    statuses.forEach((conversionStatus, index) => {
+      if (conversionStatus.errors) {
+        const failedLine = lines[index];
+        batchResult.failedLines.push(failedLine);
+        conversionStatus.errors.forEach(({message}) => {
+          // error messages have detailed IDs. Need to generalize them.
+          const generalMessage = message.replace(/.*error: /, '');
+          errors.add(generalMessage);
+          const groupedFailed = batchResult.groupedFailed[generalMessage]
+              || [];
+          groupedFailed.push(failedLine);
+          if (groupedFailed.length === 1) {
+            batchResult.groupedFailed[generalMessage] = groupedFailed;
+          }
+        });
+      }
+      batchResult.errors = Array.from(errors);
+    });
+  }
 
   /**
    * Lists all UserProfiles.
@@ -203,8 +251,8 @@ class DfaReporting {
    * @return {!Promise<string>} Profile Id.
    * @private
    */
-  getProfileForOperation_(config) {
-    if (config.profileId) return Promise.resolve(config.profileId);
+  async getProfileForOperation_(config) {
+    if (config.profileId) return config.profileId;
     if (config.accountId) return this.getProfileId(config.accountId);
     throw new Error('There is no profileId or accountId in the configuration.');
   }
@@ -213,7 +261,7 @@ class DfaReporting {
    * Runs a report and return the file Id. As an asynchronized process, the
    * returned file Id will be a placeholder until the status changes to
    * 'REPORT_AVAILABLE' in the response of `getFile`.
-   * @see https://developers.google.com/doubleclick-advertisers/v3.3/reports/run
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v3.5/reports/run
    *
    * @param {{
    *   accountId:(string|undefined),
@@ -236,7 +284,7 @@ class DfaReporting {
    * Returns file url from a report. If the report status is 'REPORT_AVAILABLE',
    * then return the apiUrl from the response; if the status is 'PROCESSING',
    * returns undefined; otherwise throws an error.
-   * @see https://developers.google.com/doubleclick-advertisers/v3.3/reports/files/get
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v3.5/reports/get
    *
    * @param {{
    *   accountId:(string|undefined),

@@ -30,7 +30,7 @@ const {
     adaptNode6,
     validatedStorageTrigger,
   },
-  utils: {getProperValue, wait, getLogger, replaceParameters,},
+  utils: {getProperValue, wait, getLogger, replaceParameters, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
@@ -38,7 +38,8 @@ const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
 const {getApiConfig, ApiConfig, ApiConfigJson} = require(
     './api_config/index.js');
 const {getApiLock, ApiLock} = require('./api_lock/index.js');
-const {getTentaclesFile, TentaclesFile} = require('./tentacles_file/index.js');
+const {getTentaclesFile, TentaclesFile, TentaclesFileEntity} =
+    require('./tentacles_file/index.js');
 const {getTentaclesTask, TentaclesTask, TentaclesTaskEntity} =
     require('./tentacles_task/index.js');
 
@@ -130,17 +131,17 @@ class Tentacles {
      *     from the function 'validatedStorageTrigger'..
      * @return {!Promise<string>} ID of the 'nudge' message.
      */
-    const loadFileAndNudge = (file) => {
-      return this.loadGcsToPs(file)
-          .then((topicName) => {
-            const fullFilePath = `gs://${file.bucket}/${file.name}`;
-            if (topicName) {
-              return this.nudge(
-                  `After publish of ${fullFilePath}`, {topic: topicName});
-            }
-            console.warn(`Something wrong with the file ${fullFilePath}.`);
-          })
-          .catch(console.error);
+    const loadFileAndNudge = async (file) => {
+      try {
+        const topic = await this.loadGcsToPs(file);
+        const fullFilePath = `gs://${file.bucket}/${file.name}`;
+        if (topic) {
+          return this.nudge(`After publish of ${fullFilePath}`, {topic});
+        }
+        this.logger.error(`Something wrong with the file ${fullFilePath}.`);
+      } catch (error) {
+        this.logger.error(error);
+      }
     };
     return this.options.validatedStorageTrigger(loadFileAndNudge, outbound);
   }
@@ -153,46 +154,42 @@ class Tentacles {
    * @return {!Promise<string|undefined>} The name of the topic that receives
    *     the data.
    */
-  loadGcsToPs(file) {
+  async loadGcsToPs(file) {
     /** @const {!Object<string,string>} Attributes in the Pub/Sub messages. */
     const attributes = getAttributes(file.name);
     attributes.topic = getTopicNameByApi(this.namespace, attributes.api);
     this.logger.debug(`Attributes from [${file.name}]: `, attributes);
-    return this.tentaclesFile.save(file).then((fileId) => {
-      fileId = fileId.toString();
-      this.logger.debug(`Incoming file is logged as [${fileId}].`);
-      return this.apiConfig.getConfig(attributes.api, attributes.config)
-          .then((apiConfig) => {
-            if (!this.options.getApiHandler(attributes.api)) {
-              throw new Error(`Unknown API: ${attributes.api}.`);
-            }
-            if (!apiConfig) {
-              throw new Error(`API[${attributes.api}] has unknown config: ${
-                  attributes.config}.`);
-            }
-            if (file.size === 0) {
-              console.warn(`Empty file: ${file.name}.`);
-            }
-            /** @type {TentaclesTaskEntity} */
-            const taskBaseInfo = Object.assign({fileId: fileId}, attributes);
-            if (attributes.gcs === 'true') {
-              return this.sendFileInfoToMessage_(file, taskBaseInfo);
-            } else {
-              return this.sendDataToMessage_(file, taskBaseInfo);
-            }
-          })
-          .then((sendOutAllData) => {
-            if (sendOutAllData) return attributes.topic;
-            throw new Error(`Errors in send out data.`);
-          })
-          .catch((error) => {
-            console.error(`Error in ${file.name}: `, error);
-            return this.tentaclesFile.saveError(fileId, error.message)
-                .then(() => {
-                  throw new Error(`File ${fileId} failed: ${error.message}`);
-                });
-          });
-    });
+    /** @const {TentaclesFileEntity} */
+    const fileEntity = Object.assign({attributes}, file);
+    const fileId = (await this.tentaclesFile.save(fileEntity)).toString();
+    this.logger.debug(`Incoming file is logged as [${fileId}].`);
+    try {
+      const {api, config} = attributes;
+      if (!this.options.getApiHandler(api)) {
+        throw new Error(`Unknown API: ${api}.`);
+      }
+      const apiConfig = await this.apiConfig.getConfig(api, config);
+      if (!apiConfig) {
+        throw new Error(`API[${api}] has unknown config: ${config}.`);
+      }
+      if (file.size === 0) {
+        console.warn(`Empty file: ${file.name}.`);
+      }
+      /** @type {TentaclesTaskEntity} */
+      const taskBaseInfo = Object.assign({fileId}, attributes);
+      let sendOutAllData;
+      if (attributes.gcs === 'true') {
+        sendOutAllData = await this.sendFileInfoToMessage_(file, taskBaseInfo);
+      } else {
+        sendOutAllData = await this.sendDataToMessage_(file, taskBaseInfo);
+      }
+      if (sendOutAllData) return attributes.topic;
+      throw new Error(`Errors in send out data.`);
+    } catch (error) {
+      this.logger.error(`Error in ${file.name}: `, error);
+      await this.tentaclesFile.saveError(fileId, error.message);
+      throw new Error(`File ${fileId} failed: ${error.message}`);
+    }
   }
 
   /**
@@ -204,16 +201,12 @@ class Tentacles {
    *     out message and update the message id back to the task) succeeded.
    * @private
    */
-  saveTaskAndSendData_(taskEntity, data) {
-    return this.tentaclesTask.createTask(taskEntity).then((taskId) => {
-      taskId = taskId.toString();
-      const messageAttributes = Object.assign({taskId: taskId}, taskEntity);
-      return this.pubsub.publish(taskEntity.topic, data, messageAttributes)
-          .then((messageId) => {
-            return this.tentaclesTask.updateTask(
-                taskId, {dataMessageId: messageId});
-          });
-    });
+  async saveTaskAndSendData_(taskEntity, data) {
+    const taskId = (await this.tentaclesTask.createTask(taskEntity)).toString();
+    const messageAttributes = Object.assign({taskId}, taskEntity);
+    const messageId = await this.pubsub.publish(
+        taskEntity.topic, data, messageAttributes);
+    return this.tentaclesTask.updateTask(taskId, {dataMessageId: messageId});
   };
 
   /**
@@ -223,34 +216,26 @@ class Tentacles {
    * @return {!Promise<boolean>} Whether all messages sent out successfully.
    * @private
    */
-  sendDataToMessage_(file, taskBaseInfo) {
-    const storageFile = this.options.getStorage(file.bucket, file.name);
+  async sendDataToMessage_(file, taskBaseInfo) {
+    const {bucket, name: fileName, size: fileSize} = file;
+    const {size, topic} = taskBaseInfo;
+    const storageFile = this.options.getStorage(bucket, fileName);
     const messageMaxSize = 1000 * 1000 *
-        getProperValue(parseFloat(taskBaseInfo.size), MESSAGE_MAXIMUM_SIZE);
+        getProperValue(parseFloat(size), MESSAGE_MAXIMUM_SIZE);
     this.logger.debug(`Split data size: ${messageMaxSize}`);
-    //TODO(lushu): review the reason to get file size here.
-    // return storageFile.getFileSize()
-    //     .then((fileSize) => {
-    //       return storageFile.getSplitRanges(fileSize, messageMaxSize);
-    //     })
-    return storageFile.getSplitRanges(file.size, messageMaxSize)
-        .then((splitRanges) => {
-          let promise = Promise.resolve(true);
-          splitRanges.forEach(([start, end], index) => {
-            promise = promise.then((latestResult) => {
-              return storageFile.loadContent(start, end).then((data) => {
-                const taskEntity = Object.assign(
-                    {start: start.toString(), end: end.toString()},
-                    taskBaseInfo);
-                this.logger.debug(`[${index}] Send ${
-                    data.length} bytes to Topic[${taskEntity.topic}].`);
-                return this.saveTaskAndSendData_(taskEntity, data)
-                    .then((currentResult) => currentResult && latestResult);
-              });
-            });
-          });
-          return Promise.resolve(promise);
-        });
+    const splitRanges =
+        await storageFile.getSplitRanges(fileSize, messageMaxSize);
+    const reducedFn = async (previous, [start, end], index) => {
+      const previousResult = await previous;
+      const data = await storageFile.loadContent(start, end);
+      const taskEntity = Object.assign(
+          {start: start.toString(), end: end.toString()}, taskBaseInfo);
+      this.logger.debug(
+          `[${index}] Send ${data.length} bytes to Topic[${topic}].`);
+      const currentResult = await this.saveTaskAndSendData_(taskEntity, data);
+      return currentResult && previousResult;
+    };
+    return splitRanges.reduce(reducedFn, true);
   }
 
   /**
@@ -262,27 +247,23 @@ class Tentacles {
    * @return {!Promise<boolean>} Whether all messages sent out successfully.
    * @private
    */
-  sendFileInfoToMessage_(file, taskBaseInfo) {
-    const storageFile = this.options.getStorage(file.bucket, file.name);
-    const gcsSplitSize =
-        getProperValue(
-            parseFloat(taskBaseInfo.size), STORAGE_FILE_MAXIMUM_SIZE, false) *
-        1000 * 1000;
-    return storageFile.split(gcsSplitSize).then((slicedFiles) => {
-      let promise = Promise.resolve(true);
-      slicedFiles.forEach((slicedFile, index) => {
-        const data = JSON.stringify({file: slicedFile, bucket: file.bucket});
-        const taskEntity =
-            Object.assign({slicedFile: slicedFile}, taskBaseInfo);
-        this.logger.debug(
-            `[${index}] Send ${data} to Topic[${taskEntity.topic}].`);
-        promise = promise.then((latestResult) => {
-          return this.saveTaskAndSendData_(taskEntity, data)
-              .then((currentResult) => currentResult && latestResult);
-        });
-      });
-      return Promise.resolve(promise);
-    });
+  async sendFileInfoToMessage_(file, taskBaseInfo) {
+    const {bucket, name: fileName} = file;
+    const storageFile = this.options.getStorage(bucket, fileName);
+    const {size, topic} = taskBaseInfo;
+    const gcsSplitSize = 1000 * 1000 *
+        getProperValue(parseFloat(size), STORAGE_FILE_MAXIMUM_SIZE, false);
+    this.logger.debug(`Split file into size: ${gcsSplitSize}`);
+    const slicedFiles = await storageFile.split(gcsSplitSize);
+    const reducedFn = async (previous, slicedFile, index) => {
+      const previousResult = await previous;
+      const data = JSON.stringify({file: slicedFile, bucket});
+      const taskEntity = Object.assign({slicedFile}, taskBaseInfo);
+      this.logger.debug(`[${index}] Send ${data} to Topic[${topic}].`);
+      const currentResult = await this.saveTaskAndSendData_(taskEntity, data);
+      return currentResult && previousResult;
+    };
+    return slicedFiles.reduce(reducedFn, true);
   }
 
   /**
@@ -297,40 +278,35 @@ class Tentacles {
    */
   getTransporter(timeout = 60, targetTopic = `${this.namespace}-push`) {
     /** @type {!CloudFunctionNode8} */
-    const transportMessage = (message, context) => {
+    const transportMessage = async (message, context) => {
       const attributes = message.attributes || {};
       const messageId = context.eventId;
       if (!attributes.topic) {
-        console.warn(`There is no source topic: ${messageId}`);
-        return Promise.resolve(TransportResult.NO_SOURCE_TOPIC);
+        this.logger.warn(`There is no source topic: ${messageId}`);
+        return TransportResult.NO_SOURCE_TOPIC;
       }
       const sourceTopic = attributes.topic;
-      return this.apiLock.getLock(sourceTopic).then((getLocked) => {
-        if (!getLocked) {
-          console.warn(`There are running tasks for ${sourceTopic}. QUIT.`);
-          return TransportResult.NO_LOCK;
-        }
-        const data = Buffer.from(message.data, 'base64').toString();
-        this.logger.debug(`Get nudge message[${messageId}]: ${
-            data}. Will transport for [${sourceTopic}]`);
-        return this.passOneMessage_(sourceTopic, timeout, targetTopic)
-            .then((result) => {
-              this.logger.debug(
-                  `Nudge message[${messageId}] transport results: ${result}`);
-              if (result === TransportResult.DONE) return result;
-              return this.apiLock.unlock(sourceTopic).then(() => {
-                if (result === TransportResult.DUPLICATED) {
-                  return this
-                      .nudge(
-                          `Got a duplicated message[${messageId}], ahead next.`,
-                          attributes)
-                      .then(() => TransportResult.DUPLICATED);
-                }
-                console.log(`There is no new message in ${sourceTopic}.`);
-                return TransportResult.TIMEOUT;
-              });
-            });
-      });
+      const getLocked = await this.apiLock.getLock(sourceTopic);
+      if (!getLocked) {
+        this.logger.warn(`There are running tasks for ${sourceTopic}. QUIT.`);
+        return TransportResult.NO_LOCK;
+      }
+      const data = Buffer.from(message.data, 'base64').toString();
+      this.logger.debug(`Get nudge message[${messageId}]: ${
+          data}. Will transport for [${sourceTopic}]`);
+      const result =
+          await this.passOneMessage_(sourceTopic, timeout, targetTopic);
+      this.logger.debug(
+          `Nudge message[${messageId}] transport results: ${result}`);
+      if (result === TransportResult.DONE) return result;
+      await this.apiLock.unlock(sourceTopic);
+      if (result === TransportResult.DUPLICATED) {
+        await this.nudge(
+            `Got a duplicated message[${messageId}], ahead next.`, attributes);
+        return TransportResult.DUPLICATED;
+      }
+      this.logger.info(`There is no new message in ${sourceTopic}.`);
+      return TransportResult.TIMEOUT;
     };
     return adaptNode6(transportMessage);
   }
@@ -345,64 +321,51 @@ class Tentacles {
    * @return {!Promise<!TransportResult>} Result of this execution.
    * @private
    */
-  passOneMessage_(sourceTopic, timeout, targetTopic) {
+  async passOneMessage_(sourceTopic, timeout, targetTopic) {
     /**
      * Gets the message handler function for the pull subscription.
      * @param {function(*)} resolver Function to call when promise is fulfilled.
      * @return {function(!PubsubMessage):!Promise<!TransportResult>}
      */
     const getMessageHandler = (resolver) => {
-      return (message) => {
-        const messageTag = `[${message.id}]@[${sourceTopic}]`;  // For log.
-        this.logger.debug(
-            `Received ${messageTag} with data length: ${message.length}`);
-        const taskId = message.attributes.taskId;
-        this.tentaclesTask.start(taskId).then((startSuccessfully) => {
-          if (startSuccessfully) {
-            this.pubsub.publish(
-                targetTopic, Buffer.from(message.data, 'base64').toString(),
-                message.attributes)
-                .then((messageId) => {
-                  console.log(`Forward ${messageTag} as [${messageId}]@[${
-                      targetTopic}]`);
-                  message.ack();
-                  return this.tentaclesTask
-                      .updateTask(taskId, {apiMessageId: messageId})
-                      .then(() => {
-                        resolver(TransportResult.DONE);
-                      });
-                });
-          } else {
-            console.warn(`Wrong status for ${
-                messageTag} (maybe duplicated). Task ID: [${taskId}].`);
-            message.ack();
-            resolver(TransportResult.DUPLICATED);
-          }
-        });
+      return async (message) => {
+        const {id, length, attributes} = message;
+        const messageTag = `[${id}]@[${sourceTopic}]`;  // For log.
+        this.logger.debug(`Received ${messageTag} with data length: ${length}`);
+        const taskId = attributes.taskId;
+        const startSuccessfully = await this.tentaclesTask.start(taskId);
+        if (startSuccessfully) {
+          const messageId = await this.pubsub.publish(targetTopic,
+              Buffer.from(message.data, 'base64').toString(), attributes);
+          this.logger.debug(`Forward ${messageTag} as [${messageId}]@[${
+              targetTopic}]`);
+          message.ack();
+          await this.tentaclesTask.updateTask(taskId,
+              {apiMessageId: messageId});
+          resolver(TransportResult.DONE);
+        } else {
+          this.logger.warn(`Wrong status for ${
+              messageTag} (maybe duplicated). Task ID: [${taskId}].`);
+          message.ack();
+          resolver(TransportResult.DUPLICATED);
+        }
       };
     };
-
-    return this.pubsub.getOrCreateSubscription(
+    const subscription = await this.pubsub.getOrCreateSubscription(
         sourceTopic, `${sourceTopic}-holder`,
-        {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}})
-        .then((subscription) => {
-          this.logger.debug(`Get subscription ${subscription.name}.`);
-          const subscriber = new Promise((resolver) => {
-            this.logger.debug(
-                `Add messageHandler to Subscription:`, subscription);
-            subscription.once(`message`, getMessageHandler(resolver));
-          });
-          return Promise
-              .race([
-                subscriber,
-                wait(timeout * 1000, TransportResult.TIMEOUT),
-              ])
-              .then((result) => {
-                this.logger.debug(`Remove messageHandler after ${result}.`);
-                subscription.removeAllListeners('message');
-                return result;
-              });
-        });
+        {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}});
+    this.logger.debug(`Get subscription ${subscription.name}.`);
+    const subscriber = new Promise((resolver) => {
+      this.logger.debug(`Add messageHandler to Subscription:`, subscription);
+      subscription.once(`message`, getMessageHandler(resolver));
+    });
+    const result = await Promise.race([
+      subscriber,
+      wait(timeout * 1000, TransportResult.TIMEOUT),
+    ]);
+    this.logger.debug(`Remove messageHandler after ${result}.`);
+    subscription.removeAllListeners('message');
+    return result;
   }
 
   /**
@@ -412,70 +375,88 @@ class Tentacles {
    */
   getApiRequester() {
     /** @type {!CloudFunctionNode8} */
-    const sendApiData = (message, context) => {
+    const sendApiData = async (message, context) => {
       const messageId = context.eventId;
-      const records = Buffer.from(message.data, 'base64').toString();
-      console.log(
+      const {attributes, data} = message;
+      const records = Buffer.from(data, 'base64').toString();
+      this.logger.debug(
           `Receive message[${messageId}] with ${records.length} bytes.`);
-      const attributes = message.attributes || {};
-      return this.apiConfig.getConfig(attributes.api, attributes.config)
-          .then((apiConfig) => {
-            const apiHandler = this.options.getApiHandler(attributes.api);
-            if (!apiHandler) {
-              throw new Error(`Unknown API: ${attributes.api}.`);
-            }
-            if (!apiConfig) {
-              throw new Error(`API[${attributes.api}] has unknown config: ${
-                  attributes.config}.`);
-            }
-            if (attributes.dryRun === 'true') {
-              console.log(
-                  `[DryRun] API[${attributes.api}] and config[${
-                      attributes.config}]: `,
-                  apiConfig);
-              return true;
-            } else {
-              let config;
-              if (!attributes.appended) {
-                config = apiConfig;
-              } else {
-                const parameters = JSON.parse(attributes.appended);
-                config = JSON.parse(replaceParameters(
-                    JSON.stringify(apiConfig), parameters, true));
-              }
-              return apiHandler(records, messageId, config);
-            }
-          })
-          .then((succeeded) => {
-            return this.tentaclesTask.finish(attributes.taskId, succeeded).then(
-                () => true);
-          })
-          .catch((error) => {
-            console.error(`Error in API[${attributes.api}], config[${
-                attributes.config}]: `, error);
-            return this.tentaclesTask.logError(attributes.taskId, error).then(
-                () => !error.message.startsWith('Unsupported API'));
-          })
-          .then((needContinue) => {
-            if (!attributes.topic) {
-              console.log(`There is no topic. In local file upload mode.`);
-              return;
-            }
-            if (!needContinue) {
-              console.log(`Skip unsupported API ${attributes.api}.`);
-            }
-            return this.releaseLockAndNotify(attributes.topic,
-                messageId, needContinue).catch((error) => {
-              // Re-do this when unknown external exceptions happens.
-              console.error('External exception happened: ', error);
-              return wait(10000).then(() => {
-                console.log('Wait 10 second and retry...');
-                return this.releaseLockAndNotify(attributes.topic, messageId,
-                    needContinue);
-              });
-            });
+      const {api, config, dryRun, appended, taskId, topic} = attributes || {};
+      /** @type {BatchResult} */ let result;
+      let needContinue;
+      try {
+        const apiConfig = await this.apiConfig.getConfig(api, config);
+        const apiHandler = this.options.getApiHandler(api);
+        if (!apiHandler) throw new Error(`Unknown API: ${api}.`);
+        if (!apiConfig) {
+          throw new Error(`API[${api}] has unknown config: ${config}.`);
+        }
+        let finalConfig; // Dynamic config
+        if (!appended) {
+          finalConfig = apiConfig;
+        } else {
+          const parameters = JSON.parse(appended);
+          const finalConfigString =
+              replaceParameters(JSON.stringify(apiConfig), parameters, true);
+          finalConfig = JSON.parse(finalConfigString);
+        }
+        if (dryRun === 'true') {
+          this.logger.info(`[DryRun] API[${api}] and config[${config}]: `,
+              finalConfig);
+          result = /** @type {!BatchResult} */ {result: true}; // A dry-run task always succeeds.
+          if (!getApiOnGcs().includes(attributes.api)) {
+            result.numberOfLines = records.split('\n').length;
+          }
+        } else {
+          result = await apiHandler(records, messageId, finalConfig);
+        }
+        //TODO(lushu) For previous API handler, will be removed after all updated.
+        if (typeof result.result === 'undefined') {
+          await this.tentaclesTask.finish(taskId, result);
+        } else {
+          const {numberOfLines = 0, failedLines, groupedFailed} = result;
+          await this.tentaclesTask.updateTask(taskId, {
+            numberOfLines,
+            numberOfFailed: failedLines ? failedLines.length : 0,
           });
-    };
+          if (groupedFailed) {
+            const errorLogger = getLogger('TentaclesFailedRecord');
+            Object.keys(groupedFailed).forEach((error) => {
+              errorLogger.info(
+                  JSON.stringify(
+                      {taskId, error, records: groupedFailed[error]}));
+            });
+          }
+          if (result.result) {
+            await this.tentaclesTask.finish(taskId, result.result);
+          } else {
+            await this.tentaclesTask.logError(taskId, result.errors);
+          }
+        }
+        needContinue = true;
+      } catch (error) {
+        this.logger.error(`Error in API[${api}], config[${config}]: `, error);
+        await this.tentaclesTask.logError(taskId, error);
+        needContinue = !error.message.startsWith('Unsupported API');
+      }
+      if (!topic) {
+        this.logger.info('There is no topic. In local file upload mode.');
+        return;
+      }
+      if (!needContinue) {
+        this.logger.info(`Skip unsupported API ${api}.`);
+      }
+      try {
+        return this.releaseLockAndNotify(topic, messageId, needContinue);
+      } catch (error) {
+        // Re-do this when unknown external exceptions happens.
+        this.logger.error('Exception happened while try to release the lock: ',
+            error);
+        await wait(10000); // wait 10 sec
+        this.logger.info('Wait 10 second and retry...');
+        return this.releaseLockAndNotify(topic, messageId, needContinue);
+      }
+    }
     return adaptNode6(sendApiData);
   }
 
@@ -486,14 +467,11 @@ class Tentacles {
    * @param {boolean} needContinue Whether should send notification message.
    * @return {!Promise<string|undefined>} ID of the 'nudge' message.
    */
-  releaseLockAndNotify(topic, messageId, needContinue) {
-    return this.apiLock.unlock(topic).then(() => {
-      if (needContinue) {
-        return this.nudge(
-            `Triggered by message[${messageId}]`,
-            {topic: topic});
-      }
-    });
+  async releaseLockAndNotify(topic, messageId, needContinue) {
+    await this.apiLock.unlock(topic);
+    if (needContinue) {
+      return this.nudge(`Triggered by message[${messageId}]`, {topic});
+    }
   }
 
   /**
@@ -525,9 +503,10 @@ const getTopicNameByApi = (topicPrefix, apiName) => {
  * @typedef {{
  *   api:string,
  *   config:string,
- *   gcs:(string),
+ *   gcs:string,
  *   size:(string|undefined),
  *   dryRun:string,
+ *   appended:(string|undefined),
  * }}
  */
 let FileAttributes;
@@ -609,16 +588,16 @@ const getTentacles = (namespace, datasource = undefined, apiConfig) => {
  * uses it to create an instance of Tentacles.
  * @return {!Promise<!Tentacles>}
  */
-const guessTentacles = (namespace = process.env['PROJECT_NAMESPACE']) => {
+const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE']) => {
   if (!namespace) {
     console.warn(
-        'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`');
+        'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`'
+    );
     namespace = 'tentacles';
   }
-  return FirestoreAccessBase.isNativeMode().then((isNative) => {
-    const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
-    return getTentacles(namespace, dataSource);
-  });
+  const isNative = await FirestoreAccessBase.isNativeMode();
+  const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
+  return getTentacles(namespace, dataSource);
 };
 
 module.exports = {

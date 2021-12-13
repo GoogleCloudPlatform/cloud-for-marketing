@@ -103,7 +103,7 @@
         "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
         "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
         "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-        "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE],
+        "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE]",
         "operation": "create|remove"
       }
     }

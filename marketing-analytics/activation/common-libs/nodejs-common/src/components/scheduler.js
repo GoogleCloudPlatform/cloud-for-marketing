@@ -30,11 +30,11 @@ const API_VERSION = 'v1';
  * to get/pause/resume a job.
  */
 class CloudScheduler {
-  constructor() {
+  constructor(projectId = process.env['GCP_PROJECT']) {
     /** @const {!AuthClient} */
     const authClient = new AuthClient(API_SCOPES);
     this.auth = authClient.getApplicationDefaultCredentials();
-    this.projectId = process.env['GCP_PROJECT'];
+    this.projectId = projectId;
     this.instance = cloudscheduler({
       version: API_VERSION,
       auth: this.auth,

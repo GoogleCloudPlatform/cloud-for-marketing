@@ -54,19 +54,22 @@ class DataAccessObject {
    * @param {string} kind The data model name.
    * @param {string} namespace The namespace of the data.
    * @param {!DataSource} dataSource The data source type.
+   * @param {string} projectId The Id of Cloud project.
    */
   constructor(kind, namespace,
-      dataSource = DataAccessObject.getDataSourceFromEnvironment()) {
+      dataSource = DataAccessObject.getDataSourceFromEnvironment(),
+      projectId = process.env['GCP_PROJECT']) {
     /** @const {string} */ this.namespace = namespace;
     /** @const {!DataSource} */ this.dataSource = dataSource;
     /** @type {!FirestoreAccessBase} */ this.accessObject = undefined;
     switch (this.dataSource) {
       case DataSource.FIRESTORE:
         this.accessObject = new NativeModeAccess(
-            `${this.namespace}/database/${kind}`);
+            `${this.namespace}/database/${kind}`, projectId);
         break;
       case DataSource.DATASTORE:
-        this.accessObject = new DatastoreModeAccess(this.namespace, kind);
+        this.accessObject = new DatastoreModeAccess(this.namespace, kind,
+            projectId);
         break;
       default:
         throw new Error(`Unknown DataSource item: ${this.dataSource}.`);

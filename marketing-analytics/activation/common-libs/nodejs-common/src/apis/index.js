@@ -110,3 +110,13 @@ exports.adsdatahub = require('./ads_data_hub.js');
  * }}
  */
 exports.measurementprotocolga4 = require('./measurement_protocol_ga4.js');
+
+/**
+ * APIs integration class for YouTube.
+ * @const {{
+ *   YouTube:!YouTube,
+ *   ListChannelsConfig: !ListChannelsConfig,
+ *   ListVideosConfig: !ListVideosConfig,
+ * }}
+ */
+exports.youtube = require('./youtube.js');

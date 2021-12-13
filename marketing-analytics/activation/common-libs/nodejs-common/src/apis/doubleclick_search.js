@@ -22,7 +22,11 @@
 const {google} = require('googleapis');
 const {request} = require('gaxios');
 const AuthClient = require('./auth_client.js');
-const {getLogger, SendSingleBatch} = require('../components/utils.js');
+const {
+  getLogger,
+  SendSingleBatch,
+  BatchResult,
+} = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/doubleclicksearch',
@@ -115,8 +119,14 @@ let ReportRequest;
  * https://support.google.com/adsihc/answer/6346075?hl=en
  */
 class DoubleClickSearch {
-  constructor() {
-    const authClient = new AuthClient(API_SCOPES);
+
+  /**
+   * @constructor
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
+   */
+  constructor(env = process.env) {
+    const authClient = new AuthClient(API_SCOPES, env);
     this.auth = authClient.getDefaultAuth();
     /** @const {!google.doubleclicksearch} */
     this.instance = google.doubleclicksearch({
@@ -138,22 +148,21 @@ class DoubleClickSearch {
    *     availabilities array.
    * @return {!Promise<boolean>} Update result.
    */
-  updateAvailability(availabilities) {
+  async updateAvailability(availabilities) {
     const availabilityTimestamp = Date.now();
-    for (const availability of availabilities) {
+    availabilities.forEach((availability) => {
       availability.availabilityTimestamp = availabilityTimestamp;
-    }
+    });
     this.logger.debug('Sending out availabilities', availabilities);
-    return this.instance.conversion
-        .updateAvailability({requestBody: {availabilities}})
-        .then((response) => {
-          this.logger.debug('Get response: ', response);
-          return response.status === 200;
-        })
-        .catch((error) => {
-          console.error(error);
-          return false;
-        });
+    try {
+      const response = await this.instance.conversion.updateAvailability(
+          {requestBody: {availabilities}});
+      this.logger.debug('Get response: ', response);
+      return response.status === 200;
+    } catch (e) {
+      this.logger.error(e);
+      return false;
+    }
   }
 
   /**
@@ -170,16 +179,16 @@ class DoubleClickSearch {
      * @param {!Array<string>} lines Data for single request. It should be
      *     guaranteed that it doesn't exceed quota limitation.
      * @param {string} batchId The tag for log.
-     * @return {!Promise<boolean>}
+     * @return {!Promise<BatchResult>}
      */
-    return (lines, batchId) => {
+    return async (lines, batchId) => {
       const conversionTimestamp = new Date().getTime();
       const conversions = lines.map((line, index) => {
         const record = JSON.parse(line);
         return Object.assign(
             {
               // Default value, can be overwritten by the exported data.
-              conversionTimestamp: conversionTimestamp,
+              conversionTimestamp,
               // Default conversion Id should be unique in a single request.
               // See error code 0x0000011F at here:
               // https://developers.google.com/search-ads/v2/troubleshooting#conversion-upload-errors
@@ -188,31 +197,98 @@ class DoubleClickSearch {
             config, record);
       });
       this.logger.debug('Configuration: ', config);
-      return this.instance.conversion
-          .insert({requestBody: {conversion: conversions}})
-          .then((response) => {
-            this.logger.debug('Response: ', response);
-            console.log(`SA[${batchId}] Insert ${
-                response.data.conversion.length} conversions`);
-            return true;
-          })
-          .catch((error) => {
-            if (error.code === 400 && error.errors) {//requestValidation error
-              const messages = error.errors.map((singleError) => {
-                return singleError.message.replace(
-                    'The request was not valid. Details: ', '');
-              });
-              console.log(`SA[${batchId}] partially failed.\n`,
-                  messages.join(',\n'));
-              return false;
-            }
-            console.error(
-                `SA insert conversions [${batchId}] failed.`, error.message);
-            this.logger.debug(
-                'Errors in response:', error.response.data.error);
-            return false;
-          });
+      /** @const {BatchResult} */
+      const batchResult = {
+        result: true,
+        numberOfLines: lines.length,
+      };
+      try {
+        const response = await this.instance.conversion.insert(
+            {requestBody: {conversion: conversions}}
+        );
+        this.logger.debug('Response: ', response);
+        const insertedConversions = response.data.conversion.length;
+        if (lines.length !== insertedConversions) {
+          const errorMessage =
+              `Conversions input/inserted: ${lines.length}/${insertedConversions}`;
+          this.logger.warn(errorMessage);
+          batchResult.result = false;
+          batchResult.numberOfLines = insertedConversions;
+          batchResult.errors = [errorMessage];
+        }
+        this.logger.info(
+            `SA[${batchId}] Insert ${insertedConversions} conversions.`);
+        return batchResult;
+      } catch (error) {
+        this.updateBatchResultWithError_(batchResult, error, lines);
+        return batchResult;
+      }
     };
+  }
+
+  /**
+   * Updates the BatchResult based on errors.
+   * There are 3 types of errors here:
+   * The first two errors are from 'Standard Error Responses';
+   * The last one is normal Javascript Error object.
+   *
+   * For more details of 'Standard Error Responses', see:
+   * https://developers.google.com/search-ads/v2/standard-error-responses
+   *
+   * Error 1. error code is not 400, e.g. 403 for no access to SA360 API. This
+   *     error fail the whole process and no need to extract detailed lines.
+   * Error 2. error code 400 and 'errors' has one or more lines. Each line might
+   *     have different failure reason. Failed lines can be extracted to give
+   *     users more information.
+   *     Note, some failure reason may fail every line, e.g. wrong
+   *     'segmentationName' in the config (Error code '0x0000010E', see:
+   *     https://developers.google.com/search-ads/v2/troubleshooting#conversion-upload-errors )
+   * Error 3. normal JavaScript Error object. No property 'errors'.
+   *
+   * @param {!BatchResult} batchResult
+   * @param {(!GoogleAdsFailure|!Error)} error
+   * @param {!Array<string>} lines The original input data.
+   * @private
+   */
+  updateBatchResultWithError_(batchResult, error, lines) {
+    batchResult.result = false;
+    // Error 3.
+    if (!error.errors) {
+      batchResult.errors = [error.message || error.toString()];
+      return;
+    }
+    const errorMessages = error.errors.map(({message}) => message);
+    // Error 1.
+    if (error.code !== 400) {
+      batchResult.errors = errorMessages;
+      return;
+    }
+    // Error 2.
+    batchResult.failedLines = [];
+    batchResult.groupedFailed = {};
+    const errors = new Set();
+    const messageReg = /.*Details: \[(.*) index=\d+ conversionId=.*/;
+    const indexReg = /.*index=(\d*) .*/;
+    errorMessages.forEach((message) => {
+      const errorMessage = messageReg.exec(message);
+      if (errorMessage) {
+        const index = indexReg.exec(message);
+        const failedLine = lines[index[1]];
+        batchResult.failedLines.push(failedLine);
+        // error messages have detailed IDs. Need to generalize them.
+        const generalMessage =
+            errorMessage[1].replace(/ \'[^\']*\'/, '');
+        errors.add(generalMessage);
+        const groupedFailed = batchResult.groupedFailed[generalMessage] || [];
+        groupedFailed.push(failedLine);
+        if (groupedFailed.length === 1) {
+          batchResult.groupedFailed[generalMessage] = groupedFailed;
+        }
+      } else {
+        errors.add(message);
+      }
+    });
+    batchResult.errors = Array.from(errors);
   }
 
   /**
@@ -226,15 +302,14 @@ class DoubleClickSearch {
    * @param {!ReportRequest} requestBody
    * @return {!Promise<string>}
    */
-  requestReports(requestBody) {
-    return this.instance.reports.request({requestBody})
-        .then(({status, data}) => {
-          if (status >= 200 && status < 300) return data.id;
-          const errorMsg =
-              `Fail to request reports: ${JSON.stringify(requestBody)}`;
-          console.error(errorMsg, data);
-          throw new Error(errorMsg);
-        });
+  async requestReports(requestBody) {
+    const {status, data} = await this.instance.reports.request({requestBody});
+    if (status >= 200 && status < 300) {
+      return data.id;
+    }
+    const errorMsg = `Fail to request reports: ${JSON.stringify(requestBody)}`;
+    this.logger.error(errorMsg, data);
+    throw new Error(errorMsg);
   }
 
   /**
@@ -245,24 +320,23 @@ class DoubleClickSearch {
    *   byteCount:string,
    * }>>}
    */
-  getReportUrls(reportId) {
-    return this.instance.reports.get({reportId})
-        .then(({status, data}) => {
-          switch (status) {
-            case 200:
-              console.log(
-                  `Report[${reportId}] has ${data.rowCount} rows and ${data.files.length} files.`);
-              return data.files;
-            case 202:
-              console.log(`Report[${reportId}] is not ready.`);
-              break;
-            default:
-              const errorMsg =
-                  `Error in get reports: ${reportId} with status code: ${status}`;
-              console.error(errorMsg, data);
-              throw new Error(errorMsg);
-          }
-        });
+  async getReportUrls(reportId) {
+    const {status, data} = await this.instance.reports.get({reportId});
+    switch (status) {
+      case 200:
+        const {rowCount, files} = data;
+        this.logger.info(
+            `Report[${reportId}] has ${rowCount} rows and ${files.length} files.`);
+        return files;
+      case 202:
+        this.logger.info(`Report[${reportId}] is not ready.`);
+        break;
+      default:
+        const errorMsg =
+            `Error in get reports: ${reportId} with status code: ${status}`;
+        this.logger.error(errorMsg, data);
+        throw new Error(errorMsg);
+    }
   }
 
   /**
@@ -271,15 +345,14 @@ class DoubleClickSearch {
    * @param {number} reportFragment The index (based 0) of report files.
    * @return {!Promise<string>}
    */
-  getReportFile(reportId, reportFragment) {
-    return this.instance.reports.getFile({reportId, reportFragment})
-        .then((response) => {
-          if (response.status === 200) return response.data;
-          const errorMsg =
-              `Error in get file from reports: ${reportFragment}@${reportId}`;
-          console.error(errorMsg, response);
-          throw new Error(errorMsg);
-        });
+  async getReportFile(reportId, reportFragment) {
+    const response = await this.instance.reports.getFile(
+        {reportId, reportFragment});
+    if (response.status === 200) return response.data;
+    const errorMsg =
+        `Error in get file from reports: ${reportFragment}@${reportId}`;
+    this.logger.error(errorMsg, response);
+    throw new Error(errorMsg);
   }
 
   /**
@@ -289,16 +362,15 @@ class DoubleClickSearch {
    * @param {string} url
    * @return {!Promise<ReadableStream>}
    */
-  getReportFileStream(url) {
-    return this.auth.getRequestHeaders()
-        .then((headers) => {
-          return request({
-            method: 'GET',
-            headers,
-            url,
-            responseType: 'stream',
-          });
-        }).then((response) => response.data);
+  async getReportFileStream(url) {
+    const headers = await this.auth.getRequestHeaders();
+    const response = await request({
+      method: 'GET',
+      headers,
+      url,
+      responseType: 'stream',
+    });
+    return response.data;
   }
 
 }

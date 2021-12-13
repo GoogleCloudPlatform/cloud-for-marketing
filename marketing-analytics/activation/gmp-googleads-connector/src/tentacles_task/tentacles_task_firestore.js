@@ -18,8 +18,10 @@
  */
 
 'use strict';
-const {firestore: {DataSource, Entity, DataAccessObject}} = require(
-    '@google-cloud/nodejs-common');
+const {
+  firestore: {DataSource, Entity, DataAccessObject},
+  utils: {getLogger,}
+} = require('@google-cloud/nodejs-common');
 const {TaskStatus, TentaclesTask} = require('./tentacles_task.js');
 
 /**
@@ -42,6 +44,7 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
    */
   constructor(dataSource, namespace = 'tentacles') {
     super('Task', namespace, dataSource);
+    this.logger = getLogger('TentaclesTask');
   }
 
   /**
@@ -84,7 +87,11 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
       return Promise.resolve(fn(task))
           .then((task) => {
             if (!task) return false;
-            return this.update(task, id).then(() => true);
+            return this.update(task, id).then(() => {
+              this.logger.info(
+                  JSON.stringify(Object.assign({id, action: fn.name}, task)));
+              return true;
+            });
           })
           .catch((error) => {
             console.error(error);
@@ -94,11 +101,14 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
   }
 
   /** @override */
-  createTask(entitySkeleton) {
+  async createTask(entitySkeleton) {
     const entity = Object.assign(
         {}, entitySkeleton,
         {status: TaskStatus.QUEUING, createdAt: new Date()});
-    return this.create(entity);
+    const id = await this.create(entity);
+    this.logger.info(
+        JSON.stringify(Object.assign({action: 'createTask', id}, entity)));
+    return id;
   }
 
   /** @override */

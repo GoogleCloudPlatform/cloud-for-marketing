@@ -20,7 +20,13 @@
 'use strict';
 const {
   api: {spreadsheets: {Spreadsheets, ParseDataRequest}},
-  utils: {getProperValue, splitArray},
+  utils: {
+    getProperValue,
+    splitArray,
+    getLogger,
+    BatchResult,
+    mergeBatchResults,
+  },
   storage: {StorageFile},
 } = require('@google-cloud/nodejs-common');
 
@@ -41,8 +47,10 @@ exports.name = 'GS';
 exports.defaultOnGcs = true;
 
 /**
- * 'sheetHeader' is the fixed head row(s) in the Sheet. 'requestLength' is the
- *  byte size of each request.
+ * 'sheetHeader' is the fixed head row(s) in the Sheet.
+ * 'requestLength' is the byte size of each request.
+ * 'pasteData' is for Sheets API batchUpdate. see
+ *     https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
  *
  * @typedef {{
  *   spreadsheetId:string,
@@ -50,6 +58,7 @@ exports.defaultOnGcs = true;
  *   sheetHeader:(string|undefined),
  *   requestLength:(number|undefined),
  *   pasteData:!ParseDataRequest,
+ *   numberOfThreads:(number|undefined),
  * }}
  */
 let SheetsLoadConfig;
@@ -63,13 +72,11 @@ exports.SheetsLoadConfig = SheetsLoadConfig;
  * @param {string} data CSV data.
  * @param {!ParseDataRequest} pasteDataRequest Definition of PasteDataRequest
  *     for Sheets API batchUpdate operation.
- * @return {!Promise<number>} The row index for next round of load.
  * @private
  */
 const setDimensions = (spreadsheets, sheetName, data, pasteDataRequest) => {
   const rows = data.split('\n');
-  const targetRows = pasteDataRequest.coordinate.rowIndex + rows.length +
-      (data.endsWith('\n') ? -1 : 0);
+  const targetRows = pasteDataRequest.coordinate.rowIndex + rows.length;
   const targetColumns = rows[0].split(pasteDataRequest.delimiter).length;
   return spreadsheets.reshape(sheetName, targetRows, targetColumns);
 };
@@ -82,86 +89,71 @@ const setDimensions = (spreadsheets, sheetName, data, pasteDataRequest) => {
  * piece of data to be loaded in to the target Sheet. Any round will wait until
  * its batches are all fulfilled before it goes for the next round.
  * @param {!Spreadsheets} spreadsheets Sheets API v4 stub class.
- * @param {string} sheetName Name of the sheet will be loaded data.
+ * @param {!SheetsLoadConfig} config SheetsLoadConfig object.
  * @param {!ParseDataRequest} pasteDataRequest PasteDataRequest for Sheets API
  *     batchUpdate operation.
- * @param {string} data CSV data.
- * @param {number} messageMaxSize Maximum requests size of a request to Sheets
- *     API.
- * @return {!Promise<boolean>} Whether operation is succeeded.
+ * @param {{
+ *       bucket:string,
+ *       name:string,
+ *     }} data CSV file.
+ * @param {string} taskId The tag for log.
+ * @return {!BatchResult}
  * @private
  */
-const loadCsvToSheet =
-    (spreadsheets, sheetName, pasteDataRequest, data, messageMaxSize) => {
-      const storageFile = new StorageFile(data.bucket, data.file);
-      let rowIndex = pasteDataRequest.coordinate.rowIndex;
-      return storageFile.loadContent(0).then((allData) => {
-        return setDimensions(spreadsheets, sheetName, allData, pasteDataRequest)
-            .then((reshapeResult) => {
-              if (!reshapeResult) {
-                throw new Error(`Fail to reshape the sheet ${sheetName}`);
-              }
-              return storageFile.getFileSize()
-                  .then((fileSize) => {
-                    return storageFile.getSplitRanges(
-                        fileSize, messageMaxSize);
-                  })
-                  .then((splitRanges) => {
-                    const groupedSplitRanges =
-                        splitArray(splitRanges, NUMBER_OF_THREADS);
-                    let promise = Promise.resolve(true);
-                    groupedSplitRanges.forEach((singleSplitRanges, round) => {
-                      promise = promise.then((lastResult) => {
-                        const dataPieces =
-                            singleSplitRanges.map(([start, end]) => {
-                              return storageFile.loadContent(start, end);
-                            });
-                        return Promise.all(dataPieces).then((pieces) => {
-                          return Promise
-                              .all(pieces.map((piece, index) => {
-                                const currentRequest =
-                                    Object.assign({}, pasteDataRequest, {
-                                      coordinate: Object.assign(
-                                          {}, pasteDataRequest.coordinate)
-                                    });
-                                currentRequest.coordinate.rowIndex = rowIndex;
-                                rowIndex += piece.split('\n').length -
-                                    (piece.endsWith('\n') ? 1 : 0);
-                                return spreadsheets.loadData(
-                                    piece, currentRequest, `${round}-${index}`);
-                              }))
-                              .then((batchResults) => {
-                                return !batchResults.includes(false) &&
-                                    lastResult;
-                              });
-                        });
-                      });
-                    });
-                    return promise;
-                  });
-            });
-      });
-    };
+const loadCsvToSheet = async (spreadsheets, config, pasteDataRequest, data,
+    taskId) => {
+  const {sheetName, requestLength, numberOfThreads} = config;
+  const messageMaxSize = getProperValue(requestLength, MAXIMUM_REQUESTS_LENGTH);
+  const roundSize = getProperValue(numberOfThreads, NUMBER_OF_THREADS);
+  const storageFile = new StorageFile(data.bucket, data.file);
+  const allData = await storageFile.loadContent(0);
+  let rowIndex = pasteDataRequest.coordinate.rowIndex;
+  await setDimensions(spreadsheets, sheetName, allData, pasteDataRequest);
+  const fileSize = await storageFile.getFileSize();
+  const splitRanges = await storageFile.getSplitRanges(fileSize,
+      messageMaxSize);
+  const roundedSplitRanges = splitArray(splitRanges, roundSize);
+  const reduceFn = async (previous, singleRound, roundNo) => {
+    const roundTag = `${taskId}-${roundNo}`;
+    const results = await previous;
+    const batchInserts = singleRound.map(([start, end], batchNo) => {
+      const batchData = allData.substring(start, end + 1);
+      const request = Object.assign({}, pasteDataRequest,
+          {coordinate: Object.assign({}, pasteDataRequest.coordinate)}
+      );
+      request.coordinate.rowIndex = rowIndex;
+      rowIndex += batchData.trim().split('\n').length;
+      return spreadsheets.loadData(batchData, request,
+          `${roundTag}-${batchNo}`);
+    });
+    const batchResults = await Promise.all(batchInserts);
+    const currentResult = mergeBatchResults(batchResults, roundTag);
+    return results.concat(currentResult);
+  }
+  /** @const {!Array<!BatchResult>} */
+  const taskResult = await roundedSplitRanges.reduce(reduceFn, []);
+  return mergeBatchResults(taskResult, taskId);
+};
 
 /**
- * Sends the data from a CSV file or a Pub/sub message to Google Sheet.
+ * Internal sendData function for test.
+ * @param {!Spreadsheets} spreadsheets Injected Spreadsheets instance.
  * @param {string} message Message data from Pubsub. It could be the
  *     information of the file to be sent out, or a piece of data that need to
  *     be send out (used for test).
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!SheetsLoadConfig} config SheetsLoadConfig Json object.
- * @return {!Promise<boolean>} Whether data have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
-exports.sendData = (message, messageId, config) => {
+const sendDataInternal = async (spreadsheets, message, messageId, config) => {
+  const logger = getLogger('API.GS');
   let data;
   try {
     data = JSON.parse(message);
   } catch (error) {
-    console.log(`This is not a JSON string. Sheets load's data not on GCS.`);
+    logger.info(`This is not a JSON string. Sheets load's data not on GCS.`);
     data = message;
   }
-  const spreadsheets = new Spreadsheets(config.spreadsheetId);
   const sheetName = config.sheetName;
   const pasteDataRequest = Object.assign(
       {
@@ -171,43 +163,42 @@ exports.sendData = (message, messageId, config) => {
       },
       config.pasteData);
   const coordinate = pasteDataRequest.coordinate;
-  return spreadsheets.clearSheet(sheetName).then((clearResult) => {
-    if (!clearResult) {
-      throw new Error('Fail to clear the sheet');
+  try {
+    await spreadsheets.clearSheet(sheetName);
+    coordinate.sheetId = await spreadsheets.getSheetId(sheetName);
+    coordinate.rowIndex = coordinate.rowIndex || 0;
+    const sheetHeader = config.sheetHeader;
+    if (sheetHeader) {
+      await spreadsheets.loadData(sheetHeader, pasteDataRequest, 'header');
+      coordinate.rowIndex += sheetHeader.trim().split('\n').length;
     }
-    return spreadsheets.getSheetId(sheetName).then((sheetId) => {
-      coordinate.sheetId = sheetId;
-      coordinate.rowIndex = coordinate.rowIndex || 0;
-      let promise;
-      const sheetHeader = config.sheetHeader;
-      if (sheetHeader) {
-        promise = spreadsheets.loadData(sheetHeader, pasteDataRequest, 'header')
-            .then(() => {
-              return coordinate.rowIndex +
-                  sheetHeader.split('\n').length +
-                  (sheetHeader.endsWith('\n') ? -1 : 0);
-            });
-      } else {
-        promise = Promise.resolve(coordinate.rowIndex);
-      }
-      return promise.then((rowIndex) => {
-        coordinate.rowIndex = rowIndex;
-        if (data.bucket) {  // Data is a GCS file.
-          const messageMaxSize =
-              getProperValue(config.requestLength, MAXIMUM_REQUESTS_LENGTH);
-          return loadCsvToSheet(
-              spreadsheets, sheetName, pasteDataRequest, data, messageMaxSize);
-        } else {  // Data comes from the message data.
-          return setDimensions(spreadsheets, sheetName, data, pasteDataRequest)
-              .then((reshapeResult) => {
-                if (!reshapeResult) {
-                  console.error(`Fail to reshape the sheet ${sheetName}`);
-                  return false;
-                }
-                return spreadsheets.loadData(data, pasteDataRequest);
-              });
-        }
-      });
-    });
-  });
+    if (data.bucket) {  // Data is a GCS file.
+      return loadCsvToSheet(spreadsheets, config, pasteDataRequest, data,
+          messageId);
+    } else {  // Data comes from the message data.
+      await setDimensions(spreadsheets, sheetName, data, pasteDataRequest);
+      return spreadsheets.loadData(data, pasteDataRequest);
+    }
+  } catch (error) {
+    return {
+      result: false,
+      errors: [error.toString()],
+    }
+  }
+};
+
+exports.sendDataInternal = sendDataInternal;
+
+/**
+ * Sends the data from a CSV file or a Pub/sub message to Google Sheet.
+ * @param {string} message Message data from Pubsub. It could be the
+ *     information of the file to be sent out, or a piece of data that need to
+ *     be send out (used for test).
+ * @param {string} messageId Pub/sub message ID for log.
+ * @param {!SheetsLoadConfig} config SheetsLoadConfig Json object.
+ * @return {!BatchResult}
+ */
+exports.sendData = async (message, messageId, config) => {
+  const spreadsheets = new Spreadsheets(config.spreadsheetId);
+  return sendDataInternal(spreadsheets, message, messageId, config);
 };

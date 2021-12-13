@@ -55,11 +55,13 @@ class AuthClient {
   /**
    * Create a new instance with given API scopes.
    * @param {string|!Array<string>|!ReadonlyArray<string>} scopes
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
    */
-  constructor(scopes) {
+  constructor(scopes, env = process.env) {
     this.scopes = scopes;
-    this.oauthTokenFile = getFullPathForEnv(DEFAULT_ENV_OAUTH);
-    this.serviceAccountKeyFile = getFullPathForEnv(DEFAULT_ENV_KEYFILE);
+    this.oauthTokenFile = getFullPathForEnv(DEFAULT_ENV_OAUTH, env);
+    this.serviceAccountKeyFile = getFullPathForEnv(DEFAULT_ENV_KEYFILE, env);
   }
 
   /**
@@ -108,8 +110,9 @@ class AuthClient {
    * @return {!OAuth2Client}
    */
   getOAuth2Client(keyFile = this.oauthTokenFile) {
+    this.ensureFileExisting_(keyFile, 'OAUTH token');
     const key = JSON.parse(fs.readFileSync(keyFile).toString());
-    console.log(`Get OAuth token with Email: ${key.client_id}`);
+    console.log(`Get OAuth token with client Id: ${key.client_id}`);
     const oAuth2Client = new OAuth2Client(key.client_id, key.client_secret);
     oAuth2Client.setCredentials({refresh_token: key.token.refresh_token});
     return oAuth2Client;
@@ -121,6 +124,7 @@ class AuthClient {
    * @return {!JWT}
    */
   getServiceAccount(keyFile = this.serviceAccountKeyFile) {
+    this.ensureFileExisting_(keyFile, 'Service Account key');
     console.log(`Get Service Account's key file: ${keyFile}`);
     return new JWT({keyFile, scopes: this.scopes,});
   }
@@ -139,6 +143,7 @@ class AuthClient {
    * }}
    */
   getOAuth2Token(keyFile = this.oauthTokenFile) {
+    this.ensureFileExisting_(keyFile, 'OAuth token');
     const key = JSON.parse(fs.readFileSync(keyFile).toString());
     return {
       clientId: key.client_id,
@@ -146,21 +151,36 @@ class AuthClient {
       refreshToken: key.token.refresh_token,
     };
   }
+
+  /**
+   * Some APIs only support one authorization type, so we have to designate a
+   * specific auth method. If the related key/token file is not available, the
+   * auth will fail. The function throws errors with more meaningful message.
+   * @param {string} file Target file path
+   * @param {string} type Key type name, 'OAuth token' or 'Service Account key'
+   * @private
+   */
+  ensureFileExisting_(file, type) {
+    if (!file) throw new Error(`Required ${type} file doesn't exist.`);
+  }
 }
 
 /**
  * Returns the full path of a existent file whose path (relative or
  * absolute) is the value of the given environment variable.
  * @param {string} envName The name of environment variable for the file path.
+ * @param {!Object<string,string>=} env The environment object to hold env
+ *     variables.
  * @return {?string} Full path of the file what set as an environment variable.
  */
-function getFullPathForEnv(envName) {
-  if (typeof process.env[envName] === 'undefined') {
+function getFullPathForEnv(envName, env) {
+  const envValue = env[envName];
+  if (typeof envValue === 'undefined') {
     console.log(`Env[${envName}] doesn't have a value.`);
   } else {
-    const fullPath = process.env[envName].startsWith('/') ?
-        process.env[envName] :
-        path.join(__dirname, process.env[envName]);
+    const fullPath = envValue.startsWith('/') ?
+        envValue :
+        path.join(__dirname, envValue);
     if (fs.existsSync(fullPath)) {
       console.log(`Find file '${fullPath}' set in env as [${envName}].`);
       return fullPath;

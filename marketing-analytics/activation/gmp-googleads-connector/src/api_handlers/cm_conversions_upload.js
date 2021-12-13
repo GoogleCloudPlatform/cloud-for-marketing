@@ -21,7 +21,7 @@
 
 const {
   api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -76,8 +76,7 @@ exports.CampaignManagerConfig = CampaignManagerConfig;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!CampaignManagerConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
 const sendDataInternal = (dfaReporting, records, messageId, config) => {
   return dfaReporting.getProfileId(config.cmAccountId).then((profileId) => {
@@ -105,8 +104,7 @@ exports.sendDataInternal = sendDataInternal;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!CampaignManagerConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
 exports.sendData = (records, messageId, config) => {
   const dfaReporting = new DfaReporting();

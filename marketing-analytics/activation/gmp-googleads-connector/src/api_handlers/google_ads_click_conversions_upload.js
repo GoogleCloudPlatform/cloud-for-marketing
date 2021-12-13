@@ -21,7 +21,7 @@
 
 const {
   api: {googleads: {GoogleAds, ClickConversionConfig}},
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getLogger, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -50,6 +50,7 @@ exports.defaultOnGcs = false;
  *   adsConfig:!ClickConversionConfig,
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
+ *   debug:(boolean|undefined),
  * }}
  */
 let GoogleAdsClickConversionConfig;
@@ -64,17 +65,37 @@ exports.GoogleAdsClickConversionConfig = GoogleAdsClickConversionConfig;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsClickConversionConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
-const sendDataInternal = (googleAds, records, messageId, config) => {
+const sendDataInternal = async (googleAds, records, messageId, config) => {
+  const logger = getLogger('API.ACLC');
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
-  const configedUpload = googleAds.getUploadConversionFn(config.customerId,
-      config.loginCustomerId, config.adsConfig);
-  return managedSend(configedUpload, records, messageId);
+  const {customerId, loginCustomerId, adsConfig} = config;
+  if (adsConfig.custom_variable_tags) {
+    try {
+      adsConfig.customVariables = await Promise.all(
+          adsConfig.custom_variable_tags.map(async (tag) => {
+            const id = await googleAds.getConversionCustomVariableId(tag,
+                customerId, loginCustomerId);
+            if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);
+            return {[tag]: id};
+          }));
+      logger.debug('Updated adsConfig', adsConfig);
+    } catch (error) {
+      /** @type {BatchResult} */ const batchResult = {
+        result: false,
+        errors: [error.message],
+      };
+      logger.error('Get error', error);
+      return batchResult;
+    }
+  }
+  const configuredUpload = googleAds.getUploadConversionFn(customerId,
+      loginCustomerId, adsConfig);
+  return managedSend(configuredUpload, records, messageId);
 };
 
 exports.sendDataInternal = sendDataInternal;
@@ -85,11 +106,11 @@ exports.sendDataInternal = sendDataInternal;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsClickConversionConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const googleAds = new GoogleAds(config.developerToken);
+  const debug = !!config.debug;
+  const googleAds = new GoogleAds(config.developerToken, debug);
   return sendDataInternal(googleAds, records, messageId, config);
 };
 

@@ -21,7 +21,7 @@
 const {google} = require('googleapis');
 const {Params$Resource$Spreadsheets$Get} = google.sheets;
 const AuthClient = require('./auth_client.js');
-const {getLogger} = require('../components/utils.js');
+const {getLogger, BatchResult} = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/spreadsheets',
@@ -67,11 +67,13 @@ class Spreadsheets {
   /**
    * Init Spreadsheets API client.
    * @param {string} spreadsheetId
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
    */
-  constructor(spreadsheetId) {
+  constructor(spreadsheetId, env = process.env) {
     /** @const {string} */
     this.spreadsheetId = spreadsheetId;
-    const authClient = new AuthClient(API_SCOPES);
+    const authClient = new AuthClient(API_SCOPES, env);
     const auth = authClient.getDefaultAuth();
     /** @const {!!google.sheets} */
     this.instance = google.sheets({
@@ -92,16 +94,15 @@ class Spreadsheets {
    * @param {string} sheetName Name of the Sheet.
    * @return {!Promise<number>} Sheet Id.
    */
-  getSheetId(sheetName) {
+  async getSheetId(sheetName) {
     const request = /** @type{Params$Resource$Spreadsheets$Get} */ {
       spreadsheetId: this.spreadsheetId,
       ranges: sheetName,
     };
-    return this.instance.spreadsheets.get(request).then((response) => {
-      const sheet = response.data.sheets[0];
-      this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
-      return sheet.properties.sheetId;
-    });
+    const response = await this.instance.spreadsheets.get(request);
+    const sheet = response.data.sheets[0];
+    this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
+    return sheet.properties.sheetId;
   }
 
   /**
@@ -109,23 +110,20 @@ class Spreadsheets {
    * see:
    * https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear
    * @param {string} sheetName Name of the Sheet.
-   * @return {!Promise<boolean>} Whether the operation succeeded.
    */
-  clearSheet(sheetName) {
+  async clearSheet(sheetName) {
     const request = {
       spreadsheetId: this.spreadsheetId,
       range: sheetName,
     };
-    return this.instance.spreadsheets.values.clear(request)
-        .then((response) => {
-          const data = response.data;
-          this.logger.debug(`Clear sheet[${sheetName}}]: `, data);
-          return true;
-        })
-        .catch((error) => {
-          console.error(error);
-          return false;
-        });
+    try {
+      const response = await this.instance.spreadsheets.values.clear(request);
+      const data = response.data;
+      this.logger.debug(`Clear sheet[${sheetName}}]: `, data);
+    } catch (error) {
+      this.logger.error(error.toString());
+      throw error;
+    }
   }
 
   /**
@@ -147,26 +145,13 @@ class Spreadsheets {
    * @private
    */
   getChangeDimensionRequest_(sheetId, dimension, current, target) {
-    if (current === target) {
-      return;
-    }
+    if (current === target) return;
     if (current < target) {  // Appends dimension.
-      return {
-        appendDimension: {
-          sheetId: sheetId,
-          dimension: dimension,
-          length: target - current,
-        }
-      };
+      return {appendDimension: {sheetId, dimension, length: target - current}};
     } else {  // Deletes dimension.
       return {
         deleteDimension: {
-          range: {
-            sheetId: sheetId,
-            dimension: dimension,
-            startIndex: target,
-            endIndex: current,
-          }
+          range: {sheetId, dimension, startIndex: target, endIndex: current},
         }
       };
     }
@@ -177,51 +162,44 @@ class Spreadsheets {
    * @param {string} sheetName Name of the Sheet.
    * @param {number} targetRows Loaded data rows number.
    * @param {number} targetColumns Loaded data columns number.
-   * @return {!Promise<boolean>} Whether the operation succeeded.
    */
-  reshape(sheetName, targetRows, targetColumns) {
+  async reshape(sheetName, targetRows, targetColumns) {
     const request =  /** @type{Params$Resource$Spreadsheets$Get} */ {
       spreadsheetId: this.spreadsheetId,
       ranges: sheetName,
     };
-    return this.instance.spreadsheets.get(request)
-        .then((response) => {
-          const sheet = response.data.sheets[0];
-          const sheetId = sheet.properties.sheetId;
-          const rowCount = sheet.properties.gridProperties.rowCount;
-          const columnCount = sheet.properties.gridProperties.columnCount;
-          this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
-          const requests = {
-            spreadsheetId: this.spreadsheetId,
-            resource: {requests: []},
-          };
-          if (rowCount !== targetRows) {
-            requests.resource.requests.push(this.getChangeDimensionRequest_(
-                sheetId, 'ROWS', rowCount, targetRows));
-          }
-          if (columnCount !== targetColumns) {
-            requests.resource.requests.push(this.getChangeDimensionRequest_(
-                sheetId, 'COLUMNS', columnCount, targetColumns));
-          }
-          this.logger.debug(
-              `Reshape Sheet from [${rowCount}, ${columnCount}] to [${
-                  targetRows}, ${targetColumns}]`,
-              JSON.stringify(requests.resource.requests));
-          if (requests.resource.requests.length > 0) {
-            return this.instance.spreadsheets.batchUpdate(requests).then(
-                (response) => {
-                  const data = response.data;
-                  console.log(`Reshape Sheet [${sheetName}]: `, data);
-                  return true;
-                });
-          }
-          this.logger.debug('No need to reshape.');
-          return true;
-        })
-        .catch((error) => {
-          console.error(error);
-          return false;
-        });
+    try {
+      const response = await this.instance.spreadsheets.get(request);
+      const sheet = response.data.sheets[0];
+      const sheetId = sheet.properties.sheetId;
+      const rowCount = sheet.properties.gridProperties.rowCount;
+      const columnCount = sheet.properties.gridProperties.columnCount;
+      this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
+      const requests = {
+        spreadsheetId: this.spreadsheetId,
+        resource: {requests: []},
+      };
+      if (rowCount !== targetRows) {
+        requests.resource.requests.push(this.getChangeDimensionRequest_(
+            sheetId, 'ROWS', rowCount, targetRows));
+      }
+      if (columnCount !== targetColumns) {
+        requests.resource.requests.push(this.getChangeDimensionRequest_(
+            sheetId, 'COLUMNS', columnCount, targetColumns));
+      }
+      this.logger.debug(`Reshape Sheet from [${rowCount}, ${
+              columnCount}] to [${targetRows}, ${targetColumns}]`,
+          JSON.stringify(requests.resource.requests));
+      if (requests.resource.requests.length > 0) {
+        const {data} = await this.instance.spreadsheets.batchUpdate(requests);
+        this.logger.debug(`Reshape Sheet [${sheetName}]: `, data);
+      } else {
+        this.logger.debug('No need to reshape.');
+      }
+    } catch (error) {
+      this.logger.error(error.toString());
+      throw error;
+    }
   }
 
   /**
@@ -230,25 +208,28 @@ class Spreadsheets {
    * @param {!ParseDataRequest} config A ParseDataRequest object template. The
    * data will be put in before it is send out through Sheets batchUpdate.
    * @param {string=} batchId The tag for log.
-   * @return {!Promise<boolean>} Promise returning whether the operation
-   *     succeeded.
+   * @return {!BatchResult}
    */
-  loadData(data, config, batchId = 'unnamed') {
-    const pasteData = Object.assign({}, config, {data: data});
+  async loadData(data, config, batchId = 'unnamed') {
+    const pasteData = Object.assign({}, config, {data});
     const request = {
       spreadsheetId: this.spreadsheetId,
-      resource: {requests: [{pasteData: pasteData}]},
+      resource: {requests: [{pasteData}]},
     };
-    return this.instance.spreadsheets.batchUpdate(request)
-        .then((response) => {
-          const data = response.data;
-          console.log(`Batch[${batchId}] uploaded: `, data);
-          return true;
-        })
-        .catch((error) => {
-          console.error(error.errors);
-          return false;
-        });
+    /** @type {BatchResult} */ const batchResult = {
+      numberOfLines: data.trim().split('\n').length,
+    };
+    try {
+      const response = await this.instance.spreadsheets.batchUpdate(request);
+      const data = response.data;
+      this.logger.debug(`Batch[${batchId}] uploaded: `, data);
+      batchResult.result = true;
+    } catch (error) {
+      this.logger.error(error);
+      batchResult.result = false;
+      batchResult.errors = [error.toString()];
+    }
+    return batchResult;
   }
 }
 

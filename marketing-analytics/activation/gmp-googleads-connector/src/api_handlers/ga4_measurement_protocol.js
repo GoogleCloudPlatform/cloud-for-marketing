@@ -26,7 +26,7 @@ const {
       MeasurementProtocolGA4Config,
     }
   },
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -50,6 +50,7 @@ exports.defaultOnGcs = false;
  * @typedef {{
  *   qps:(number|undefined),
  *   numberOfThreads:(number|undefined),
+ *   debug:(boolean|undefined),
  *   mpGa4Config:!MeasurementProtocolGA4Config,
  * }}
  */
@@ -71,11 +72,11 @@ exports.MpGa4IntegrationConfig = MpGa4IntegrationConfig;
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
  *     Protocol.
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<!BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const mpGa4 = new MeasurementProtocolGA4();
+  const debug = !!config.debug;
+  const mpGa4 = new MeasurementProtocolGA4(debug);
   return sendDataInternal(mpGa4, records, messageId, config);
 };
 
@@ -91,8 +92,7 @@ exports.sendData = sendData;
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
  *     Protocol.
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
 const sendDataInternal = (mpGa4, records, messageId, config) => {
   const recordsPerRequest = RECORDS_PER_REQUEST;

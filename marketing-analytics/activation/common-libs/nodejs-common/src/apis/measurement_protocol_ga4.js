@@ -20,7 +20,12 @@
 'use strict';
 
 const {request} = require('gaxios');
-const {getLogger, SendSingleBatch} = require('../components/utils.js');
+const lodash = require('lodash');
+const {
+  getLogger,
+  SendSingleBatch,
+  BatchResult,
+} = require('../components/utils.js');
 /** Base URL for Google Analytics service. */
 const BASE_URL = 'https://www.google-analytics.com';
 
@@ -85,11 +90,15 @@ class MeasurementProtocolGA4 {
      * @param {!Array<string>} lines Data for single request. It should be
      *     guaranteed that it doesn't exceed quota limitation.
      * @param {string} batchId The tag for log.
-     * @return {!Promise<boolean>}
+     * @return {!BatchResult}
      */
     return async (lines, batchId) => {
       const line = lines[0]; // Each request contains one record only.
-      const hit = Object.assign({}, config.requestBody, JSON.parse(line));
+      if (lines.length > 1) {
+        this.logger.warn(
+            "Only one line data expected. Will only send the first line.");
+      }
+      const hit = lodash.merge({}, config.requestBody, JSON.parse(line));
 
       const requestOptions = {
         method: 'POST',
@@ -104,22 +113,37 @@ class MeasurementProtocolGA4 {
         headers: {'User-Agent': 'Tentacles/MeasurementProtocol-GA4'}
       };
       const response = await request(requestOptions);
+      /** @type {BatchResult} */ const batchResult = {
+        numberOfLines: lines.length,
+      };
       if (response.status < 200 || response.status >= 300) {
         const errorMessages = [
           `Measurement Protocol GA4 [${batchId}] didn't succeed.`,
           `Get response code: ${response.status}`,
           `response: ${response.data}`,
         ];
-        console.error(errorMessages.join('\n'));
-        throw new Error(`Status code not 2XX`);
+        this.logger.error(errorMessages.join('\n'));
+        batchResult.errors = errorMessages;
+        batchResult.result = false;
+        return batchResult;
       }
       this.logger.debug('Configuration:', config);
       this.logger.debug('Input Data:   ', lines);
       this.logger.debug(`Batch[${batchId}] status: ${response.status}`);
-      this.logger.debug('Response:     ', response.data);
+      this.logger.debug(response.data);
       // There is not enough information from the non-debug mode.
-      if (!this.debugMode) return true;
-      return response.data.validationMessages.length === 0;
+      if (!this.debugMode) {
+        batchResult.result = true;
+      } else {
+        batchResult.result = response.data.validationMessages.length === 0;
+        if (!batchResult.result) {
+          batchResult.failedLines = lines;
+          batchResult.errors = response.data.validationMessages.map(
+              ({description}) => description);
+          batchResult.groupedFailed = {[batchResult.errors.join()]: [lines[0]]};
+        }
+      }
+      return batchResult;
     };
   };
 

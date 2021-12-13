@@ -27,7 +27,7 @@ const {
       AvailabilityConfig,
     }
   },
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getProperValue, BatchResult, getLogger},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -72,17 +72,26 @@ exports.SearchAdsConfig = SearchAdsConfig;
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!SearchAdsConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<BatchResult>}
  */
-const sendData = (records, messageId, config) => {
+const sendData = async (records, messageId, config) => {
   const doubleClickSearch = new DoubleClickSearch();
+  const logger = getLogger('API.SA');
   if (records.trim() === '') {
+    /** @type {!BatchResult} */
+    const batchResult = {
+      numberOfLines: 0,
+    };
     if (config.availabilities) {
-      return doubleClickSearch.updateAvailability(config.availabilities);
+      batchResult.result = await doubleClickSearch.updateAvailability(
+          config.availabilities);
+    } else {
+      const error = 'Empty file with no availabilities settings. Quit.';
+      logger.error(error);
+      batchResult.result = false;
+      batchResult.errors = [error];
     }
-    console.log('Empty file with no availabilities settings. Quit.');
-    return Promise.resolve(false);
+    return batchResult;
   }
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST, false);

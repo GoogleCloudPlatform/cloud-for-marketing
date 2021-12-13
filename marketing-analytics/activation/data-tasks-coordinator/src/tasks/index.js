@@ -23,6 +23,7 @@ const {LoadTask} = require('./bigquery/load_task.js');
 const {ExportTask} = require('./bigquery/export_task.js');
 const {QueryTask} = require('./bigquery/query_task.js');
 const {ExportSchemaTask} = require('./bigquery/export_schema_task.js');
+const {DeleteDatasetTask} = require('./bigquery/delete_dataset_task.js');
 const {DataTransferTask} = require('./bigquery/data_transfer_task.js');
 const {CopyGcsTask} = require('./copy_gcs_task.js');
 const {PredictTask} = require('./predict_task.js');
@@ -40,6 +41,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.EXPORT]: ExportTask,
   [TaskType.QUERY]: QueryTask,
   [TaskType.EXPORT_SCHEMA]: ExportSchemaTask,
+  [TaskType.DELETE_DATASET]: DeleteDatasetTask,
   [TaskType.DATA_TRANSFER]: DataTransferTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
   [TaskType.PREDICT]: PredictTask,

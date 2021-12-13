@@ -19,8 +19,10 @@
 
 'use strict';
 
-const {firestore: {DataSource, DataAccessObject}} = require(
-    '@google-cloud/nodejs-common');
+const {
+  firestore: {DataSource, DataAccessObject},
+  utils: {getLogger,}
+} = require('@google-cloud/nodejs-common');
 const {TentaclesFile} = require('./tentacles_file.js');
 
 /**
@@ -35,21 +37,20 @@ class TentaclesFileOnFirestore extends DataAccessObject {
    */
   constructor(dataSource, namespace = 'tentacles') {
     super('File', namespace, dataSource);
+    this.logger = getLogger('TentaclesFile');
   }
 
   /** @override */
-  save(file) {
-    const entity = {
-      name: file.name,
-      bucket: file.bucket,
-      size: file.size,
-      updated: file.updated,
-    };
-    return this.create(entity);
+  async save(file) {
+    const fileId = await this.create(file);
+    this.logger.info(
+        JSON.stringify(Object.assign({action: 'save', fileId}, file)));
+    return fileId;
   }
 
   /** @override */
   saveError(fileId, error) {
+    this.logger.info(JSON.stringify({action: 'saveError', fileId, error}));
     return this.merge({error}, fileId);
   }
 }

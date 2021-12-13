@@ -20,7 +20,14 @@
 
 const {
   pubsub: {EnhancedPubSub},
-  utils: {apiSpeedControl, getProperValue, replaceParameters, wait},
+  utils: {
+    apiSpeedControl,
+    getProperValue,
+    replaceParameters,
+    getLogger,
+    wait,
+    BatchResult,
+  },
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -61,15 +68,16 @@ exports.PubSubMessageConfig = PubSubMessageConfig;
 /**
  * Sends out the data as messages to Pub/Sub (PB).
  * This function exposes a EnhancedPubSub parameter for test.
- * @param {EnhancedPubSub} pubsub Injected EnhancedPubSub instance.
+ * @param {!EnhancedPubSub} pubsub Injected EnhancedPubSub instance.
  * @param {string} records Attributes of the messages. Expected JSON string in
  *     each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!PubSubMessageConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
 const sendDataInternal = async (pubsub, records, messageId, config) => {
+  const logger = getLogger('API.PB');
+  logger.debug(`Init Pub/Sub message sender with Debug Mode.`);
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const numberOfThreads =
@@ -80,27 +88,36 @@ const sendDataInternal = async (pubsub, records, messageId, config) => {
   /** This function send out one message with the given data. */
   const getSendSingleMessageFn = async (lines, batchId) => {
     if (lines.length !== 1) throw Error('Wrong number of Pub/Sub messages.');
+    /** @const {!BatchResult} */ const batchResult = {
+      numberOfLines: 1,
+    };
     const args = JSON.parse(lines[0]);
     const originalMessage = typeof (config.message) === 'object'
         ? JSON.stringify(config.message) : config.message;
     const message = replaceParameters(originalMessage || '', args, true);
     const attributes = JSON.parse(
-        replaceParameters(JSON.stringify(config.attributes || {}), args, true));
+        replaceParameters(JSON.stringify(config.attributes || {}), args, true)
+    );
     let retryTimes = 0;
+    let errors = [];
     do {
       // Wait sometime (1s, 2s, 3s, ...) before each retry.
       if (retryTimes > 0) await wait(retryTimes * 1000);
       try {
         const messageId = await pubsub.publish(topic, message, attributes);
-        console.log(`Send ${lines[0]} to ${config.topic} as ${messageId}.`);
-        return true;
+        logger.debug(`Send ${lines[0]} to ${config.topic} as ${messageId}.`);
+        batchResult.result = true;
+        return batchResult;
       } catch (error) {
-        console.error(`Pub/Sub message[${batchId}] failed: ${lines[0]}`,
-            error);
+        logger.error(`Pub/Sub message[${batchId}] failed: ${lines[0]}`, error);
+        errors.push(error.message);
         retryTimes++;
       }
     } while (retryTimes <= RETRY_TIMES)
-    return false;
+    batchResult.result = false;
+    batchResult.errors = errors;
+    batchResult.failedLines = lines;
+    return batchResult;
   };
   return managedSend(getSendSingleMessageFn, records, messageId);
 };
@@ -113,8 +130,7 @@ exports.sendDataInternal = sendDataInternal;
  *     each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!PubSubMessageConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
 exports.sendData = (records, messageId, config) => {
   const pubsub = new EnhancedPubSub();

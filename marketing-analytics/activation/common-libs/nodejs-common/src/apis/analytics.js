@@ -23,7 +23,7 @@ const stream = require('stream');
 const {google} = require('googleapis');
 const {Schema$Upload} = google.analytics;
 const AuthClient = require('./auth_client.js');
-const {wait, getLogger} = require('../components/utils.js');
+const {wait, getLogger, BatchResult} = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/analytics',
@@ -56,8 +56,13 @@ let DataImportClearConfig;
  * Google Analytics API v3 stub.
  */
 class Analytics {
-  constructor() {
-    const authClient = new AuthClient(API_SCOPES);
+  /**
+   * @constructor
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
+   */
+  constructor(env = process.env) {
+    const authClient = new AuthClient(API_SCOPES, env);
     const auth = authClient.getDefaultAuth();
     /** @type {!google.analytics} */
     this.instance = google.analytics({
@@ -76,8 +81,7 @@ class Analytics {
    * @param {string|!stream.Readable} data A string or a stream to be uploaded.
    * @param {!DataImportConfig} config GA data import configuration.
    * @param {string=} batchId A tag for log.
-   * @return {!Promise<boolean>} Promise returning whether data import
-   *     succeeded.
+   * @return {!BatchResult}
    */
   async uploadData(data, config, batchId = 'unnamed') {
     const uploadConfig = Object.assign(
@@ -95,28 +99,37 @@ class Analytics {
     this.logger.debug('Response: ', response);
     const job = /** @type {Schema$Upload} */ response.data;
     const uploadId = (/** @type {Schema$Upload} */job).id;
-    console.log(`Task [${batchId}] creates GA Data import job: ${uploadId}`);
+    this.logger.info(
+        `Task [${batchId}] creates GA Data import job: ${uploadId}`);
     const jobConfig = Object.assign({uploadId}, config);
     const result = await Promise.race([
       this.checkJobStatus(jobConfig),
       wait(8 * 60 * 1000, job),  // wait up to 8 minutes here
     ]);
+    /** @type {BatchResult} */ const batchResult = {};
     switch ((/** @type {Schema$Upload} */ result).status) {
       case 'FAILED':
-        this.logger.error('GA Data Import failed', job);
-        return false;
+        this.logger.error('GA Data Import failed', result);
+        batchResult.result = false;
+        batchResult.errors = result.errors
+            || [`Unknown reason. ID: ${uploadId}`];
+        break;
       case 'COMPLETED':
         this.logger.info(`GA Data Import job[${uploadId}] completed.`);
-        this.logger.debug('Response: ', job);
-        return true;
+        this.logger.debug('Response: ', result);
+        batchResult.result = true;
+        break;
       case 'PENDING':
-        this.logger.info('GA Data Import pending.', job);
+        this.logger.info('GA Data Import pending.', result);
         this.logger.info('Still will return true here.');
-        return true;
+        batchResult.result = true;
+        break;
       default:
-        this.logger.error('Unknown results of GA Data Import: ', job);
-        return false;
+        this.logger.error('Unknown results of GA Data Import: ', result);
+        batchResult.result = false;
+        batchResult.errors = [`Unknown status. ID: ${uploadId}`];
     }
+    return batchResult;
   }
 
   /**

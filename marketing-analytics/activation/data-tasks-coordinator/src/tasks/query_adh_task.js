@@ -73,8 +73,9 @@ class QueryAdhTask extends BaseTask {
     const destTable = this.config.destination.table;
     const sql = await this.getSql_();
     const adh = this.getAdhInstance_(this.config.adhConfig)
-    const queryName = await adh.createQuery(destTable.tableId, sql);
 
+    // If query exist already: will fail with 409 error here
+    const queryName = await adh.createQuery(destTable.tableId, sql);
     const endDateTime = DateTime.fromISO(source.endDate);
     const startDateTime = endDateTime.minus({days: source.dateRangeInDays});
     const spec = {
@@ -89,9 +90,13 @@ class QueryAdhTask extends BaseTask {
         day: endDateTime.day,
       },
     };
-
     const tableName = destTable.projectId + '.' + destTable.datasetId + '.'
         + destTable.tableId;
+
+    // Request the newly created operation too soon will result in 404 error.
+    await new Promise(resolve => setTimeout(resolve, 60000));
+
+    // If BQ source table not found: sometimes will fail with 404 error here, exist with error.
     const {name: opName} = await adh.startQuery(queryName, spec, tableName);
 
     return {
@@ -107,17 +112,30 @@ class QueryAdhTask extends BaseTask {
     const adhConfig = this.config.adhConfig;
     const param = this.parameters[JOB_ID_PARAMETER];
 
-    // Request the newly created operation too soon will result in 404 error.
-    // TODO(xinxincheng): change to graceful wait once confirm the above issue.
-    await new Promise(resolve => setTimeout(resolve, 60000));
-
-    const {done, error} = await this.getAdhInstance_(
-        this.config.adhConfig).getQueryStatus(param);
-
-    if (error) {
-      await this.completeTask();
-      throw new Error(error.message);
+    let response;
+    try {
+        response = await this.getAdhInstance_(this.config.adhConfig).getQueryStatus(param);
+    } catch (e) {
+        // Request the newly created operation too soon will result in 404 error, will retry.
+        console.log('ADH query operation not found yet, will retry: ', e.toString());
+        // TODO(xinxincheng): Use this.logger to replace console.log
+        this.logger.debug('ADH query operation not found yet, will retry: ', e.toString());
+        return false;
     }
+
+    const {done, error} = response;
+    // If BQ source table not found, will have done = true, error.code = 3
+    // e.g, error.message Table not found: `adh_apps_data.firebase_bi_20211104`
+    if (error) {
+        await this.completeTask();
+        // To make sure task will fail with ERROR instead of retry.
+        console.error('ADH query task failed, will NOT retry: ', error.toString());
+        // TODO(xinxincheng): Use this.logger to replace console.log
+        this.logger.error('ADH query task failed, will NOT retry: ', error.toString());
+        throw new Error(error.message);
+    }
+
+    // If no response yet, done = undefined, error = undefined; the function will return false.
     return !!done;
   }
 

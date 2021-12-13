@@ -34,7 +34,20 @@ PROJECT_NAMESPACE="${SOLUTION_NAME}"
 CONFIG_FILE="./config.json"
 
 # Parameter name used by functions to load and save config.
-CONFIG_ITEMS=("PROJECT_NAMESPACE" "REGION" "GCS_BUCKET" "OUTBOUND")
+CONFIG_ITEMS=(
+  "PROJECT_NAMESPACE"
+  "REGION"
+  "GCS_BUCKET"
+  "OUTBOUND"
+  "ENABLE_VISUALIZATION"
+  "DATASET"
+  "DATASET_LOCATION"
+)
+
+# Default name for BigQuery dataset to receive logs.
+DATASET="${SOLUTION_NAME}"
+# BigQuery table name for logs.
+BIGQUERY_LOG_TABLE="winston_log"
 
 # The Google Cloud APIs that will be used in Tentacles.
 GOOGLE_CLOUD_APIS["firestore.googleapis.com"]="Cloud Firestore API"
@@ -131,6 +144,40 @@ confirm_integration_api() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Confirm the integration with external APIs..."
   confirm_apis "extra_operation_for_confirm_api"
+}
+
+#######################################
+# Checks if the user want to use visualization feature of Tentacles. This
+# feature requires BigQuery.
+# Globals:
+#   ENABLE_VISUALIZATION
+# Arguments:
+#   none
+#######################################
+confirm_visualization() {
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Confirm enabling the visualization feature..."
+  printf '%s' "    Tentacles can provide a structured overview of processed \
+files and errors based on BigQuery and Data Studio. \
+Do you want to enable it? [Y/n]: "
+  local input
+  read -r input
+  if [[ ${input} == 'n' || ${input} == 'N' ]]; then
+    declare -g "ENABLE_VISUALIZATION=false"
+    printf '%s\n' "Skipped visualization feature."
+  else
+    declare -g "ENABLE_VISUALIZATION=true"
+    GOOGLE_CLOUD_PERMISSIONS["BigQuery Data Editor"]="bigquery.datasets.create"
+    GOOGLE_CLOUD_PERMISSIONS["Logs Writer"]="logging.logEntries.create"
+    GOOGLE_CLOUD_PERMISSIONS["Logs Configuration Writer"]=\
+"logging.sinks.create"
+    GOOGLE_CLOUD_PERMISSIONS["BigQuery Data Editor"]="bigquery.datasets.create"
+# Role 'Project IAM Admin' or 'Security Admin' has the permission
+# 'bigquery.datasets.setIamPolicy'
+    GOOGLE_CLOUD_PERMISSIONS["Project IAM Admin"]=\
+"resourcemanager.projects.setIamPolicy"
+    printf '%s\n' "OK. Visualization feature has been confirmed."
+  fi
 }
 
 #######################################
@@ -245,6 +292,425 @@ deploy_tentacles() {
 }
 
 #######################################
+# Generate a default Log Router sink's name based on the project namespace.
+# Globals:
+#   PROJECT_NAMESPACE
+# Arguments:
+#   Any string.
+# Returns:
+#   The default sink name.
+#######################################
+get_default_sink_name() {
+  printf '%s' "${PROJECT_NAMESPACE}_log"
+}
+
+#######################################
+# Set up visualization features for Tentacles, including:
+# 1. Create or update the sink;
+# 2. Create or update the dataset;
+# 3. Send out a dummy log to trigger the creation of BigQuery table.
+# Globals:
+#   ENABLE_VISUALIZATION
+# Arguments:
+#   None
+#######################################
+prepare_visualization() {
+  while [[ -z "${ENABLE_VISUALIZATION}" ]]; do
+    confirm_visualization
+  done
+  if [[ "${ENABLE_VISUALIZATION}" == "false" ]]; then
+    return
+  fi
+  # Create the dataset
+  confirm_located_dataset DATASET DATASET_LOCATION REGION
+  printf '\n'
+  # Create the sink
+  create_sink_for_visualization
+  # If table exists, confirm to delete it or use it.
+  local table_name="${DATASET}.${BIGQUERY_LOG_TABLE}"
+  if [[ $(check_existence_in_bigquery "${table_name}") -eq 0 ]]; then
+    printf '%s' "  The table [${table_name}] exists. Do you want to delete \
+it? [y/N]: "
+    local input
+    read -r input
+    if [[ -z ${input} || ${input} == 'n' || ${input} == 'N' ]]; then
+      # Select to use the existing table.
+      printf '%s\n' "OK. Continue using the existing table.";
+      return 0
+    else
+      printf '%s\n' "Deleting table: ${table_name}...";
+      bq rm -f -t "${table_name}"
+    fi
+  fi
+  send_dummy_log_to_create_sink_table
+}
+
+#######################################
+# Send a dummy log to create target BigQuery table if it doesn't exist.
+# Globals:
+#   BIGQUERY_LOG_TABLE
+# Arguments:
+#   None
+#######################################
+send_dummy_log_to_create_sink_table(){
+  gcloud logging write ${BIGQUERY_LOG_TABLE} '{"message": "[TentaclesFile]"}' \
+--payload-type=json --severity=INFO
+}
+
+#######################################
+# Complete visualization features for Tentacles, including:
+# 1. Make sure the log table exists.
+# 2. Create or update all views.
+# Globals:
+#   ENABLE_VISUALIZATION
+# Arguments:
+#   None
+#######################################
+complete_visualization() {
+  while [[ -z "${ENABLE_VISUALIZATION}" ]]; do
+    confirm_visualization
+  done
+  if [[ "${ENABLE_VISUALIZATION}" == "false" ]]; then
+    return
+  fi
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Creating Views for visualization..."
+  # Confirm table is ready
+  local table_name="${DATASET}.${BIGQUERY_LOG_TABLE}"
+  while [[ $(check_existence_in_bigquery "${table_name}") -gt 0 ]]; do
+    send_dummy_log_to_create_sink_table
+    printf '%s\n' "The table ${table_name} is not ready."
+    printf '\n%s' "Press any key to check again..."
+    local any
+    read -n1 -s any
+  done
+  create_all_views
+  printf '%s\n' "OK. Views for visualization have been created."
+}
+
+#######################################
+# Create Log Export to capture BigQuery events and granted the permission to
+# publish message to Cloud Pub/Sub.
+# This function requires two permissions beyond the default role 'Editor':
+# logging.sinks.create - sample role: Logs Configuration Writer
+# resourcemanager.projects.setIamPolicy - sample role: Project IAM Admin
+# Globals:
+#   GCP_PROJECT
+#   PROJECT_NAMESPACE
+# Arguments:
+#   None
+# Returns:
+#   1 if failed to create log sink
+#######################################
+create_sink_for_visualization() {
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Creating Logs router sink..."
+  printf '%s\n' "  Tentacles leverages Logs router to send logs to BigQuery."
+  local sinkName logFilter sinkDest
+  sinkName=$(get_default_sink_name)
+  logFilter='jsonPayload.message=~("TentaclesFile" OR "TentaclesTask" OR
+    "TentaclesFailedRecord")'
+  sinkDest="bigquery.googleapis.com/projects/${GCP_PROJECT}/datasets/${DATASET}"
+
+  create_or_update_sink ${sinkName} "${logFilter}" \
+"${sinkDest} --use-partitioned-tables"
+  confirm_sink_service_account_permission ${sinkName} "bigquery.dataEditor" \
+"BigQuery Data Editor"
+}
+
+#######################################
+# Checks whether the BigQuery object (table or view) exists.
+# Globals:
+#  GCP_PROJECT
+#  DATASET
+#  BIGQUERY_LOG_TABLE
+# Arguments:
+#  None
+#######################################
+check_existence_in_bigquery() {
+  bq show "${1}" >/dev/null 2>&1
+  printf '%d' $?
+}
+
+#######################################
+# Creates or updates the BigQuery view.
+# Globals:
+#  GCP_PROJECT
+#  DATASET
+# Arguments:
+#  The name of view.
+#  The query of view.
+#######################################
+create_or_update_view() {
+  local viewName viewQuery
+  viewName="${1}"
+  viewQuery=${2}
+  local action="mk"
+  if [[ $(check_existence_in_bigquery "${DATASET}.${viewName}") -eq 0 ]]; then
+    action="update"
+  fi
+  bq "${action}" \
+    --use_legacy_sql=false \
+    --view "${viewQuery}" \
+    --project_id ${GCP_PROJECT} \
+    "${DATASET}.${viewName}"
+}
+
+#######################################
+# Creates all views.
+# Globals:
+#  GCP_PROJECT
+#  DATASET
+#  BIGQUERY_LOG_TABLE
+# Arguments:
+#  none
+#######################################
+create_all_views() {
+  create_or_update_view RawJson '
+    SELECT
+      timestamp,
+      REGEXP_EXTRACT(message, r"\[([^]]+)\]")   AS entity,
+      REGEXP_EXTRACT(message, r"\[[^]]+\](.*)") AS json
+    FROM (
+      SELECT
+        REPLACE(jsonpayload.message, "\n","")   AS message,
+        timestamp
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.'${BIGQUERY_LOG_TABLE}'`
+    )
+  '
+
+  create_or_update_view RawTask '
+    SELECT
+      timestamp,
+      JSON_VALUE(json, "$.action")         AS action,
+      JSON_VALUE(json, "$.fileId")         AS fileId,
+      JSON_VALUE(json, "$.id")             AS id,
+      JSON_VALUE(json, "$.api")            AS api,
+      JSON_VALUE(json, "$.config")         AS config,
+      JSON_VALUE(json, "$.start")          AS startIndex,
+      JSON_VALUE(json, "$.end")            AS endIndex,
+      JSON_VALUE(json, "$.status")         AS status,
+      JSON_VALUE(json, "$.dryRun")         AS dryRun,
+      JSON_VALUE(json, "$.createdAt")      AS createdAt,
+      JSON_VALUE(json, "$.dataMessageId")  AS dataMessageId,
+      JSON_VALUE(json, "$.startSending")   AS startSending,
+      JSON_VALUE(json, "$.apiMessageId")   AS apiMessageId,
+      JSON_VALUE(json, "$.finishedTime")   AS finishedTime,
+      JSON_VALUE(json, "$.error")          AS error,
+      JSON_VALUE(json, "$.numberOfLines")  AS numberOfLines,
+      JSON_VALUE(json, "$.numberOfFailed") AS numberOfFailed
+    FROM
+      `'${GCP_PROJECT}'.'${DATASET}'.RawJson`
+    WHERE
+      entity = "TentaclesTask"
+    ORDER BY
+      timestamp DESC
+  '
+
+  create_or_update_view RawFile '
+    SELECT
+      timestamp,
+      JSON_VALUE(json, "$.action")            AS action,
+      JSON_VALUE(json, "$.fileId")            AS fileId,
+      JSON_VALUE(json, "$.name")              AS name,
+      JSON_VALUE(json, "$.size")              AS fileSize,
+      JSON_VALUE(json, "$.updated")           AS updated,
+      JSON_VALUE(json, "$.error")             AS error,
+      JSON_VALUE(json, "$.attributes.api")    AS api,
+      JSON_VALUE(json, "$.attributes.config") AS config,
+      JSON_VALUE(json, "$.attributes.dryRun") AS dryRun,
+      JSON_VALUE(json, "$.attributes.size")   AS splitSize,
+      JSON_VALUE(json, "$.attributes.gcs")    AS gcs
+    FROM
+      `'${GCP_PROJECT}'.'${DATASET}'.RawJson`
+    WHERE
+      entity = "TentaclesFile"
+    ORDER BY
+      timestamp DESC
+  '
+
+  create_or_update_view RawFailedRecord '
+    SELECT
+      timestamp                            AS recordUpdatedTime,
+      JSON_VALUE(json, "$.taskId")         AS taskId,
+      JSON_VALUE(json, "$.error")          AS recordError,
+      JSON_VALUE_ARRAY(json, "$.records")  AS records
+    FROM
+      `'${GCP_PROJECT}'.'${DATASET}'.RawJson`
+    WHERE
+      entity = "TentaclesFailedRecord"
+    ORDER BY
+      timestamp DESC
+  '
+
+  create_or_update_view TentaclesTask '
+    SELECT
+      "'${PROJECT_NAMESPACE}'"                           AS namespace,
+      "'${GCP_PROJECT}'"                                 AS projectId,
+      main.* EXCEPT (error, numberOfLines, numberOfFailed),
+      status,
+      CASE
+        WHEN status = "sending"
+          AND DATETIME_DIFF(CURRENT_DATETIME(), startSending, MINUTE) > 9
+        THEN "error"
+        ELSE status
+      END AS taskStatus,
+      CASE
+        WHEN status = "sending"
+          AND DATETIME_DIFF(CURRENT_DATETIME(), startSending, MINUTE) > 9
+        THEN "Timeout"
+        ELSE error
+      END AS taskError,
+      DATETIME_DIFF(finishedTime,startSending,SECOND) AS sendingTime,
+      DATETIME_DIFF(startSending,createdAt,SECOND)    AS waitingTime,
+      CAST(numberOfLines AS INT64)                    AS numberOfLines,
+      CAST(numberOfFailed AS INT64)                   AS numberOfFailed
+    FROM (
+      SELECT
+        id                                                       AS taskId,
+        ANY_VALUE(fileId)                                        AS fileId,
+        ANY_VALUE(api)                                           AS api,
+        ANY_VALUE(config)                                        AS config,
+        ANY_VALUE(dryRun)                                        AS dryRun,
+        ANY_VALUE(error)                                         AS error,
+        CAST(ANY_VALUE(startIndex) AS INT64)                     AS startIndex,
+        CAST(ANY_VALUE(endIndex) AS INT64)                       AS endIndex,
+        PARSE_DATETIME("%FT%H:%M:%E3SZ",ANY_VALUE(createdAt))    AS createdAt,
+        PARSE_DATETIME("%FT%H:%M:%E3SZ",ANY_VALUE(startSending)) AS startSending,
+        PARSE_DATETIME("%FT%H:%M:%E3SZ",ANY_VALUE(finishedTime)) AS finishedTime,
+        ANY_VALUE(dataMessageId)                                 AS dataMessageId,
+        ANY_VALUE(apiMessageId)                                  AS apiMessageId,
+        MAX(timestamp)                                           AS lastTimestamp,
+        ANY_VALUE(numberOfLines)                                 AS numberOfLines,
+        ANY_VALUE(numberOfFailed)                                AS numberOfFailed
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.RawTask`
+      GROUP BY
+        id
+      ) AS main
+    LEFT JOIN (
+      SELECT
+        id, timestamp, status
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.RawTask`) AS latest
+    ON
+      main.taskId=latest.id AND main.lastTimestamp=latest.timestamp
+    ORDER BY
+      lastTimestamp DESC
+  '
+
+  create_or_update_view TentaclesReport '
+    SELECT
+      "'${PROJECT_NAMESPACE}'"                           AS namespace,
+      "'${GCP_PROJECT}'"                                 AS projectId,
+      "'${GCS_BUCKET}'"                                  AS bucket,
+      file.* EXCEPT (name, fileSize),
+      name                                               AS fileFullName,
+      REGEXP_REPLACE(file.name, "processed/[^/]*/", "")  AS fileName,
+      CAST(file.fileSize AS INT64)                       AS fileSize,
+      PARSE_DATETIME("%FT%H:%M:%E3SZ", file.updatedTime) As fileUpdatedTime,
+      IFNULL(taskLastUpdatedTime, PARSE_DATETIME("%FT%H:%M:%E3SZ",
+        file.updatedTime))                               AS fileLastUpdatedTime,
+      taskSummary.* EXCEPT (fileId, failedTask, taskNumber),
+      IFNULL(taskNumber, 0)                              AS taskNumber,
+      IFNULL(taskError, fileError)                       AS errorMessage,
+      CASE
+        WHEN (IFNULL(failedTask, fileError)  IS NOT NULL)
+        THEN "error"
+        WHEN (taskNumber = doneNumber)
+        THEN "done"
+        ELSE "processing"
+      END                                                AS fileStatus,
+      task.* EXCEPT (fileId, api, config, dryRun, namespace, projectId),
+      failedRecord.* EXCEPT (taskId)
+    FROM (
+      SELECT
+        fileId,
+        ANY_VALUE(name)                    AS name,
+        ANY_VALUE(fileSize)                AS fileSize,
+        ANY_VALUE(updated)                 AS updatedTime,
+        ANY_VALUE(api)                     AS api,
+        ANY_VALUE(config)                  AS config,
+        CAST(ANY_VALUE(dryRun) AS BOOLEAN) AS dryRun,
+        ANY_VALUE(error)                   AS fileError
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.RawFile`
+      WHERE
+        fileId IS NOT NULL
+      GROUP BY
+        fileId
+    ) AS file
+    LEFT OUTER JOIN (
+      SELECT
+        fileId,
+        COUNT(taskId)                        AS taskNumber,
+        COUNTIF(taskStatus = "done")         AS doneNumber,
+        COUNTIF(taskStatus = "queuing")      AS queuingNumber,
+        COUNTIF(taskStatus = "sending")      AS sendingNumber,
+        COUNTIF(taskStatus = "error")        AS errorNumber,
+        COUNTIF(taskStatus = "failed")       AS failedNumber,
+        ANY_VALUE(taskError)                 AS failedTask,
+        CAST(MAX(lastTimestamp) AS DATETIME) AS taskLastUpdatedTime
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.TentaclesTask`
+      GROUP BY
+       fileId
+    )  AS taskSummary
+    ON
+      file.fileId = taskSummary.fileId
+    LEFT OUTER JOIN (
+      SELECT
+        *
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.TentaclesTask`
+    )  AS task
+    ON
+      file.fileId = task.fileId
+    LEFT OUTER JOIN (
+      SELECT
+        *
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.RawFailedRecord` as record
+    ) AS failedRecord
+    ON
+      task.taskId = failedRecord.taskId
+    WHERE
+      file.api IS NOT NULL
+    ORDER BY
+      updatedTime DESC
+  '
+
+  create_or_update_view TentaclesBlockage '
+    WITH blockedApis AS (
+      SELECT
+        api,
+        DATETIME_DIFF(CURRENT_TIMESTAMP(), MAX(lastTimestamp), MINUTE) AS minutes
+      FROM
+        `'${GCP_PROJECT}'.'${DATASET}'.TentaclesTask`
+      WHERE
+        api IN (
+          SELECT
+            DISTINCT api
+          FROM
+            `'${GCP_PROJECT}'.'${DATASET}'.TentaclesTask`
+          WHERE
+            taskStatus = "queuing"
+        )
+      GROUP BY
+        api
+      HAVING
+        minutes>9 )
+    SELECT
+      *
+    FROM
+      `'${GCP_PROJECT}'.'${DATASET}'.TentaclesTask`
+    WHERE
+      taskStatus = "queuing" AND api IN (SELECT api FROM blockedApis)
+  '
+}
+
+#######################################
 # Check Firestore status and print next steps information after installation.
 # Globals:
 #   NEED_SERVICE_ACCOUNT
@@ -260,7 +726,7 @@ post_installation() {
   if [[ ${NEED_AUTHENTICATION} == 'true' ]]; then
     local account="YOUR_OAUTH_EMAIL"
     if [[ ${NEED_SERVICE_ACCOUNT} == 'true' ]]; then
-      account=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
+      account=$(get_service_account)
     fi
     cat <<EOF
 Some enabled APIs require authentication. Extra steps are required to grant \
@@ -430,14 +896,17 @@ DEFAULT_INSTALL_TASKS=(
   confirm_region
   confirm_integration_api
   confirm_auth_method
+  confirm_visualization
   check_permissions
   enable_apis
   "confirm_located_bucket GCS_BUCKET BUCKET_LOC REGION"
   "confirm_folder OUTBOUND"
+  prepare_visualization
   save_config
   create_subscriptions
   do_authentication
   deploy_tentacles
+  complete_visualization
   post_installation
   "print_finished Tentacles"
 )

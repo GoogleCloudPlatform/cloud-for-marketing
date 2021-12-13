@@ -23,6 +23,7 @@ const {File} = require('@google-cloud/storage');
 const {
   api: {analytics: {Analytics, DataImportConfig, DataImportClearConfig,}},
   storage: {StorageFile},
+  utils: {BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /** API name in the incoming file name. */
@@ -86,8 +87,7 @@ const prepareFile = async (bucket, fileName, dataImportHeader = undefined) => {
  *     be send out.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAnalyticsConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
 const sendData = (message, messageId, config) => {
   const analytics = new Analytics();
@@ -103,8 +103,7 @@ exports.sendData = sendData;
  *     be send out.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAnalyticsConfig} config
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!BatchResult}
  */
 const sendDataInternal = async (analytics, message, messageId, config) => {
   let uploadData = '';
@@ -116,7 +115,10 @@ const sendDataInternal = async (analytics, message, messageId, config) => {
       uploadData = gcsFile.createReadStream();
     } else {
       console.error('Could find bucket in message', message);
-      return false;
+      return {
+        result: false,
+        errors: [`Could find bucket in message: ${message}`],
+      };
     }
   } catch (error) {
     console.log('Incoming message: ', message);

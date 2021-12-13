@@ -21,7 +21,7 @@
 
 const {
   api: {measurementprotocol: {MeasurementProtocol}},
-  utils: {apiSpeedControl, getProperValue},
+  utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -46,6 +46,7 @@ exports.defaultOnGcs = false;
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
  *   numberOfThreads:(number|undefined),
+ *   debug:(boolean|undefined)
  *   mpConfig:!Object<string,string>,
  * }}
  */
@@ -66,11 +67,11 @@ exports.MeasurementProtocolConfig = MeasurementProtocolConfig;
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!MeasurementProtocolConfig} config Configuration for Measurement
  *     Protocol.
- * @return {!Promise<boolean>} Whether 'records' have been sent out without any
- *     errors.
+ * @return {!Promise<!BatchResult>}
  */
 exports.sendData = (records, messageId, config) => {
-  const measurementProtocol = new MeasurementProtocol();
+  const debug = !!config.debug;
+  const measurementProtocol = new MeasurementProtocol(debug);
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const numberOfThreads =

@@ -18,6 +18,8 @@
 
 'use strict';
 
+const {utils: {BatchResult},} = require('@google-cloud/nodejs-common');
+
 const gaDataImport = require('./ga_data_import.js');
 const gaMeasurementProtocol = require('./ga_measurement_protocol.js');
 const cmConversionsUpload = require('./cm_conversions_upload.js');
@@ -58,7 +60,7 @@ let ApiConfigItem;
  * {string} Data to send out.
  * {string} Pub/sub message ID for log.
  * {!ApiConfigItem} API configuration.
- * @typedef {function(string,string,!ApiConfigItem):!Promise<boolean>}
+ * @typedef {function(string,string,!ApiConfigItem):!BatchResult}
  */
 let ApiHandlerFunction;
 

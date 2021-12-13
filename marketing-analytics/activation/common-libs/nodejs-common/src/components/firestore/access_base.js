@@ -217,11 +217,14 @@ class FirestoreAccessBase {
    * Returns whether the mode of Firestore is 'Native'.
    * @return {!Promise<boolean>}
    */
-  static isNativeMode() {
-    return new Firestore().listCollections().then(() => true).catch((error) => {
+  static async isNativeMode(projectId = process.env['GCP_PROJECT']) {
+    try {
+      await new Firestore({projectId}).listCollections();
+      return true;
+    } catch (error) {
       console.log(`In detecting Firestore mode: `, error.message);
       return false;
-    });
+    }
   };
 }
 

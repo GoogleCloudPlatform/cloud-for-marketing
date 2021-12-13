@@ -41,10 +41,11 @@ class NativeModeAccess {
    * way. This constructor will check the path to make sure it presents a
    * 'collection', otherwise an Error will be thrown.
    * @param {string} path Path for the 'collection'.
+   * @param {string} projectId The Id of Cloud project.
    */
-  constructor(path) {
+  constructor(path, projectId = process.env['GCP_PROJECT']) {
     /** @type {!Firestore} */
-    this.firestore = new Firestore();
+    this.firestore = new Firestore({projectId});
     if (path.split('/').length % 2 === 0) {
       throw new Error(`Invalid path for Collection: ${path}`);
     }

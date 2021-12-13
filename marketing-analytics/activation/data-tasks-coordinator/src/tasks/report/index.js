@@ -24,6 +24,7 @@ const {DoubleClickSearchReport} = require('./doubleclick_search_report.js');
 const {DoubleClickBidManagerReport} =
     require('./doubleclick_bidmanager_report.js');
 const {GoogleAdsReport} = require('./googleads_report.js');
+const {YouTubeReport} = require('./youtube_report.js');
 
 /**
  * All reports supported by ReportTask.
@@ -34,6 +35,7 @@ const REPORTING_FACTORY = Object.freeze({
   'SA360': DoubleClickSearchReport,
   'DV360': DoubleClickBidManagerReport,
   'ADS': GoogleAdsReport,
+  'YT': YouTubeReport,
 });
 
 /**

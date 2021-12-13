@@ -20,7 +20,11 @@
 'use strict';
 
 const {request} = require('gaxios');
-const {getLogger, SendSingleBatch} = require('../components/utils.js');
+const {
+  getLogger,
+  SendSingleBatch,
+  BatchResult,
+} = require('../components/utils.js');
 /** Base URL for Google Analytics service. */
 const BASE_URL = 'https://www.google-analytics.com';
 
@@ -62,21 +66,17 @@ class MeasurementProtocol {
      * @param {!Array<string>} lines Data for single request. It should be
      *     guaranteed that it doesn't exceed quota limitation.
      * @param {string} batchId The tag for log.
-     * @return {!Promise<boolean>}
+     * @return {!Promise<BatchResult>}
      */
-    return (lines, batchId) => {
-      const payload =
-          lines
-              .map((line) => {
-                const record = JSON.parse(line);
-                const hit = Object.assign({}, config, record);
-                return Object.keys(hit)
-                    .map((key) => {
-                      return `${key}=${encodeURIComponent(hit[key])}`;
-                    })
-                    .join('&');
-              })
-              .join('\n');
+    return async (lines, batchId) => {
+      const payload = lines.map((line) => {
+            const record = JSON.parse(line);
+            const hit = Object.assign({}, config, record);
+            return Object.keys(hit).map(
+                (key) => `${key}=${encodeURIComponent(hit[key])}`)
+                .join('&');
+          })
+          .join('\n');
       // In debug mode, the path is fixed to '/debug/collect'.
       const path = (this.debugMode) ? '/debug/collect' : '/batch';
       const requestOptions = {
@@ -85,29 +85,70 @@ class MeasurementProtocol {
         body: payload,
         headers: {'User-Agent': 'Tentacles/MeasurementProtocol-v1'}
       };
-      return request(requestOptions).then((response) => {
-        if (response.status < 200 || response.status >= 300) {
-          const errorMessages = [
-            `Measurement Protocol [${batchId}] didn't succeed.`,
-            `Get response code: ${response.status}`,
-            `response: ${response.data}`,
-          ];
-          console.error(errorMessages.join('\n'));
-          throw new Error(`Status code not 2XX`);
-        }
-        this.logger.debug(`Configuration:`, config);
-        this.logger.debug(`Input Data:   `, lines);
-        this.logger.debug(`Batch[${batchId}] status: ${response.status}`);
-        this.logger.debug(response.data);
-        // There is not enough information from the non-debug mode.
-        if (!this.debugMode) return true;
-        return response.data.hitParsingResult.every((result) => result.valid);
-      });
+      const response = await request(requestOptions);
+      /** @type {BatchResult} */ const batchResult = {
+        numberOfLines: lines.length,
+      };
+      if (response.status < 200 || response.status >= 300) {
+        const errorMessages = [
+          `Measurement Protocol [${batchId}] didn't succeed.`,
+          `Get response code: ${response.status}`,
+          `response: ${response.data}`,
+        ];
+        this.logger.error(errorMessages.join('\n'));
+        batchResult.errors = errorMessages;
+        batchResult.result = false;
+        return batchResult;
+      }
+      this.logger.debug(`Configuration:`, config);
+      this.logger.debug(`Input Data:   `, lines);
+      this.logger.debug(`Batch[${batchId}] status: ${response.status}`);
+      this.logger.debug(response.data);
+      // There is not enough information from the non-debug mode.
+      if (!this.debugMode) {
+        batchResult.result = true;
+      } else {
+        this.extraFailedLines_(batchResult, response.data.hitParsingResult,
+            lines);
+      }
+      return batchResult;
     };
   };
 
-  static getInstance() {
-    return new MeasurementProtocol(process.env['DEBUG'] === 'true');
+  /**
+   * Extras failed lines based on the hitParsingResult, see:
+   * https://developers.google.com/analytics/devguides/collection/protocol/v1/validating-hits
+   *
+   * Note, only in 'debug' mode, Google Analytics will return this part of data.
+   *
+   * @param {!BatchResult} batchResult
+   * @param {!Array<!Object>} hitParsingResults
+   * @param {!Array<string>} lines The original input data.
+   * @private
+   */
+  extraFailedLines_(batchResult, hitParsingResults, lines) {
+    batchResult.failedLines = [];
+    batchResult.groupedFailed = {};
+    const errors = new Set();
+    hitParsingResults.forEach((result, index) => {
+      if (!result.valid) {
+        const failedLine = lines[index];
+        batchResult.failedLines.push(failedLine);
+        result.parserMessage.forEach(({description: error, messageType}) => {
+          this.logger.info(`[${messageType}]: ${error} for ${failedLine}`);
+          if (messageType === 'ERROR') {
+            errors.add(error);
+            const groupedFailed = batchResult.groupedFailed[error] || [];
+            groupedFailed.push(failedLine);
+            if (groupedFailed.length === 1) {
+              batchResult.groupedFailed[error] = groupedFailed;
+            }
+          }
+        });
+      }
+    });
+    batchResult.result = batchResult.failedLines.length === 0;
+    batchResult.errors = Array.from(errors);
   }
 }
 

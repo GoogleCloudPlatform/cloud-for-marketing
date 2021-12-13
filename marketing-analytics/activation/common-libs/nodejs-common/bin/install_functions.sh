@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Cloud Functions Runtime Environment.
-CF_RUNTIME="${CF_RUNTIME:=nodejs10}"
+CF_RUNTIME="${CF_RUNTIME:=nodejs14}"
 
 # Counter for steps.
 STEP=0
@@ -108,6 +108,7 @@ declare EXTERNAL_APIS=(
   "sheets.googleapis.com"
   "googleads.googleapis.com"
   "adsdatahub.googleapis.com"
+  "youtube.googleapis.com"
 )
 
 # Some APIs only support OAuth which needs an process to generate refresh token.
@@ -115,6 +116,7 @@ declare EXTERNAL_APIS=(
 declare EXTERNAL_APIS_OAUTH_ONLY=(
   "googleads.googleapis.com"
   "doubleclickbidmanager.googleapis.com"
+  "youtube.googleapis.com"
 )
 
 # API scopes for OAuth authentication.
@@ -133,17 +135,12 @@ EXTERNAL_API_SCOPES=(
   ["sheets.googleapis.com"]="https://www.googleapis.com/auth/spreadsheets"
   ["googleads.googleapis.com"]="https://www.googleapis.com/auth/adwords"
   ["adsdatahub.googleapis.com"]="https://www.googleapis.com/auth/adsdatahub"
+  ["youtube.googleapis.com"]=\
+"https://www.googleapis.com/auth/youtube.force-ssl"
 )
 
 # Enabled APIs' OAuth scopes.
 ENABLED_OAUTH_SCOPES=()
-
-# https://cloud.google.com/iam/docs/understanding-roles#service-accounts-roles
-declare -A GOOGLE_SERVICE_ACCOUNT_PERMISSIONS
-GOOGLE_SERVICE_ACCOUNT_PERMISSIONS=(
-  ["Service Account Admin"]="iam.serviceAccounts.create"
-  ["Service Account Key Admin"]="iam.serviceAccounts.create"
-)
 
 # Preparation functions.
 #######################################
@@ -437,8 +434,8 @@ select_functions_location() {
   local regionVariableName defaultValue locations
   regionVariableName="${1:-"REGION"}"
   defaultValue="${!regionVariableName}"
-  locations=($(gcloud functions regions list | grep "projects"|sed \
-    's/projects\/.*\/locations\///'))
+  locations=($(gcloud functions regions list --format="csv[no-heading](name)"| \
+    sed 's/projects\/.*\/locations\///'))
   local region
   while :; do
     local exist_functions
@@ -561,7 +558,6 @@ need to be enabled."
 #   NEED_OAUTH
 #   NEED_SERVICE_ACCOUNT
 #   GOOGLE_CLOUD_PERMISSIONS
-#   GOOGLE_SERVICE_ACCOUNT_PERMISSIONS
 # Arguments:
 #   None
 #######################################
@@ -590,11 +586,6 @@ authentication method:"
     printf '%s\n' "... OAuth is selected."
   else
     NEED_SERVICE_ACCOUNT="true"
-    local role
-    for role in "${!GOOGLE_SERVICE_ACCOUNT_PERMISSIONS[@]}"; do
-      GOOGLE_CLOUD_PERMISSIONS["${role}"]=\
-"${GOOGLE_SERVICE_ACCOUNT_PERMISSIONS["${role}"]}"
-    done
     printf '%s\n' "... Service Account is selected."
   fi
 }
@@ -752,8 +743,8 @@ select_dataset_location() {
     "ASIA_PACIFIC"
   )
   local MULTI_REGIONAL=(
-    "Data centers within member states of the European Union (EU)"
-    "Data centers in the United States (US)"
+    "Data centers within member states of the European Union (eu)"
+    "Data centers in the United States (us)"
   )
   local AMERICAS=(
     "${NORTH_AMERICA[@]}"
@@ -1193,6 +1184,83 @@ EOF
 }
 
 #######################################
+# Create or update a Log router sink.
+# Globals:
+#   None
+# Arguments:
+#   Name of the sink
+#   Filter conditions
+#   Sink destination
+#######################################
+create_or_update_sink() {
+  local sinkName=${1}
+  local logFilter=${2}
+  local sinkDestAndFlags=(${3})
+  local existingFilter
+  existingFilter=$(gcloud logging sinks list --filter="name:${sinkName}" \
+--format="value(filter)")
+  local action
+  if [[ -z "${existingFilter}" ]]; then
+    action="create"
+    printf '%s\n' "  Logging Export [${sinkName}] doesn't exist. Creating..."
+  else
+    action="update"
+    printf '%s\n' "  Logging Export [${sinkName}] exists with a different \
+filter. Updating..."
+  fi
+  gcloud -q logging sinks ${action} "${sinkName}" "${sinkDestAndFlags[@]}" \
+--log-filter="${logFilter}"
+  if [[ $? -gt 0 ]];then
+    printf '%s\n' "Failed to create or update Logs router sink."
+    return 1
+  fi
+}
+
+#######################################
+# Confirm the service account of the given sink has proper permission to dump
+# the logs.
+# Globals:
+#   None
+# Arguments:
+#   Name of the sink
+#   Bindings role, e.g. "pubsub.publisher" or "bigquery.dataEditor"
+#   Role name, e.g. "Pub/Sub Publisher" or "BigQuery Data Editor"
+#######################################
+confirm_sink_service_account_permission() {
+  local sinkName=${1}
+  local bindingsRole=${2}
+  local roleName=${3}
+  local serviceAccount existingRole
+  serviceAccount=$(gcloud logging sinks describe "${sinkName}" \
+--format="get(writerIdentity)")
+  while :;do
+    printf '%s\n' "  Checking the role of the sink's service account \
+[${serviceAccount}]..."
+    existingRole=$(gcloud projects get-iam-policy "${GCP_PROJECT}" \
+--flatten=bindings --filter="bindings.members:${serviceAccount} AND \
+bindings.role:roles/${bindingsRole}" --format="get(bindings.members)")
+    if [[ -z "${existingRole}" ]];then
+      printf '%s\n'  "  Granting Role '${roleName}' to the service \
+account..."
+      gcloud -q projects add-iam-policy-binding "${GCP_PROJECT}" --member \
+"${serviceAccount}" --role roles/${bindingsRole}
+      if [[ $? -gt 0 ]];then
+        printf '%s\n' "Failed to grant the role. Use this link \
+https://console.cloud.google.com/iam-admin/iam?project=${GCP_PROJECT} to \
+manually grant Role '${roleName}' to ${serviceAccount}."
+        printf '%s' "Press any key to continue after you grant the access..."
+        local any
+        read -n1 -s any
+        continue
+      fi
+    else
+      printf '%s\n'  "  The role has already been granted."
+      return 0
+    fi
+  done
+}
+
+#######################################
 # Save the configuration to a local file.
 # Globals:
 #   GCP_PROJECT
@@ -1228,9 +1296,15 @@ save_config() {
 
 #######################################
 # Based on the authentication method, guide user complete authentication
-# process. For service account, confirm to use/create a service account and
-# download key file; for OAuth 2.0, guide user to complete OAuth authentication
-# and save the refresh token.
+# process.
+# For service account, given that Cloud Functions can extend the authorized API
+# scopes now, it will use the default service account rather than an explicit
+# service account with the key file downloaded. By doing so, we can reduce the
+# risk of leaking service account key. If there is a service key in the current
+# folder from previous installation, the code will continue using it, otherwise
+# it will use the Cloud Functions' default service account.
+# For OAuth 2.0, guide user to complete OAuth authentication and save the
+# refresh token.
 # Globals:
 #   NEED_SERVICE_ACCOUNT
 #   NEED_OAUTH
@@ -1238,150 +1312,9 @@ save_config() {
 #   None
 #######################################
 do_authentication(){
-  if [[ ${NEED_SERVICE_ACCOUNT} == "true" ]]; then
-    download_service_account_key
-  fi
   if [[ ${NEED_OAUTH} == "true" ]]; then
     do_oauth
   fi
-}
-
-#######################################
-# Download a service account key file and save as `$SA_KEY_FILE`.
-# Globals:
-#   SA_NAME
-#   GCP_PROJECT
-#   SA_KEY_FILE
-# Arguments:
-#   None
-# Returns:
-#   0 if service key files exists or created, non-zero on error.
-#######################################
-download_service_account_key() {
-  (( STEP += 1 ))
-  printf '%s\n' "Step ${STEP}: Downloading the key file for the service \
-account..."
-  if [[ -z ${SA_NAME} ]];then
-    confirm_service_account
-  fi
-  local suffix exist
-  suffix=$(get_sa_domain_from_gcp_id "${GCP_PROJECT}")
-  local email="${SA_NAME}@${suffix}"
-  local prompt="Would you like to download the key file for [${email}] and \
-save it as ${SA_KEY_FILE}? [Y/n]: "
-  local default_value="y"
-  if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
-    exist=$(get_value_from_json_file ${SA_KEY_FILE} 'client_email' 2>&1)
-    if [[ ${exist} =~ .*("@${suffix}") ]]; then
-      prompt="A key file for [${exist}] with the key ID '\
-$(get_value_from_json_file ${SA_KEY_FILE} 'private_key_id') already exists'. \
-Would you like to create a new key to overwrite it? [N/y]: "
-      default_value="n"
-    fi
-  fi
-  printf '%s' "${prompt}"
-  local input
-  read -r input
-  input=${input:-"${default_value}"}
-  if [[ ${input} == 'y' || ${input} == 'Y' ]];then
-    printf '%s\n' "Downloading a new key file for [${email}]..."
-    gcloud iam service-accounts keys create "${SA_KEY_FILE}" --iam-account \
-"${email}"
-    if [[ $? -gt 0 ]]; then
-      printf '%s\n' "Failed to download new key files for [${email}]."
-      return 1
-    else
-      printf '%s\n' "OK. New key file is saved at [${SA_KEY_FILE}]."
-      return 0
-    fi
-  else
-    printf '%s\n' "Skipped downloading new key file. See \
-https://cloud.google.com/iam/docs/creating-managing-service-account-keys \
-to learn more about service account key files."
-    return 0
-  fi
-}
-
-#######################################
-# Make sure a service account for this integration exists and set the email of
-# the service account to the global variable `SA_NAME`.
-# Globals:
-#   GCP_PROJECT
-#   SA_KEY_FILE
-#   SA_NAME
-#   DEFAULT_SERVICE_ACCOUNT
-# Arguments:
-#   None
-#######################################
-confirm_service_account() {
-  cat <<EOF
-  Some external APIs might require authentication based on OAuth or \
-JWT(service account), for example, Google Analytics or Campaign Manager. \
-In this step, you prepare the service account. For more information, see \
-https://cloud.google.com/iam/docs/creating-managing-service-accounts
-EOF
-
-  local suffix
-  suffix=$(get_sa_domain_from_gcp_id "${GCP_PROJECT}")
-  local email
-  if [[ -f "${SA_KEY_FILE}" && -s "${SA_KEY_FILE}" ]]; then
-    email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
-    if [[ ${email} =~ .*("@${suffix}") ]]; then
-      printf '%s' "A key file for service account [${email}] already exists. \
-Would you like to create a new service account? [N/y]: "
-      local input
-      read -r input
-      if [[ ${input} != 'y' && ${input} != 'Y' ]]; then
-        printf '%s\n' "OK. Will use existing service account [${email}]."
-        SA_NAME=$(printf "${email}" | cut -d@ -f1)
-        return 0
-      fi
-    fi
-  fi
-
-  SA_NAME="${SA_NAME:-"${PROJECT_NAMESPACE}-api"}"
-  while :; do
-    printf '%s' "Enter the name of service account [${SA_NAME}]: "
-    local input sa_elements=() sa
-    read -r input
-    input=${input:-"${SA_NAME}"}
-    IFS='@' read -a sa_elements <<< "${input}"
-    if [[ ${#sa_elements[@]} == 1 ]]; then
-      echo "  Append default suffix to service account name and get: ${email}"
-      sa="${input}"
-      email="${sa}@${suffix}"
-    else
-      if [[ ${sa_elements[1]} != "${suffix}" ]]; then
-        printf '%s\n' "  Error: Service account domain name ${sa_elements[1]} \
-doesn't belong to the current project. The service account domain name for the \
-current project should be: ${suffix}."
-        continue
-      fi
-      sa="${sa_elements[0]}"
-      email="${input}"
-    fi
-
-    printf '%s\n' "Checking the existence of the service account [${email}]..."
-    if ! result=$(gcloud iam service-accounts describe "${email}" 2>&1); then
-      printf '%s\n' "  Service account [${email}] does not exist. Trying to \
-create..."
-      gcloud iam service-accounts create "${sa}" --display-name \
-"Tentacles API requester"
-      if [[ $? -gt 0 ]]; then
-        printf '%s\n' "Creating the service account [${email}] failed. Please \
-try again..."
-      else
-        printf '%s\n' "The service account [${email}] was successfully created."
-        SA_NAME=${sa}
-        break
-      fi
-    else
-      printf ' found.\n'
-      SA_NAME=${sa}
-      break
-    fi
-  done
-  printf '%s\n' "OK. Service account [${SA_NAME}] is ready."
 }
 
 #######################################
@@ -1393,8 +1326,8 @@ try again..."
 # 3. Prompt user to enter the OAuth Client secret.
 # 4. Print the OAuth authentication URL which users should open in a browser \
 # and complete the process.
-# 5. Copy the authentication code from the browser and paste here.
-# 6. Use the authentication code to redeem an OAuth token and save it.
+# 5. Copy the authorization code from the browser and paste here.
+# 6. Use the authorization code to redeem an OAuth token and save it.
 # Globals:
 #   ENABLED_OAUTH_SCOPES
 #   OAUTH2_TOKEN_JSON
@@ -1480,10 +1413,10 @@ ${auth_url}"
 "Error 400: redirect_uri_mismatch" shown up on the page. In this case, press \
 "Enter" to start again with a native application OAuth client ID.
 EOF
-    printf '%s' "4. Copy the authentication code from browser and paste here: "
+    printf '%s' "4. Copy the authorization code from browser and paste here: "
     read -r auth_code
     if [[ -z ${auth_code} ]]; then
-      printf '%s\n\n' "No authentication code. Starting from beginning again..."
+      printf '%s\n\n' "No authorization code. Starting from beginning again..."
       continue
     fi
     auth_response=$(curl -s -d "code=${auth_code}" -d "client_id=${client_id}" \
@@ -1492,7 +1425,7 @@ EOF
     auth_error=$(node -e "console.log(!!JSON.parse(process.argv[1]).error)" \
 "${auth_response}")
     if [[ ${auth_error} == "true" ]]; then
-      printf '%s\n' "Error happened in redeem the authentication code: \
+      printf '%s\n' "Error happened in redeem the authorization code: \
 ${auth_response}"
       continue
     fi
@@ -1549,7 +1482,7 @@ set_authentication_env_for_cloud_functions() {
 }
 
 #######################################
-# Create or update a Cloud Schdduleer
+# Create or update a Cloud Scheduler
 # Globals:
 #   None
 # Arguments:
@@ -1635,8 +1568,27 @@ print_finished(){
 print_service_account(){
   printf '%s\n' "=========================="
   local email
-  email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
-  printf '%s\n' "The email address of the current service account is ${email}."
+  email=$(get_service_account)
+  printf '%s\n' "The email address of the current service account is: ${email}."
+}
+
+#######################################
+# Returns the email address of the service account. If there is a key file of
+# service account, it returns the email of that service account; otherwise it
+# it will get the default service account of Cloud Functions.
+# Globals:
+#   SA_KEY_FILE
+# Arguments:
+#   None
+#######################################
+get_service_account(){
+  local email
+  if [[ -f "${SA_KEY_FILE}" ]]; then
+    email=$(get_value_from_json_file "${SA_KEY_FILE}" 'client_email')
+  else
+    email=$(get_cloud_functions_service_account)
+  fi
+  printf '%s' "${email}"
 }
 
 #######################################
@@ -1688,6 +1640,40 @@ run_default_function() {
 # Utilities functions
 
 #######################################
+# Get the access token based on OAuth key file.
+# Globals:
+#   OAUTH2_TOKEN_JSON
+# Arguments:
+#   OAuth key file, default value ${OAUTH2_TOKEN_JSON}
+#######################################
+get_oauth_access_token() {
+  local oauthFile clientId clientSecret refreshToken
+  oauthFile="${1:-${OAUTH2_TOKEN_JSON}}"
+  if [[ ! -s "${oauthFile}" ]]; then
+    printf '%s\n' "Fail to find OAuth key file: ${oauthFile}" >&2
+    return
+  fi
+  clientId=$(get_value_from_json_file "${oauthFile}" 'client_id')
+  clientSecret=$(get_value_from_json_file "${oauthFile}" 'client_secret')
+  refreshToken=$(get_value_from_json_file "${oauthFile}" 'token.refresh_token')
+  local request response accessToken
+  request=(
+    -d "client_id=${clientId}"
+    -d "client_secret=${clientSecret}"
+    -d "grant_type=refresh_token"
+    -d "refresh_token=${refreshToken}"
+    -s "https://accounts.google.com/o/oauth2/token"
+  )
+  response=$(curl "${request[@]}")
+  accessToken=$(get_value_from_json_string "${response}" "access_token")
+  if [[ -z "${accessToken}" ]]; then
+    printf '%s\n' "Fail to refresh access token: ${response}" >&2
+    return
+  fi
+  printf '%s' "${accessToken}"
+}
+
+#######################################
 # Copy a local file or synchronize a local folder to the target Storage bucket.
 # Globals:
 #   CONFIG_FILE
@@ -1725,7 +1711,7 @@ get_value_from_json_string() {
   read -d '' script << EOF
 const properties = process.argv[2].split('.');
 const currentLocation = properties.reduce((previous, currentProperty) => {
-  return previous[currentProperty];
+  return previous ? previous[currentProperty] : undefined;
 }, JSON.parse(process.argv[1]));
 let output;
 if (typeof currentLocation !== 'object'){
@@ -1809,25 +1795,25 @@ sed  -r 's/^([^:]*):(.*)$/\2.\1/').iam.gserviceaccount.com"
 
 #######################################
 # Returns the default service account of the given Cloud Functions.
-# Use cases:
-# 1. When BigQuery query Google Sheet based external tables, this service
-#    account needs to be added to the Google Sheet as a viewer.
 # Globals:
 #   None
 # Arguments:
-#   None
+#   The name of Cloud Functions, default value is a random one starts with the
+#     namespace.
 # Returns:
 #   The default service account of the given Cloud Functions.
 #######################################
 get_cloud_functions_service_account() {
-  local region=$(gcloud functions list --format="csv[no-heading](name,REGION)" \
-| grep "${1}" | cut -d, -f2 | uniq)
-  if [[ -z ${region} ]]; then
-    printf '%s\n' "Cloud Functions [$1] doesn't exist."
+  local cf=($(gcloud functions list --format="csv[no-heading,separator=\
+' '](name,REGION)" | grep "${1:-"${PROJECT_NAMESPACE}"}" | head -1))
+  if [[ ${#cf[@]} -lt 1 ]]; then
+    printf '%s\n' "Cloud Functions [${1}] doesn't exist."
   else
-    local service_account=$(gcloud functions describe "$1" \
+    local name="${cf[0]}"
+    local region="${cf[1]}"
+    local service_account=$(gcloud functions describe "${name}" \
 --region="${region}" --format="get(serviceAccountEmail)")
-    printf '%s' "$service_account"
+    printf '%s' "${service_account}"
   fi
 }
 
@@ -1843,9 +1829,8 @@ get_cloud_functions_service_account() {
 #   None.
 #######################################
 check_firestore_existence() {
-  local firestore_status
-  firestore_status=$(gcloud firestore operations list 2>&1)
-  while [[ ${firestore_status} =~ .*NOT_FOUND.* ]]; do
+  gcloud firestore indexes fields list >/dev/null 2>&1
+  while [[ $? -gt 0 ]]; do
     cat <<EOF
 Cannot find Firestore or Datastore in current project. Please visit \
 https://console.cloud.google.com/firestore?project=${GCP_PROJECT} to create a \
@@ -1856,7 +1841,7 @@ EOF
     local any
     read -n1 -s any
     printf '\n'
-    firestore_status=$(gcloud firestore operations list 2>&1)
+    gcloud firestore indexes fields list >/dev/null 2>&1
   done
 }
 
@@ -1869,7 +1854,7 @@ EOF
 #######################################
 quit_if_failed() {
   printf '\n'
-  if [[ $1 -gt 0 ]];then
+  if [[ ${1} -gt 0 ]];then
     printf '%s\n' "[Error] Quit."
     exit 1
   fi

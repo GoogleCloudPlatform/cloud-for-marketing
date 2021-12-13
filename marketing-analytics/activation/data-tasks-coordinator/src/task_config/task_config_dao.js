@@ -33,6 +33,7 @@ const TaskType = {
   EXPORT: 'export',
   DATA_TRANSFER: 'data_transfer',
   EXPORT_SCHEMA: 'export_schema',
+  DELETE_DATASET: 'delete_dataset',
   // Cloud Storage tasks
   COPY_GCS: 'copy_gcs',
   // AutoML Tables API

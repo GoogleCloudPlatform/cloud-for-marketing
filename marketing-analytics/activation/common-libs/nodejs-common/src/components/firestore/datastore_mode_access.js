@@ -46,10 +46,11 @@ class DatastoreModeAccess {
    * Initializes DatastoreModeAccess instance.
    * @param {string} namespace The namespace for data.
    * @param {string} kind The kind of this entity.
+   * @param {string} projectId The Id of Cloud project.
    */
-  constructor(namespace, kind) {
+  constructor(namespace, kind, projectId = process.env['GCP_PROJECT']) {
     /** @type{Datastore} */
-    this.datastore = new Datastore();
+    this.datastore = new Datastore({projectId});
     this.kind = kind;
     this.namespace = namespace;
     this.logger = getLogger('DS.ACC');
