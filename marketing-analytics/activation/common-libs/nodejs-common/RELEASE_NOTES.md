@@ -1,6 +1,11 @@
 Release Notes
 ===
 
+1.0.1 (2022-01-05)
+---
+
+### Support creating a Firestore database during installation
+
 1.0.0 (2021-12-02)
 ---
 

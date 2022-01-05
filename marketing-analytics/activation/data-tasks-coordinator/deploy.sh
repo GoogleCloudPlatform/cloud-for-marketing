@@ -310,9 +310,7 @@ job for Sentinel status check task..."
 #######################################
 post_installation() {
   (( STEP += 1 ))
-  printf '%s\n' "Step ${STEP}: Post-installation checks..."
-  check_firestore_existence
-  printf '%s\n' "[ok] Firestore/Datastore is ready."
+  printf '%s\n' "Step ${STEP}: Post-installation actions..."
   if [[ ${NEED_AUTHENTICATION} == 'true' ]]; then
     local account="YOUR_OAUTH_EMAIL"
     if [[ ${NEED_SERVICE_ACCOUNT} == 'true' ]]; then
@@ -352,9 +350,9 @@ EOF
 #   Optional string for the configuration file path and name.
 #######################################
 update_task_config() {
-  check_firestore_existence
   check_authentication
   quit_if_failed $?
+  check_firestore_existence
   local configFile
   configFile="${1}"
   while [[ ! -s "${configFile}" ]]; do
@@ -480,6 +478,7 @@ DEFAULT_INSTALL_TASKS=(
   confirm_namespace
   confirm_project
   confirm_region
+  confirm_firestore
   confirm_external_tasks
   confirm_auth_method
   check_permissions

@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/data-tasks-coordinator",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A data task coordinator based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",
@@ -20,7 +20,7 @@
     "@google-cloud/bigquery": "^5.9.2",
     "@google-cloud/bigquery-data-transfer": "^2.3.0",
     "@google-cloud/firestore": "^5.0.1",
-    "@google-cloud/nodejs-common": "^1.0.0",
+    "@google-cloud/nodejs-common": "^1.0.1",
     "@google-cloud/storage": "^5.16.1",
     "google-auth-library": "^7.10.3",
     "luxon": "^2.2.0",

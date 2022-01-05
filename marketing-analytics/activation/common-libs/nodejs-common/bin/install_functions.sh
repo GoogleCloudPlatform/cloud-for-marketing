@@ -443,7 +443,7 @@ select_functions_location() {
 "name~${PROJECT_NAMESPACE}" --format="csv[no-heading](name,REGION)"))
     if [[ ${#exist_functions[@]} -gt 0 ]]; then
       local exist_region
-      exist_region=$(printf "${exist_functions[0]}" | cut -d, -f2 | uniq)
+      exist_region=$(printf "${exist_functions[0]}" | cut -d\, -f2 | uniq)
       printf '%s\n' "Current application has already been installed in region: \
 ${exist_region}."
       local i
@@ -466,9 +466,9 @@ Functions for that region. Do you want to continue? [N/y]: "
         if [[ ${confirm_delete} == "Y" || ${confirm_delete} == "y" ]]; then
           for i in "${!exist_functions[@]}"; do
             local exist_function
-            exist_function=$(printf "${exist_functions[$i]}" | cut -d, -f1)
+            exist_function=$(printf "${exist_functions[$i]}" | cut -d\, -f1)
             local function_region
-            function_region=$(printf "${exist_functions[$i]}" | cut -d, -f2)
+            function_region=$(printf "${exist_functions[$i]}" | cut -d\, -f2)
             gcloud functions delete --region="${function_region}" \
 "${exist_function}"
           done
@@ -1818,31 +1818,66 @@ get_cloud_functions_service_account() {
 }
 
 #######################################
-# Make sure Firestore or Datastore is in the current project.
-# To create the Firestore, the operator need to have following permissions:
-# appengine.applications.create - role: Owner
-# datastore.locations.list - sample role: Cloud Datastore Owner
-# servicemanagement.services.bind - sample role: Editor
+# Make sure the Firestore database is in the current project. If there is no
+# Firestore datastore, it will help to create one.
+# To create the Firestore, the operator need to be the Owner.
 # Globals:
 #   GCP_PROJECT
 # Arguments:
-#   None.
+#   Firestore mode, 'native' or 'datastore'.
+#   Firestore region, it's not the same list as Cloud Functions regions and it
+#   will be bonded to this Cloud project after created.
 #######################################
 check_firestore_existence() {
-  gcloud firestore indexes fields list >/dev/null 2>&1
-  while [[ $? -gt 0 ]]; do
-    cat <<EOF
-Cannot find Firestore or Datastore in current project. Please visit \
-https://console.cloud.google.com/firestore?project=${GCP_PROJECT} to create a \
-database before continue.
-
-Press any key to continue after you create the database...
-EOF
+  local firestore mode appRegion
+  mode="${1}"
+  appRegion="${2}"
+  firestore=$(gcloud app describe --format="csv[no-heading](databaseType)")
+  if [[ -z "${firestore}" ]]; then
+    printf '%s\n' "Firestore is not ready. Creating a new Firestore database\
+is an irreversible operation, so read carefully before continue:"
+    printf '%s\n' "  1. You need to be the owner of ${GCP_PROJECT} to continue."
+    printf '%s\n' "  2. Once you select the region and mode, you cannot change it."
+    printf '%s\n' "Press any key to continue..."
     local any
     read -n1 -s any
-    printf '\n'
-    gcloud firestore indexes fields list >/dev/null 2>&1
-  done
+    if [[ -z "${mode}" ]]; then
+      printf '%s\n' "  For more information about mode, see \
+https://cloud.google.com/firestore/docs/firestore-or-datastore#choosing_a_database_mode"
+    fi
+    while [[ -z "${mode}" ]]; do
+      printf '%s' "  Enter the mode of your dataset [Native]: "
+      local selectMode
+      read -r selectMode
+      selectMode=$(printf '%s' "${selectMode:-"Native"}" | \
+        tr '[:upper:]' '[:lower:]')
+      if [[ ${selectMode} == 'native' || ${selectMode} == 'datastore' ]]; then
+        mode=${selectMode}
+      fi
+    done
+    printf '%s\n' "Creating Firestore database in ${mode} mode..."
+    gcloud app create --region=${appRegion}
+    if [[ $? -eq 0 ]]; then
+      if [[ "${mode}" == "native" ]]; then
+        appRegion=$(gcloud app describe --format="csv[no-heading](locationId)")
+        gcloud firestore databases create --region="${appRegion}"
+      fi
+    else
+      return 1
+    fi
+  else
+    printf '%s\n' "OK. Firestore is ready in mode ${firestore}."
+  fi
+}
+
+#######################################
+# Installation step for confirming Firestore is ready.
+# See function check_firestore_existence.
+#######################################
+confirm_firestore() {
+  (( STEP += 1 ))
+  printf '%s\n' "Step ${STEP}: Checking the status of Firestore..."
+  check_firestore_existence
 }
 
 #######################################
