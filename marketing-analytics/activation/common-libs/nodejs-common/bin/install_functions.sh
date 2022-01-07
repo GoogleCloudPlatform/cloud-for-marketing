@@ -1877,7 +1877,7 @@ https://cloud.google.com/firestore/docs/firestore-or-datastore#choosing_a_databa
 confirm_firestore() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Checking the status of Firestore..."
-  check_firestore_existence
+  check_firestore_existence "$@"
 }
 
 #######################################
