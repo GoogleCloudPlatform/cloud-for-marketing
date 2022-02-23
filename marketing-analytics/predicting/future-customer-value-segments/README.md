@@ -37,7 +37,7 @@ Beam.
 
 ### Installation
 
-Note: This solution requires Python 3.7.
+Note: This solution requires Python >=3.7.
 
 #### GCP Steps
 

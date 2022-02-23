@@ -87,9 +87,10 @@ install_dataflow_templates() {
     --temp_location "gs://${GCS_BUCKET}/temp/" \
     --staging_location "gs://${GCS_BUCKET}/staging/" \
     --template_location "gs://${GCS_BUCKET}/templates/FoCVS-csv" \
+    --region "${DATAFLOW_REGION}" \
     --save_main_session \
     --setup_file ./setup.py \
-    --region "${DATAFLOW_REGION}"
+    --experiment use_unsupported_python_version
 
   python fcvs_pipeline_bq.py \
     --runner DataflowRunner \
@@ -97,10 +98,11 @@ install_dataflow_templates() {
     --temp_location "gs://${GCS_BUCKET}/temp/" \
     --staging_location "gs://${GCS_BUCKET}/staging/" \
     --template_location "gs://${GCS_BUCKET}/templates/FoCVS-bq" \
+    --region "${DATAFLOW_REGION}" \
     --save_main_session \
-    --experiments=use_beam_bq_sink \
     --setup_file ./setup.py \
-    --region "${DATAFLOW_REGION}"
+    --experiments=use_beam_bq_sink \
+    --experiment use_unsupported_python_version
 
   gsutil cp FoCVS-*_metadata gs://${GCS_BUCKET}/templates
 
