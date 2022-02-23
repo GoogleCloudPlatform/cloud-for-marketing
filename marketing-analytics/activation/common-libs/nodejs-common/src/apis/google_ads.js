@@ -81,6 +81,13 @@ const IDENTIFIERS = [
 ];
 
 /**
+ * Maximum number of user identifiers in single UserData.
+ * @see https://ads-developers.googleblog.com/2021/10/userdata-enforcement-in-google-ads-api.html
+ * @type {number}
+ */
+const MAX_IDENTIFIERS_PER_USER = 20;
+
+/**
  * Configuration for uploading click conversions for Google Ads, includes:
  * gclid, conversion_action, conversion_date_time, conversion_value,
  * currency_code, order_id, external_attribution_data, etc.
@@ -111,43 +118,34 @@ const IDENTIFIERS = [
  *   order_id: (string|undefined),
  *   user_identifier_source:(UserIdentifierSource|undefined),
  *   custom_variable_tags:(!Array<string>|undefined),
- *   customVariables:(!object<string,string>|undefined),
+ *   customVariables:(!Object<string,string>|undefined),
  * }}
  */
 let ClickConversionConfig;
 
 /**
  * Configuration for uploading customer match to Google Ads, includes:
- * customer_id, login_customer_id, list_id, list_type and operation
- * list_type must be one of the following: hashed_email,
- * hashed_phone_number, mobile_id, third_party_user_id or address_info;
+ * customer_id, login_customer_id, list_id and operation.
  * operation must be one of the two: 'create' or 'remove';
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
  * @typedef {{
  *   customer_id: string,
  *   login_customer_id: string,
  *   list_id: string,
- *   list_type: 'hashed_email'|'hashed_phone_number'|'mobile_id'|
- *       'third_party_user_id'|'address_info',
  *   operation: 'create'|'remove',
  * }}
  */
 let CustomerMatchConfig;
 
 /**
- * Configuration for uploading customer match data for Google Ads, includes one of:
- * hashed_email, hashed_phone_number, mobile_id, third_party_user_id or address_info
+ * Configuration for uploading customer match data for Google Ads.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier
  * @typedef {{
- *   hashed_email: string,
- * }|{
- *   hashed_phone_number: string,
- * }|{
- *   mobile_id: string,
- * }|{
- *   third_party_user_id: string,
- * }|{
- *   address_info: GoogleAdsApi.OfflineUserAddressInfo,
+ *   hashed_email: (string|Array<string>|undefined),
+ *   hashed_phone_number: (string|Array<string>|undefined),
+ *   mobile_id: (string|Array<string>|undefined),
+ *   third_party_user_id: (string|Array<string>|undefined),
+ *   address_info: (GoogleAdsApi.OfflineUserAddressInfo|undefined),
  * }}
  */
 let CustomerMatchRecord;
@@ -530,18 +528,17 @@ class GoogleAds {
     const customerId = customerMatchConfig.customer_id.replace(/-/g, '');
     const loginCustomerId = customerMatchConfig.login_customer_id.replace(/-/g,
         '');
-    const userListType = customerMatchConfig.list_type;
     const userListId = customerMatchConfig.list_id;
     const operation = customerMatchConfig.operation;
 
     const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
     const operationsList = this.buildOperationsList_(operation,
-        customerMatchRecords, userListType);
+        customerMatchRecords);
     const metadata = this.buildCustomerMatchUserListMetadata_(customerId,
         userListId);
     const request = UploadUserDataRequest.create({
       customer_id: customerId,
-      operations: [operationsList],
+      operations: operationsList,
       customer_match_user_list_metadata: metadata,
     });
     const response = await customer.userData.uploadUserData(request);
@@ -556,18 +553,36 @@ class GoogleAds {
    * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
    * @param {string} operationType either 'create' or 'remove'
    * @param {Array<CustomerMatchRecord>} customerMatchRecords userIds
-   * @param {string} userListType One of the following hashed_email, hashed_phone_number,
-   *     mobile_id, third_party_user_id or address_info
    * @return {Array<UserDataOperation>}
    * @private
    */
-  buildOperationsList_(operationType, customerMatchRecords, userListType) {
-    const userIdentifiers = customerMatchRecords.map((customerMatchRecord) => {
-      return UserIdentifier.create(
-          {[userListType]: customerMatchRecord[userListType]});
+  buildOperationsList_(operationType, customerMatchRecords) {
+    return customerMatchRecords.map((customerMatchRecord) => {
+      const userIdentifiers = [];
+      IDENTIFIERS.forEach((idType) => {
+        const idValue = customerMatchRecord[idType];
+        if (idValue) {
+          if (Array.isArray(idValue)) {
+            idValue.forEach((user) => {
+              userIdentifiers.push(UserIdentifier.create({[idType]: user}));
+            });
+          } else {
+            userIdentifiers.push(UserIdentifier.create({[idType]: idValue}));
+          }
+        }
+      });
+      let userData;
+      if (userIdentifiers.length <= MAX_IDENTIFIERS_PER_USER) {
+        userData = UserData.create({user_identifiers: userIdentifiers});
+      } else {
+        this.logger.warn(
+            `Too many user identifiers, will only send ${MAX_IDENTIFIERS_PER_USER}:`,
+            JSON.stringify(customerMatchRecord));
+        userData = UserData.create({user_identifiers: userIdentifiers}.slice(0,
+            MAX_IDENTIFIERS_PER_USER));
+      }
+      return UserDataOperation.create({[operationType]: userData});
     });
-    const userData = UserData.create({user_identifiers: userIdentifiers});
-    return UserDataOperation.create({[operationType]: userData});
   }
 
   /**

@@ -1,5 +1,9 @@
 Release Notes
 ===
+1.0.3 (2022-02-23)
+---
+
+### Update Customer Match on Google Ads based on [this change](https://ads-developers.googleblog.com/2021/10/userdata-enforcement-in-google-ads-api.html)
 
 1.0.1 (2022-01-05)
 ---

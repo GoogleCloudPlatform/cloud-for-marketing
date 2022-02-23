@@ -28,12 +28,16 @@ const {
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
  * However UserDataService has limit of 10 operations and 100 userIds per request
  * @see https://developers.google.com/google-ads/api/docs/migration/user-data-service#rate_limits
+ * Based on this: https://ads-developers.googleblog.com/2021/10/userdata-enforcement-in-google-ads-api.html
+ * Each operation only contains the data for one user, so the limited number of
+ * records for a single request is 10 (operations).
  */
-const RECORDS_PER_REQUEST = 100;
+const RECORDS_PER_REQUEST = 10;
 
 /**
  * Queries per second. Google Ads has no limits on queries per second, however
  * it has limits on the gRPC size (4MB), so large requests may fail.
+ * This can be overwritten by configuration.
  */
 const QUERIES_PER_SECOND = 10;
 
@@ -70,7 +74,7 @@ const sendDataInternal = (googleAds, records, messageId, config) => {
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
+  const managedSend = apiSpeedControl(recordsPerRequest, qps, qps);
   const configedUpload = googleAds.getUploadCustomerMatchFn(
       config.customerMatchConfig);
   return managedSend(configedUpload, records, messageId);

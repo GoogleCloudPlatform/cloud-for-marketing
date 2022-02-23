@@ -1,5 +1,23 @@
 Release Notes
 ===
+
+2.0.3 (2022-02-23)
+---
+
+### Integrated APIs
+
+* Updated Google Ads Customer Match connector
+  for [this change](https://ads-developers.googleblog.com/2021/10/userdata-enforcement-in-google-ads-api.html)
+
+Note: For ACM connector, the new solution is much slower than previous version
+due to the reduced data in each request. DO
+use [size parameter](https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/main/marketing-analytics/activation/gmp-googleads-connector#34-name-convention-of-data-files)
+in the file name to guide Tentacles to properly slice your data file into small
+pieces rather than relying on the default setting. Ideally each piece should
+contain about 5k lines of data, which should be done in about 5 minutes. For
+example, if 5k lines are about 0.4 MB, then put this `_size{0.4}` in your data
+filenames.
+
 2.0.0 (2021-12-02)
 ---
 
