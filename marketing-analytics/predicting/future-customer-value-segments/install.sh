@@ -51,6 +51,13 @@ HELP
   exit 1
 }
 
+temp_install_py38_virtualenv() {
+  rm -rf ~/.pyenv
+  curl https://pyenv.run | bash
+  pyenv install 3.8.12
+  virtualenv -p ~/.pyenv/versions/3.8.12/bin/python3.8 focvs-env
+}
+
 install_dependencies() {
   if ! "${INSTALL_DEPENDENCIES}" && [ -d "focvs-env" ]; then
     printf "\nINFO - Reusing existing virtualenv 'focvs-env'\n"
@@ -58,7 +65,8 @@ install_dependencies() {
   else
     printf "\nINFO - Installing Python dependencies...\n\n"
     rm -rf focvs-env
-    virtualenv focvs-env
+    temp_install_py38_virtualenv
+    # virtualenv focvs-env
     source focvs-env/bin/activate
     pip install -r requirements.txt
     printf "\nINFO - Python dependencies installed successfully!\n"
