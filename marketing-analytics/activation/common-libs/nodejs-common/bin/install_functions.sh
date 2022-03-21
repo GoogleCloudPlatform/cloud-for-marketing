@@ -1337,10 +1337,13 @@ do_authentication(){
 do_oauth(){
   # Base url of Google OAuth service.
   OAUTH_BASE_URL="https://accounts.google.com/o/oauth2/"
+  # Redirect uri.
+  # Must be the same for requests of authorization code and refresh token.
+  REDIRECT_URI="http%3A//127.0.0.1%3A8887"
   # Defaulat parameters of OAuth requests.
   OAUTH_PARAMETERS=(
     "access_type=offline"
-    "redirect_uri=urn:ietf:wg:oauth:2.0:oob"
+    "redirect_uri=${REDIRECT_URI}"
     "response_type=code"
   )
   while [ ${#ENABLED_OAUTH_SCOPES[@]} -eq 0 ]; do
@@ -1409,18 +1412,26 @@ EOF
     printf '%s\n' "3. Open the link in browser and finish authentication: \
 ${auth_url}"
     cat <<EOF
-  Note: if the OAuth client is not for a native application, there will be an \
+  Note:
+    If the OAuth client is not for a native application, there will be an \
 "Error 400: redirect_uri_mismatch" shown up on the page. In this case, press \
 "Enter" to start again with a native application OAuth client ID.
+    If there is no local web server serving at ${REDIRECT_URI}, the \
+succeeded OAuth flow will land the browser on an error page ("This site can't \
+be reached"). This is an expected behavior. Copy the whole URL and continue.
+
 EOF
-    printf '%s' "4. Copy the authorization code from browser and paste here: "
+    printf '%s' "4. Copy the authorization code or complete url from browser \
+and paste here: "
     read -r auth_code
     if [[ -z ${auth_code} ]]; then
       printf '%s\n\n' "No authorization code. Starting from beginning again..."
       continue
     fi
+    auth_code=$(printf "%s" "${auth_code}" | sed 's/^.*code=//;s/&.*//')
+    printf '%s\n' "Got authorization code: ${auth_code}"
     auth_response=$(curl -s -d "code=${auth_code}" -d "client_id=${client_id}" \
--d "grant_type=authorization_code" -d "redirect_uri=urn:ietf:wg:oauth:2.0:oob" \
+-d "grant_type=authorization_code" -d "redirect_uri=${REDIRECT_URI}" \
 -d "client_secret=${client_secret}" "${OAUTH_BASE_URL}token")
     auth_error=$(node -e "console.log(!!JSON.parse(process.argv[1]).error)" \
 "${auth_response}")
