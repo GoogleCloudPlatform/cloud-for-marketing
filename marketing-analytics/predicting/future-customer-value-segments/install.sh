@@ -65,8 +65,7 @@ install_dependencies() {
   else
     printf "\nINFO - Installing Python dependencies...\n\n"
     rm -rf focvs-env
-    temp_install_py38_virtualenv
-    # virtualenv focvs-env
+    temp_install_py38_virtualenv # virtualenv focvs-env
     source focvs-env/bin/activate
     pip install -r requirements.txt
     printf "\nINFO - Python dependencies installed successfully!\n"
