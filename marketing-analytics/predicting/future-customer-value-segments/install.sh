@@ -51,6 +51,20 @@ HELP
   exit 1
 }
 
+temp_install_py38_virtualenv() {
+  BASE_DIR="${HOME}/.pyenv"
+  PY38_VERSION="3.8.12"
+  PY38_DIR="${BASE_DIR}/versions/${PY38_VERSION}/bin"
+
+  if [ ! -d "${PY38_DIR}" ]; then
+    rm -rf "${BASE_DIR}"
+    bash pyenv-installer.sh
+    pyenv install "${PY38_VERSION}"
+  fi
+
+  virtualenv -p "${PY38_DIR}/python3.8" focvs-env
+}
+
 install_dependencies() {
   if ! "${INSTALL_DEPENDENCIES}" && [ -d "focvs-env" ]; then
     printf "\nINFO - Reusing existing virtualenv 'focvs-env'\n"
@@ -58,7 +72,7 @@ install_dependencies() {
   else
     printf "\nINFO - Installing Python dependencies...\n\n"
     rm -rf focvs-env
-    virtualenv focvs-env
+    temp_install_py38_virtualenv # virtualenv focvs-env
     source focvs-env/bin/activate
     pip install -r requirements.txt
     printf "\nINFO - Python dependencies installed successfully!\n"
