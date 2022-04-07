@@ -20,8 +20,7 @@
 
 const winston = require('winston');
 const {inspect} = require('util');
-const {LoggingWinston} = require('@google-cloud/logging-winston');
-const {CloudPlatformApis} = require('../apis/cloud_platform_apis.js');
+const { LoggingWinston } = require('@google-cloud/logging-winston');
 
 /**
  * The result of a batch of data sent to target API. The batch here means the
@@ -499,37 +498,6 @@ const extractObject = (paths) => {
 };
 
 /**
- * Checks whether the permissions are granted for current authentication.
- * This function will be invoked during the deployment of a specific solution,
- * e.g. Tentacles, to make sure the operator has the proper permissions to
- * carry on. If the operator doesn't have enough permissions, it will exit with
- * status code 1 to let the invoker (the Bash installation script) know that it
- * doesn't pass.
- * @param {!Array<string>} permissions Array of permissions to check.
- * @param {string} projectId The Id of Cloud project.
- * @return {!Promise<undefined>}
- */
-const checkPermissions = (permissions,
-    projectId = process.env['GCP_PROJECT']) => {
-  const cloudPlatformApis = new CloudPlatformApis(projectId);
-  return cloudPlatformApis.testIamPermissions(permissions)
-      .then((grantedPermissions) => {
-        console.log(grantedPermissions);
-        grantedPermissions = grantedPermissions || [];
-        if (grantedPermissions.length < permissions.length) {
-          const missedPermissions = permissions.filter(
-              (permission) => grantedPermissions.indexOf(permission) === -1);
-          console.error(`[MISSED] ${missedPermissions.join(',')}.`);
-          process.exit(1);
-        }
-      })
-      .catch((error) => {
-        console.error(`[ERROR] ${error.message}`);
-        process.exit(1);
-      });
-};
-
-/**
  * For more details, see:
  * https://developers.google.com/google-ads/api/docs/rest/design/json-mappings
  * @param {string} name Identifiers.
@@ -565,7 +533,6 @@ module.exports = {
   replaceParameters,
   getFilterFunction,
   extractObject,
-  checkPermissions,
   changeNamingFromSnakeToUpperCamel,
   changeNamingFromSnakeToLowerCamel,
 };

@@ -173,7 +173,7 @@ project ID: [${current_project}]"
         project=${project:-"${current_project}"}
         target_project=${project}
       fi
-      if [[ -n ${current_project} && \
+      if [[ -z ${current_project} || \
 ${current_project} != "${target_project}" ]];then
         printf '%s' "Setting the Google Cloud project to [${target_project}]..."
         gcloud config set project "${target_project}"

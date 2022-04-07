@@ -56,8 +56,13 @@ let RequestBody;
  * https://developers.google.com/bid-manager/how-tos/authorizing
  */
 class DoubleClickBidManager {
-  constructor() {
-    const authClient = new AuthClient(API_SCOPES);
+  /**
+   * @constructor
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
+   */
+  constructor(env = process.env) {
+    const authClient = new AuthClient(API_SCOPES, env);
     const auth = authClient.getDefaultAuth();
     /** @const {!google.doubleclickbidmanager} */
     this.instance = google.doubleclickbidmanager({
@@ -104,6 +109,20 @@ class DoubleClickBidManager {
     return response.data.queryId;
   }
 
+  /**
+   * Deletes a query.
+   * @param {number} queryId
+   * @return {!Promise<boolean>} Whether the query was deleted.
+   */
+  async deleteQuery(queryId) {
+    try {
+      await this.instance.queries.deletequery({ queryId });
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
 }
 
 module.exports = {

@@ -30,7 +30,9 @@ const pubsubMessageSend = require('./pubsub_message_send.js');
 const googleAdsClickConversionUpload = require(
     './google_ads_click_conversions_upload.js');
 const googleAdsCustomerMatchUpload = require(
-    './google_ads_customer_match_upload.js');
+  './google_ads_customer_match_upload.js');
+const googleAdsConversionAdjustmentUpload = require(
+  './google_ads_conversion_adjustments_upload.js');
 const ga4MeasurementProtocol = require('./ga4_measurement_protocol.js');
 
 const {GoogleAnalyticsConfig} = gaDataImport;
@@ -40,7 +42,7 @@ const {SftpConfig} = sftpUpload;
 const {SheetsLoadConfig} = sheetsLoadCsv;
 const {SearchAdsConfig} = saConversionsInsert;
 const {PubSubMessageConfig} = pubsubMessageSend;
-const {GoogleAdsClickConversionConfig} = googleAdsClickConversionUpload;
+const {GoogleAdsConversionConfig} = googleAdsClickConversionUpload;
 const {GoogleAdsCustomerMatchConfig} = googleAdsCustomerMatchUpload;
 const {MpGa4IntegrationConfig} = ga4MeasurementProtocol;
 
@@ -50,7 +52,7 @@ const {MpGa4IntegrationConfig} = ga4MeasurementProtocol;
  * @typedef {(!GoogleAnalyticsConfig|!CampaignManagerConfig|
  * !MeasurementProtocolConfig|!SftpConfig|!SheetsLoadConfig|
  * !SearchAdsConfig|!PubSubMessageConfig|
- * !GoogleAdsClickConversionConfig|!GoogleAdsCustomerMatchConfig|
+ * !GoogleAdsConversionConfig|!GoogleAdsCustomerMatchConfig|
  * !MpGa4IntegrationConfig)}
  */
 let ApiConfigItem;
@@ -78,6 +80,7 @@ const API_HANDLERS = Object.freeze({
   [pubsubMessageSend.name]: pubsubMessageSend,
   [googleAdsClickConversionUpload.name]: googleAdsClickConversionUpload,
   [googleAdsCustomerMatchUpload.name]: googleAdsCustomerMatchUpload,
+  [googleAdsConversionAdjustmentUpload.name]: googleAdsConversionAdjustmentUpload,
   [ga4MeasurementProtocol.name]: ga4MeasurementProtocol,
 });
 

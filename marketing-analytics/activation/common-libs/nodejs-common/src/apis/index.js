@@ -88,7 +88,7 @@ exports.bigquery = require('./bigquery.js');
  * APIs integration class for Google Ads.
  * @const {{
  *   GoogleAds:!GoogleAds,
- *   ClickConversionConfig:!ClickConversionConfig,
+ *   ConversionConfig:!ConversionConfig,
  *   CustomerMatchConfig: !CustomerMatchConfig,
  *   CustomerMatchRecord: !CustomerMatchRecord,
  *   ReportQueryConfig:!ReportQueryConfig,

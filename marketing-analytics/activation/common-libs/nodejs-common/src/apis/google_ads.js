@@ -31,6 +31,8 @@ const {
   services: {
     UploadClickConversionsRequest,
     UploadClickConversionsResponse,
+    UploadConversionAdjustmentsRequest,
+    UploadConversionAdjustmentsResponse,
     UploadUserDataRequest,
     UploadUserDataResponse,
     UserDataOperation,
@@ -51,8 +53,9 @@ const API_SCOPES = Object.freeze(['https://www.googleapis.com/auth/adwords',]);
 
 /**
  * List of properties that will be taken from the data file as elements of a
- * conversion.
+ * conversion or a conversion adjustment.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/ClickConversion
+ * @see https://developers.google.com/google-ads/api/reference/rpc/latest/ConversionAdjustment
  * @type {Array<string>}
  */
 const PICKED_PROPERTIES = [
@@ -65,6 +68,10 @@ const PICKED_PROPERTIES = [
   'conversion_value',
   'currency_code',
   'order_id',
+  'adjustment_type',
+  'adjustment_date_time',
+  'user_agent',
+  'gclid_date_time_pair',
 ];
 
 /**
@@ -88,9 +95,11 @@ const IDENTIFIERS = [
 const MAX_IDENTIFIERS_PER_USER = 20;
 
 /**
- * Configuration for uploading click conversions for Google Ads, includes:
+ * Configuration for uploading click conversions or conversion adjustments for
+ * Google Ads, includes:
  * gclid, conversion_action, conversion_date_time, conversion_value,
- * currency_code, order_id, external_attribution_data, etc.
+ * currency_code, order_id, external_attribution_data,
+ * adjustment_type, adjustment_date_time, user_agent, gclid_date_time_pair, etc.
  * @see PICKED_PROPERTIES
  *
  * Other properties that will be used to build the conversions but not picked by
@@ -116,12 +125,15 @@ const MAX_IDENTIFIERS_PER_USER = 20;
  *   conversion_value: number,
  *   currency_code:(string|undefined),
  *   order_id: (string|undefined),
- *   user_identifier_source:(UserIdentifierSource|undefined),
+ *   adjustment_type: (string|undefined),
+ *   adjustment_date_time: (!ConversionAdjustmentType|undefined),
+ *   user_agent: (string|undefined),
+ *   user_identifier_source:(!UserIdentifierSource|undefined),
  *   custom_variable_tags:(!Array<string>|undefined),
  *   customVariables:(!Object<string,string>|undefined),
  * }}
  */
-let ClickConversionConfig;
+let ConversionConfig;
 
 /**
  * Configuration for uploading customer match to Google Ads, includes:
@@ -255,7 +267,7 @@ class GoogleAds {
    * of click conversions.
    * @param {string} customerId
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
-   * @param {!ClickConversionConfig} adsConfig Default click conversion params
+   * @param {!ConversionConfig} adsConfig Default click conversion params
    * @return {!SendSingleBatch} Function which can send a batch of hits to
    *     Google Ads API.
    */
@@ -268,7 +280,7 @@ class GoogleAds {
      * @return {!BatchResult}
      */
     return async (lines, batchId) => {
-      /** @type {!Array<ClickConversionConfig>} */
+      /** @type {!Array<ConversionConfig>} */
       const conversions = lines.map(
           (line) => buildClickConversionFromLine(line, adsConfig, customerId));
       /** @const {BatchResult} */
@@ -294,6 +306,57 @@ class GoogleAds {
       } catch (error) {
         this.logger.error(
             `Error in upload conversions batch: ${batchId}`, error);
+        this.updateBatchResultWithError_(batchResult, error, lines, 0);
+        return batchResult;
+      }
+    }
+  }
+
+  /**
+   * Returns the function to send out a request to Google Ads API with a batch
+   * of conversion adjustments.
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @param {!ConversionConfig} adsConfig Default conversion adjustments
+   *     params.
+   * @return {!SendSingleBatch} Function which can send a batch of hits to
+   *     Google Ads API.
+   */
+  getUploadConversionAdjustmentFn(customerId, loginCustomerId, adsConfig) {
+    /**
+     * Sends a batch of hits to Google Ads API.
+     * @param {!Array<string>} lines Data for single request. It should be
+     *     guaranteed that it doesn't exceed quota limitation.
+     * @param {string} batchId The tag for log.
+     * @return {!BatchResult}
+     */
+    return async (lines, batchId) => {
+      /** @type {!Array<ConversionConfig>} */
+      const conversions = lines.map(
+          (line) => buildClickConversionFromLine(line, adsConfig, customerId));
+      /** @const {BatchResult} */
+      const batchResult = {
+        result: true,
+        numberOfLines: lines.length,
+      };
+      try {
+        const response = await this.uploadConversionAdjustments(conversions,
+            customerId, loginCustomerId);
+        const {results, partial_failure_error: failed} = response;
+        if (this.logger.isDebugEnabled()) {
+          const orderId = results.map((conversion) => conversion.order_id);
+          this.logger.debug('Uploaded order_id:', orderId);
+        }
+        if (failed) {
+          this.logger.info('partial_failure_error:', failed.message);
+          const failures = failed.details.map(
+              ({value}) => GoogleAdsFailure.decode(value));
+          this.extraFailedLines_(batchResult, failures, lines, 0);
+        }
+        return batchResult;
+      } catch (error) {
+        this.logger.error(
+            `Error in upload conversion adjustments batch: ${batchId}`, error);
         this.updateBatchResultWithError_(batchResult, error, lines, 0);
         return batchResult;
       }
@@ -434,7 +497,7 @@ class GoogleAds {
    * Uploads click conversions to google ads account.
    * It requires an array of click conversions and customer id.
    * In DEBUG mode, this function will only validate the conversions.
-   * @param {Array<ClickConversionConfig>} clickConversions ClickConversions
+   * @param {Array<ConversionConfig>} clickConversions ClickConversions
    * @param {string} customerId
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @return {!Promise<!UploadClickConversionsResponse>}
@@ -449,6 +512,31 @@ class GoogleAds {
       partial_failure: true, // Will still create the non-failed entities
     });
     return customer.conversionUploads.uploadClickConversions(request);
+  }
+
+  /**
+   * Uploads conversion adjustments to google ads account.
+   * It requires an array of conversion adjustments and customer id.
+   * In DEBUG mode, this function will only validate the conversion adjustments.
+   * @param {Array<ConversionAdjustment>} conversionAdjustments Conversion
+   *     adjustments.
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @return {!Promise<!UploadConversionAdjustmentsResponse>}
+   */
+  uploadConversionAdjustments(conversionAdjustments, customerId,
+      loginCustomerId) {
+    this.logger.debug('Upload conversion adjustments for customerId:',
+        customerId);
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const request = new UploadConversionAdjustmentsRequest({
+      conversion_adjustments: conversionAdjustments,
+      customer_id: customerId,
+      validate_only: this.debugMode, // when true makes no changes
+      partial_failure: true, // Will still create the non-failed entities
+    });
+    return customer.conversionAdjustmentUploads.uploadConversionAdjustments(
+        request);
   }
 
   /**
@@ -622,7 +710,7 @@ class GoogleAds {
 /**
  * Returns a conversion object based the given config and line data.
  * @param {string} line A JSON string of a conversion data.
- * @param {ClickConversionConfig} config Default click conversion params
+ * @param {ConversionConfig} config Default click conversion params
  * @param {string} customerId
  * @return {object} A conversion
  */
@@ -657,7 +745,7 @@ const buildClickConversionFromLine = (line, config, customerId) => {
 }
 
 module.exports = {
-  ClickConversionConfig,
+  ConversionConfig,
   CustomerMatchRecord,
   CustomerMatchConfig,
   GoogleAds,

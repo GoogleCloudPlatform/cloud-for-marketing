@@ -37,9 +37,11 @@ class AdsDataHub {
    *
    * @param {GaxiosOptions|undefined=} options Used to setup for tests.
    * @param {string|undefined=} customerId ADH customer id.
+   * @param {!Object<string,string>=} env The environment object to hold env
+   *     variables.
    */
-  constructor(options, customerId = undefined) {
-    const authClient = new AuthClient(API_SCOPES);
+  constructor(options, customerId = undefined, env = process.env) {
+    const authClient = new AuthClient(API_SCOPES, env);
     this.auth = authClient.getDefaultAuth();
     /** @const{GaxiosOptions} */ this.options = options || {};
     /** @const{string|undefined=} */ this.customerId = customerId;

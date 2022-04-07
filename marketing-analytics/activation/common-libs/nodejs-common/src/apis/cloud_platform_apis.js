@@ -32,11 +32,11 @@ const API_VERSION = 'v1';
  * Google cloud client libraries.
  */
 class CloudPlatformApis {
-  constructor(projectId = process.env['GCP_PROJECT']) {
+  constructor(env = process.env) {
     /** @const {!AuthClient} */
-    const authClient = new AuthClient(API_SCOPES);
-    this.auth = authClient.getApplicationDefaultCredentials();
-    this.projectId = projectId;
+    const authClient = new AuthClient(API_SCOPES, env);
+    this.auth = authClient.getDefaultAuth();
+    this.projectId = env['GCP_PROJECT'];
   }
 
   /**

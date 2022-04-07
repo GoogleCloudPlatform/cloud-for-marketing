@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/gmp-googleads-connector",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "GMP & Google Ads connector based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",
@@ -16,7 +16,7 @@
   "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/gmp-googleads-connector/README.md",
   "main": "index.js",
   "dependencies": {
-    "@google-cloud/nodejs-common": "^1.0.4",
+    "@google-cloud/nodejs-common": "^1.0.5",
     "@google-cloud/storage": "^5.8.5",
     "ssh2-sftp-client": "^7.0.4"
   },

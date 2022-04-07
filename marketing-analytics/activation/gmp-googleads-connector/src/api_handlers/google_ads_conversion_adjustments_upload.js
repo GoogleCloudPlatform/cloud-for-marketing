@@ -13,20 +13,24 @@
 // limitations under the License.
 
 /**
- * @fileoverview Tentacles API handler for Google Ads Click Conversions
+ * @fileoverview Tentacles API handler for Google Ads Conversion Adjustments
  * uploading (Google Ads API (unofficial) Wrapper).
  */
 
 'use strict';
 
 const {
-  api: {googleads: {GoogleAds, ConversionConfig}},
-  utils: {apiSpeedControl, getLogger, getProperValue, BatchResult},
+  api: { googleads: { GoogleAds } },
+  utils: { apiSpeedControl, getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
 
+const {
+  GoogleAdsConversionConfig,
+} = require('./google_ads_click_conversions_upload.js');
+
 /**
- * Conversions per request. Google Ads has a limit as 2000.
- * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
+ * Conversion adjustments per request. Google Ads has a limit as 2000.
+ * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas#conversion_adjustment_upload_service
  */
 const RECORDS_PER_REQUEST = 2000;
 /**
@@ -36,29 +40,13 @@ const RECORDS_PER_REQUEST = 2000;
 const QUERIES_PER_SECOND = 10;
 
 /** API name in the incoming file name. */
-exports.name = 'ACLC';
+exports.name = 'ACA';
 
 /** Data for this API will be transferred through GCS by default. */
 exports.defaultOnGcs = false;
 
 /**
- * Configuration for a Google Ads click conversions upload.
- * @typedef {{
- *   developerToken:string,
- *   customerId:string,
- *   loginCustomerId:(string|undefined),
- *   adsConfig:!ConversionConfig,
- *   recordsPerRequest:(number|undefined),
- *   qps:(number|undefined),
- *   debug:(boolean|undefined),
- * }}
- */
-let GoogleAdsConversionConfig;
-
-exports.GoogleAdsConversionConfig = GoogleAdsConversionConfig;
-
-/**
- * Sends out the data as click conversions to Google Ads API.
+ * Sends out the data as conversion adjustments to Google Ads API.
  * This function exposes a googleAds parameter for test
  * @param {GoogleAds} googleAds Injected Google Ads instance.
  * @param {string} records Data to send out as click conversions. Expected JSON
@@ -68,42 +56,22 @@ exports.GoogleAdsConversionConfig = GoogleAdsConversionConfig;
  * @return {!Promise<BatchResult>}
  */
 const sendDataInternal = async (googleAds, records, messageId, config) => {
-  const logger = getLogger('API.ACLC');
   const recordsPerRequest =
-      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
+    getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
-  const {customerId, loginCustomerId, adsConfig} = config;
-  if (adsConfig.custom_variable_tags) {
-    try {
-      adsConfig.customVariables = await Promise.all(
-          adsConfig.custom_variable_tags.map(async (tag) => {
-            const id = await googleAds.getConversionCustomVariableId(tag,
-                customerId, loginCustomerId);
-            if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);
-            return {[tag]: id};
-          }));
-      logger.debug('Updated adsConfig', adsConfig);
-    } catch (error) {
-      /** @type {BatchResult} */ const batchResult = {
-        result: false,
-        errors: [error.message],
-      };
-      logger.error('Get error', error);
-      return batchResult;
-    }
-  }
-  const configuredUpload = googleAds.getUploadConversionFn(customerId,
-      loginCustomerId, adsConfig);
+  const { customerId, loginCustomerId, adsConfig } = config;
+  const configuredUpload = googleAds.getUploadConversionAdjustmentFn(customerId,
+    loginCustomerId, adsConfig);
   return managedSend(configuredUpload, records, messageId);
 };
 
 exports.sendDataInternal = sendDataInternal;
 
 /**
- * Sends out the data as click conversions to Google Ads API.
- * @param {string} records Data to send out as click conversions. Expected JSON
- *     string in each line.
+ * Sends out the data as conversion adjustments to Google Ads API.
+ * @param {string} records Data to send out as conversion adjustments. Expected
+ *     JSON string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsConversionConfig} config
  * @return {!Promise<BatchResult>}
