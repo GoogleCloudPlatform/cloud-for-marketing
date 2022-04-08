@@ -946,5 +946,5 @@ UserIdentifier to an order (`order_id`):
 Or UserIdentifier with AddressInfo
 
 ```
-{"order_id": "2022032803", "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+{"order_id":"2022040802", "hashed_email":"47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700","address_info":{"hashed_first_name":"ae3379ac2ab35c1c1cfe33b155f0fb39efaa894a8d84a4dcaa7db23816caffd9","hashed_last_name":"1ce3fb2cb03a19b8fd1afdb0e0bd4aa977b8254805e1d4e15d52b6f94cfd21c7","city":"Pyrmont","country_code":"AU","state":"NSW","postal_code":"2009","hashed_street_address":"6cf827c741a060e66b2642117ea91725a51116ea0af7c1809c0bab5297ecd2b7"}}
 ```
