@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.1.0 (2022-04-07)
+
+### Update to the v10 of the Google Ads API
+
 ## 1.0.5 (2022-03-30)
 
 ### Add new feature: Google Ads enhanced conversions upload

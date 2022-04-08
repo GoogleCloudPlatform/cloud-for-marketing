@@ -21,8 +21,8 @@
 const SftpClient = require('ssh2-sftp-client');
 const path = require('path');
 const {
-  storage: {StorageFile},
-  utils: {getLogger, BatchResult},
+  storage: { StorageFile },
+  utils: { getLogger, BatchResult },
 } = require('@google-cloud/nodejs-common');
 
 /** Placeholder for a timestamp in the name of a uploaded file. */
@@ -94,7 +94,7 @@ exports.sendData = async (message, messageId, config) => {
   if (data.bucket) {
     const storageFile = new StorageFile(data.bucket, data.file);
     output = storageFile.getFile().createReadStream();
-    const {fileName} = config;
+    const { fileName } = config;
     if (fileName) {
       targetFile = fileName;
     } else {
@@ -103,10 +103,10 @@ exports.sendData = async (message, messageId, config) => {
       // 2. By removing those tags (API, config, etc.) but keeping the value,
       // the filenames shown in SA360 can be clearer.
       targetFile = path.basename(data.file)
-          .replace(/API[\[|{](\w-*)[\]|}]/i, '$1')
-          .replace(/config[\[|{](\w*)[\]|}]/i, '$1')
-          .replace(/size\[(\w*)[\]|}]/i, '$1')
-          .replace(/:/g, '-');
+        .replace(/API[\[|{]([\w-]*)[\]|}]/i, '$1')
+        .replace(/config[\[|{](\w*)[\]|}]/i, '$1')
+        .replace(/size\[(\w*)[\]|}]/i, '$1')
+        .replace(/:/g, '-');
     }
   } else {
     output = Buffer.from(data);

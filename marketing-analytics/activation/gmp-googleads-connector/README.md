@@ -372,7 +372,7 @@ Follow these steps to get the dashboard ready:
 
 - _Sample Data file content:_
 
-```json
+```
 {"cid": "1471305204.1541378885", "ti": "123", "tr": "100"}
 ```
 
@@ -520,20 +520,14 @@ Tip: For more details of a request, see
 
 Attributed to a Google Click Identifier (`gclid`):
 
-```json
-{
-  "gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example",
-  "timestampMicros": "1550407680000000"
-}
+```
+{"gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example", "timestampMicros": "1550407680000000"}
 ```
 
 Attributed to encrypted user ID (`encryptedUserId`):
 
-```json
-{
-  "encryptedUserId": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example",
-  "U2": "a|b|c"
-}
+```
+{"encryptedUserId": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example", "U2": "a|b|c"}
 ```
 
 ### 4.4. SFTP: Business Data upload to Search Ads 360
@@ -767,12 +761,8 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
 
 Attributed to a Google Click Identifier (`gclid`):
 
-```json
-{
-  "conversion_date_time": "2020-01-01 03:00:00-18:00",
-  "conversion_value": "20",
-  "gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"
-}
+```
+{"conversion_date_time": "2020-01-01 03:00:00-18:00", "conversion_value": "20", "gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
 ```
 
 ### 4.8. ACM: Google Ads Customer Match upload via API
@@ -825,10 +815,8 @@ Tip: For more details see
 
 - _Sample Data file content:_
 
-```json
-{
-  "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"
-}
+```
+{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```
 
 ### 4.9. MP_GA4: Measurement Protocol (Google Analytics 4)
@@ -893,11 +881,8 @@ Tip: For more details see
 
 - _Sample Data file content:_
 
-```json
-{
-  "app_instance_id": "cbd7d1056fexxxxxxxxxxxxxx08ff",
-  "timestamp_micros": 1617508786220000
-}
+```
+{"app_instance_id": "cbd7d1056fexxxxxxxxxxxxxx08ff", "timestamp_micros": 1617508786220000}
 ```
 
 ### 4.10. ACA: Google Ads Enhanced Conversions upload via API
@@ -954,9 +939,12 @@ Tip: For more details see
 
 UserIdentifier to an order (`order_id`):
 
-```json
-{
-  "order_id": "2022032803",
-  "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"
-}
+```
+{"order_id": "2022032803", "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+```
+
+Or UserIdentifier with AddressInfo
+
+```
+{"order_id": "2022032803", "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```

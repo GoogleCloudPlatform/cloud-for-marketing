@@ -1,5 +1,11 @@
 # Release Notes
 
+## 2.1.0 (2022-04-08)
+
+### Integrated APIs
+
+- Updated to the v10 of the Google Ads API.
+
 ## 2.0.5 (2022-03-30)
 
 ### Integrated APIs
