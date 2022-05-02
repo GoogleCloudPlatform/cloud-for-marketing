@@ -60,9 +60,9 @@ temp_install_py38_virtualenv() {
     rm -rf "${BASE_DIR}"
     bash pyenv-installer.sh
     echo 'export PATH="${HOME}/.pyenv/bin:${PATH}"' >> "${HOME}/.bashrc"
-    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-    echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
-    source ~/.bashrc
+    echo 'eval "$(pyenv init -)"' >> "${HOME}/.bashrc"
+    echo 'eval "$(pyenv virtualenv-init -)"' >> "${HOME}/.bashrc"
+    source "${HOME}/.bashrc"
     pyenv install "${PY38_VERSION}"
   fi
 
