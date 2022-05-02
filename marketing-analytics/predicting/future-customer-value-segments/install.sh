@@ -52,9 +52,9 @@ HELP
 }
 
 temp_install_py38_virtualenv() {
-  rm -rf ~/.pyenv
-  curl https://pyenv.run | bash
-  pyenv install 3.8.12
+  # rm -rf ~/.pyenv
+  # curl https://pyenv.run | bash
+  # pyenv install 3.8.12
   virtualenv -p ~/.pyenv/versions/3.8.12/bin/python3.8 focvs-env
 }
 
