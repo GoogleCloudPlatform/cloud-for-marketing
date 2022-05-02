@@ -52,10 +52,21 @@ HELP
 }
 
 temp_install_py38_virtualenv() {
-  # rm -rf ~/.pyenv
-  # curl https://pyenv.run | bash
-  # pyenv install 3.8.12
-  virtualenv -p ~/.pyenv/versions/3.8.12/bin/python3.8 focvs-env
+  BASE_DIR="${HOME}/.pyenv"
+  PY38_VERSION="3.8.12"
+  PY38_DIR="${BASE_DIR}/versions/${PY38_VERSION}/bin"
+
+  if [ ! -d "${PY38_DIR}" ]; then
+    rm -rf "${BASE_DIR}"
+    bash pyenv-installer.sh
+    echo 'export PATH="${HOME}/.pyenv/bin:${PATH}"' >> "${HOME}/.bashrc"
+    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+    echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
+    source ~/.bashrc
+    pyenv install "${PY38_VERSION}"
+  fi
+
+  virtualenv -p "${PY38_DIR}/python3.8" focvs-env
 }
 
 install_dependencies() {
