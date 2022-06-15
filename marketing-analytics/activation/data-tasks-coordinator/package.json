@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/data-tasks-coordinator",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "A data task coordinator based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",
@@ -17,17 +17,17 @@
   "main": "index.js",
   "dependencies": {
     "@google-cloud/automl": "^2.5.2",
-    "@google-cloud/bigquery": "^5.12.0",
-    "@google-cloud/bigquery-data-transfer": "^2.3.0",
+    "@google-cloud/bigquery": "^6.0.0",
+    "@google-cloud/bigquery-data-transfer": "^3.0.0",
     "@google-cloud/firestore": "^5.0.2",
-    "@google-cloud/nodejs-common": "^1.1.0",
-    "@google-cloud/storage": "^5.19.0",
-    "google-auth-library": "^7.14.1",
-    "luxon": "^2.3.1",
-    "nanoid": "^3.3.2"
+    "@google-cloud/nodejs-common": "^1.2.0",
+    "@google-cloud/storage": "^6.0.1",
+    "google-auth-library": "^8.0.2",
+    "luxon": "^2.4.0",
+    "nanoid": "^3.3.4"
   },
   "devDependencies": {
-    "jasmine": "^4.0.2"
+    "jasmine": "^4.1.0"
   },
   "scripts": {
     "test": "node node_modules/jasmine/bin/jasmine"

@@ -40,6 +40,7 @@ const {
   TaskLogStatus,
 } = require('./task_log/task_log_dao.js');
 const {
+  ErrorHandledStatus,
   buildTask,
   BaseTask,
   RetryableError,
@@ -344,25 +345,29 @@ class Sentinel {
    * @return {!Promise<(string | number)>} taskLogId
    * @private
    */
-  startTaskJob_(taskLogId, taskLog) {
-    const parameters = JSON.parse(taskLog.parameters);
-    return this.prepareTask(taskLog.taskId, parameters).then((task) => {
-      return task.start()
-          .then((updatesToTaskLog) => {
-            console.log('Task started with:', JSON.stringify(updatesToTaskLog));
-            return this.taskLogDao.afterStart(taskLogId, updatesToTaskLog);
-          })
-          // Waits for async `afterStart` to complete.
-          .then(() => task.isDone())
-          .then((done) => {
-            if (done) return this.finishTask_(taskLogId);
-          })
-          // Waits for async `finishTask_` to complete.
-          .then(() => taskLogId);
-    }).catch((error) => {
+  async startTaskJob_(taskLogId, taskLog) {
+    try {
+      const parameters = JSON.parse(taskLog.parameters);
+      const task = await this.prepareTask(taskLog.taskId, parameters);
+      const updatesToTaskLog = await task.start();
+      this.logger.debug('Task started with:', JSON.stringify(updatesToTaskLog));
+      const needEnableCheckCronJob = task.isManualAsynchronous()
+        && !taskLog[FIELD_NAMES.MULTIPLE_TAG] && !taskLog[FIELD_NAMES.EMBEDDED_TAG];
+      if (needEnableCheckCronJob) {
+        this.logger.info(
+          `Asynchronous tasks started. Resume the Status Check Task.`);
+        await this.options.statusCheckCronJob.resume();
+      }
+      await this.taskLogDao.afterStart(taskLogId, updatesToTaskLog);
+      const done = await task.isDone();
+      if (done) {
+        await this.finishTask_(taskLogId);
+      }
+      return taskLogId;
+    } catch (error) {
       console.error(error);
       return this.taskLogDao.saveErrorMessage(taskLogId, error);
-    });
+    }
   }
 
   /**
@@ -471,39 +476,17 @@ class Sentinel {
       await this.taskLogDao.afterFinish(taskLogId, updatesToTaskLog);
     } catch (error) {
       console.error(error);
-      const taskConfig = await this.taskConfigDao.load(taskLog.taskId);
-      /**@type {!ErrorOptions} */
-      const errorOptions = Object.assign({
-        // Default retry 3 times before recognize it's a real failure.
-        retryTimes: 3,
-        ignoreError: false, // Default error is not ignored.
-      }, taskConfig.errorOptions);
-      if (error instanceof RetryableError) {
-        const retriedTimes = taskLog[FIELD_NAMES.RETRIED_TIMES] || 0;
-        if (retriedTimes < errorOptions.retryTimes) {
-          // Roll back task status from 'FINISHING' to 'STARTED' and set task
-          // needs regular status check (to trigger next retry).
-          // TODO(lushu) If there are tasks other than report task needs retry,
-          //  consider move this part into the detailed tasks.
-          return this.taskLogDao.merge({
-            status: TaskLogStatus.STARTED,
-            [FIELD_NAMES.REGULAR_CHECK]: true,
-            [FIELD_NAMES.RETRIED_TIMES]: retriedTimes + 1,
-          }, taskLogId);
-        }
-        console.log(
-            'Reach the maximum retry times, continue to mark this task failed.');
+      const [errorHandledStatus, result] =
+        await this.taskManager.handleFailedTaks(taskLogId, taskLog, error);
+      if (errorHandledStatus !== ErrorHandledStatus.IGNORED) {
+        return result;
       }
-      if (errorOptions.ignoreError !== true) {
-        return this.taskLogDao.saveErrorMessage(taskLogId, error);
-      }
-      // Save the error information for 'ignore error' task then continue to
-      // trigger its next task(s).
-      await this.taskLogDao.saveErrorMessage(taskLogId, error, true);
     }
-    return this.taskManager.startTasks(taskLog.next,
-        {[FIELD_NAMES.PARENT_ID]: taskLogId},
-        updatedParameterStr);
+    return this.taskManager.startTasks(
+      taskLog.next,
+      { [FIELD_NAMES.PARENT_ID]: taskLogId },
+      updatedParameterStr
+    );
   }
 
   /**

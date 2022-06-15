@@ -18,5 +18,8 @@
 config*.json
 *.md
 node_modules
+jasmine.json
 package-lock.json
 tests
+keys/*
+!keys/oauth2.token.json

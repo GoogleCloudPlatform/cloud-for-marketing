@@ -157,6 +157,7 @@ class TaskLogDao extends DataAccessObject {
     const toFinishEntity = {
       prefinishTime: new Date(),
       status: TaskLogStatus.FINISHING,
+      [FIELD_NAMES.REGULAR_CHECK]: false,
       ...taskLogEntity,
     };
     return this.runTransaction(

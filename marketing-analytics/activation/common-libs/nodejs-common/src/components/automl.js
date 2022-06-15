@@ -17,15 +17,9 @@
  */
 
 'use strict';
-const {request} = require('gaxios');
-const {JWT, Compute} = require('google-auth-library');
+const { ClientOptions } = require('google-gax');
 const automl = require('@google-cloud/automl');
 const google = automl.protos.google;
-const AuthClient = require('../apis/auth_client.js');
-
-const API_SCOPES = Object.freeze([
-  'https://www.googleapis.com/auth/cloud-platform',
-]);
 
 /**
  * For version `v1beta1`, BigQuery can be the source and destination.
@@ -40,46 +34,49 @@ const API_SCOPES = Object.freeze([
  * @type {string}
  */
 const API_VERSION = 'v1beta1';
-const PredictionServiceClient = automl[API_VERSION].PredictionServiceClient;
+const { PredictionServiceClient } = automl[API_VERSION];
 
 /**
- * AutoML Tables API doesn't have fully cloud client library support yet. This
- * class acts as the single client class for different API requests of AutoML
- * Tables API, including:
- * 1. 'batch predict' based on Google Cloud Client Library,
- * https://googleapis.dev/nodejs/automl/latest/index.html
- * 2. 'get Operations' based on REST API, see:
- * https://cloud.google.com/automl/docs/reference/rest/v1/projects.locations.operations/get
- * https://cloud.google.com/automl-tables/docs/long-operations#get-operation
+ * AutoML Tables API class for:
+ * 1. start a batch predict job:
+ * @see https://cloud.google.com/nodejs/docs/reference/automl/latest/automl/v1beta1.predictionserviceclient#_google_cloud_automl_v1beta1_PredictionServiceClient_batchPredict_member_3_
+ * 2. get the status of an operation:
+ * @see https://cloud.google.com/nodejs/docs/reference/automl/latest/automl/v1beta1.predictionserviceclient#_google_cloud_automl_v1beta1_PredictionServiceClient_checkBatchPredictProgress_member_1_
  */
 class AutoMl {
-
   /**
    * Initialize an instance.
-   * @param {{keyFilename:(string|undefined)}} options
+   * @param {ClientOptions=} options
    */
   constructor(options = {}) {
-    this.options = options;
+    this.client = new PredictionServiceClient(options);
   }
 
   /**
    * Batch predicts based on Google Cloud Client Library.
-   * See https://googleapis.dev/nodejs/automl/latest/index.html
    * @param {string} projectId
    * @param {string} computeRegion
    * @param {string} modelId
-   * @param {google.cloud.automl.v1.IBatchPredictInputConfig} inputConfig
-   * @param {google.cloud.automl.v1.IBatchPredictOutputConfig} outputConfig
+   * @param {google.cloud.automl.v1beta1.IBatchPredictInputConfig} inputConfig
+   * @param {google.cloud.automl.v1beta1.IBatchPredictOutputConfig} outputConfig
    * @return {Promise<string>} Predict operation name.
    */
-  async batchPredict(projectId, computeRegion, modelId, inputConfig,
-      outputConfig) {
-    const client = new PredictionServiceClient(this.options);
-    const modelFullId = client.modelPath(projectId, computeRegion, modelId);
-    const responses = await client.batchPredict({
+  async batchPredict(
+    projectId,
+    computeRegion,
+    modelId,
+    inputConfig,
+    outputConfig
+  ) {
+    const modelFullId = this.client.modelPath(
+      projectId,
+      computeRegion,
+      modelId
+    );
+    const responses = await this.client.batchPredict({
       name: modelFullId,
-      inputConfig: inputConfig,
-      outputConfig: outputConfig,
+      inputConfig,
+      outputConfig,
     });
     const operation = responses[1];
     console.log(`Operation name: ${operation.name}`);
@@ -87,37 +84,20 @@ class AutoMl {
   }
 
   /**
-   * Gets Operations based on REST API, see:
-   * https://cloud.google.com/automl/docs/reference/rest/v1/projects.locations.operations/get
-   * https://cloud.google.com/automl-tables/docs/long-operations#get-operation
+   * Gets status of an operation.
    * @param {string} operationName
-   * @return {Promise<google.longrunning.Operation>}
+   * @return {Promise<{{
+   *   done: boolean,
+   *   error: Error|undefined,
+   *   metadata: OperationMetadata,
+   *   name: string,
+   * }}>}
    */
   async getOperation(operationName) {
-    const url = `https://automl.googleapis.com/${API_VERSION}/${operationName}`;
-    const headers = await this.getAuthClient_().getRequestHeaders();
-    const requestOptions = {
-      method: 'GET',
-      headers,
-      url,
-    };
-    const response = await request(requestOptions);
-    return response.data;
+    const response = await this.client.checkBatchPredictProgress(operationName);
+    const { done, error, metadata, name } = response;
+    return { done, error, metadata, name };
   }
-
-  /**
-   * Gets authentication client of AutoML API.
-   * This API belongs to GCP, however it is not fully supported by Google Cloud
-   * Client Library. So we need to manage some functions on its REST API,
-   * in the way like we invoke other external APIs.
-   * @returns {(!JWT|!Compute)}
-   * @private
-   */
-  getAuthClient_() {
-    /** @const {!AuthClient} */ const authClient = new AuthClient(API_SCOPES);
-    return authClient.getApplicationDefaultCredentials();
-  }
-
 }
 
 exports.AutoMl = AutoMl;

@@ -256,6 +256,7 @@ deploy_sentinel() {
 }
 
 #######################################
+# Deprecated. Use `create_or_update_cloud_scheduler_for_pubsub` instead.
 # Create a Cloud Scheduler Job which target Pub/Sub. Current Cloud Console does
 # not support attributes. For example:
 #   ./deploy.sh create_cron_task test-export
@@ -296,8 +297,13 @@ set_internal_task() {
 job for Sentinel status check task..."
   local jobName
   jobName="${PROJECT_NAMESPACE}-intrinsic-cronjob"
-  create_cron_task "system" "*/5 * * * *" "UTC" '{"intrinsic":"status_check"}'\
-    "${jobName}"
+  create_or_update_cloud_scheduler_for_pubsub \
+    "${jobName}" \
+    "*/5 * * * *" \
+    "Etc/UTC" \
+    "${PROJECT_NAMESPACE}-monitor" \
+    '{"intrinsic":"status_check"}' \
+    "taskId=system"
 }
 
 #######################################

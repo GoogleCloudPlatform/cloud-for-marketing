@@ -1,5 +1,12 @@
 # Release Notes
 
+## 2.2.0 (2022-06-14)
+
+### New Installation command
+
+- To activate other APIs that were not selected during the installation, run
+ `./deploy.sh reselect_api` to reselect the APIs.
+
 ## 2.1.0 (2022-04-08)
 
 ### Integrated APIs

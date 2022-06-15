@@ -30,11 +30,36 @@ const API_VERSION = 'v1';
  * to get/pause/resume a job.
  */
 class CloudScheduler {
-  constructor(projectId = process.env['GCP_PROJECT']) {
-    /** @const {!AuthClient} */
-    const authClient = new AuthClient(API_SCOPES);
-    this.auth = authClient.getApplicationDefaultCredentials();
-    this.projectId = projectId;
+  constructor(env = process.env, options = {}) {
+    if (!options.authClient) {
+      /** @const {!AuthClient} */
+      const authClient = new AuthClient(API_SCOPES, env);
+      /**
+       * By default, `AuthClient` (getDefaultAuth()) will return an auth client
+       * based on the settings in ENV while the OAuth is the most preferred.
+       * This works for most of the external API clients (in the '../apis'
+       * folder), however this won't work in the Cloud Functions, as those OAuth
+       * token usually won't have enough permission to invoke Google Cloud API.
+       * Using the method `getApplicationDefaultCredentials` to force
+       * `AuthClient` return an ADC auth client, which will work in the Cloud.
+       *
+       * Cloud Scheduler API Client Library is used here as Cloud Client Library
+       * is still at beta stage. (For the difference, see
+       * https://cloud.google.com/apis/docs/client-libraries-explained)
+       * Eventually, when we migrate this to the cloud client library, which
+       * automatically takes ADC as the authentication method, the 'AuthClient'
+       * is not required here and can be removed.
+       */
+      this.auth = authClient.getApplicationDefaultCredentials();
+    } else {
+      /**
+       * `authClient` can be consumed by cloud client library as the auth
+       * client. By passing this in, we can offer more flexible auth clients in
+       * test cases for API client library and cloud client library in future.
+       */
+      this.auth = options.authClient;
+    }
+    this.projectId = env['GCP_PROJECT'];
     this.instance = cloudscheduler({
       version: API_VERSION,
       auth: this.auth,
@@ -113,8 +138,8 @@ class CloudScheduler {
    */
   async getJobs_(name, targetLocations = undefined) {
     const regex = new RegExp(`/jobs/${name}$`);
-    const jobs = (await this.listJobs_(targetLocations)).filter(
-        (job) => regex.test(job));
+    const allJobs = await this.listJobs_(targetLocations);
+    const jobs = allJobs.filter((job) => regex.test(job));
     if (jobs.length === 0) console.error(`Can not find job: ${name}`);
     return jobs;
   }
@@ -134,23 +159,10 @@ class CloudScheduler {
     const projectId = await this.getProjectId_();
     const requestPrefix = `projects/${projectId}/locations`;
     const jobs = locations.map(async (location) => {
-      const request = {parent: `${requestPrefix}/${location}`};
-      try {
-        const response = await this.instance.projects.locations.jobs.list(
-            request);
-        return response.data.jobs.map((job) => job.name);
-      } catch (error) {
-        // Currently, listLocations always returns an array with one location.
-        // Not sure whether this will be changed or not in future. If one day
-        // the Cloud Scheduler let users to select a location for a job, then
-        // it may return multiple locations when listLocation, however the
-        // target job may exist in one of the locations. In this case, when we
-        // iterate the job with all possible locations to get the complete job
-        // path to operate, it will likely generate an error for those wrong
-        // location(s). So set the try-catch here to handle this situation.
-        console.error(error.message);
-        return [];
-      }
+      const request = { parent: `${requestPrefix}/${location}` };
+      const response = await this.instance.projects.locations.jobs.list(request);
+      if (!response.data.jobs) return [];
+      return response.data.jobs.map((job) => job.name);
     });
     // Waits for all jobs names and flattens nested job name arrays, however
     // there is no 'flat' available in current Cloud Functions runtime.

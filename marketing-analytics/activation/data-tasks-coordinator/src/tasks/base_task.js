@@ -92,11 +92,6 @@ class BaseTask {
   async start() {
     const updatesToTaskLog = (await this.doTask()) || {};
     const needCheck = this.isManualAsynchronous();
-    if (needCheck) {
-      this.logger.info(
-          `Asynchronous tasks started. Resume the Status Check Task.`);
-      await this.options.statusCheckCronJob.resume();
-    }
     return {
       next: this.config.next || '',
       [FIELD_NAMES.REGULAR_CHECK]: needCheck,
@@ -216,14 +211,6 @@ class BaseTask {
   }
 }
 
-/**
- * Tasks throw this error to let Sentinel retry this task.
- */
-class RetryableError extends Error {
-
-}
-
 module.exports = {
   BaseTask,
-  RetryableError,
 };

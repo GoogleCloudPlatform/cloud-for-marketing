@@ -573,7 +573,7 @@ API(s):"
     printf '%s\n'  "OK. OAuth is required by selected API(s)."
     return 0
   fi
-  printf '%s\n' "Selected API(s) require authentication. Please select \
+  printf '%s\n' "Selected API(s) require authentication. Choose the \
 authentication method:"
   local auths=("Service Account (recommended)" "OAuth")
   select auth in "${auths[@]}"; do
@@ -604,28 +604,40 @@ check_permissions() {
   (( STEP += 1 ))
   printf '%s\n' "Step ${STEP}: Checking current user's access..."
   local role error
-  for role in "${!GOOGLE_CLOUD_PERMISSIONS[@]}"; do
-    printf '%s'  "  Checking permissions for ${role}... "
-    local permissions
-    permissions=(${GOOGLE_CLOUD_PERMISSIONS[${role}]})
-    local missed
-    missed=$(get_number_of_missed_permissions "${permissions[@]}")
-    if [[ $missed -gt 0 ]]; then
-      message="missed ${missed}, failed"
-      error=1
+  while :; do
+    error=0
+    for role in "${!GOOGLE_CLOUD_PERMISSIONS[@]}"; do
+      printf '%s'  "  Checking permissions for ${role}... "
+      local permissions
+      permissions=(${GOOGLE_CLOUD_PERMISSIONS[${role}]})
+      local missed
+      missed=$(get_number_of_missed_permissions "${permissions[@]}")
+      if [[ $missed -gt 0 ]]; then
+        message="missed ${missed}, failed"
+        error=1
+      else
+        message='successfully'
+      fi
+      printf '%s\n' " ${message}."
+    done
+    if [[ ${error} -gt 0 ]]; then
+      printf '%s\n' "Permissions check failed."
+      printf '%s\n' "Would you like to login with another account? [Y/n]: "
+      local reLogin
+      read -r reLogin
+      reLogin=${reLogin:-"Y"}
+      if [[ ${reLogin} == "Y" || ${reLogin} == "y" ]]; then
+        gcloud auth login
+        continue
+      else
+        return 1
+      fi
     else
-      message='successfully'
+      echo "OK. Permissions check passed for Google Cloud project \
+  [${GCP_PROJECT}]."
+      return 0
     fi
-    printf '%s\n' " ${message}."
   done
-  if [[ ${error} -gt 0 ]]; then
-    printf '%s\n' "Permissions check failed."
-    return 1
-  else
-    echo "OK. Permissions check passed for Google Cloud project \
-[${GCP_PROJECT}]."
-    return 0
-  fi
 }
 
 #######################################
@@ -1031,13 +1043,24 @@ refresh the list:"
 # Globals:
 #   GCP_PROJECT
 # Arguments:
-#   Bucket name var, default value 'GCS_BUCKET'
+#   Bucket name var with optional usage, e.g. 'GCS_BUCKET_REPORT:reports'.
+#     The default value is 'GCS_BUCKET'.
 #   Location var name, default value 'REGION'
 #   If the second location var is unset, use this var as default value
 #######################################
 confirm_located_bucket() {
-  local gcsName defaultValue defaultBucketName locationName location
-  gcsName="${1:-"GCS_BUCKET"}"
+  local gcsName usage defaultValue defaultBucketName locationName location
+  if [[ -z "${1}" ]]; then
+    gcsName="GCS_BUCKET"
+  elif [[ "${1}" == *":"* ]]; then
+    gcsName=$(echo "${1}" | cut -d\: -f1)
+    usage=$(echo "${1}" | cut -d\: -f2)
+    if [[ -n "${usage}" ]]; then
+      usage=" for ${usage}"
+    fi
+  else
+    gcsName="${1}"
+  fi
   locationName="${2:-"REGION"}"
   defaultValue="${!gcsName}"
   defaultBucketName=$(get_default_bucket_name "${GCP_PROJECT}")
@@ -1052,7 +1075,8 @@ confirm_located_bucket() {
 
   (( STEP += 1 ))
   if [[ -z "${location}" ]]; then
-    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket..."
+    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage \
+Bucket${usage}..."
     if [[ "${locationName}" == "REGION" ]]; then
       select_functions_location ${locationName}
     else
@@ -1060,8 +1084,8 @@ confirm_located_bucket() {
     fi
     location="${!locationName}"
   else
-    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage Bucket in \
-location [${location}] ..."
+    printf '%s\n' "Step ${STEP}: Checking or creating a Cloud Storage \
+Bucket${usage} in location [${location}] ..."
   fi
   declare -g "${locationName}=${location}"
   while :; do
@@ -1129,6 +1153,7 @@ Project. Continuing to enter another bucket..."
     fi
   done
   declare -g "${gcsName}=${bucket}"
+  confirm_bucket_lifecycle "${bucket}"
 }
 
 #######################################
@@ -1147,6 +1172,58 @@ confirm_bucket_with_location() {
   locationName="${gcsName}_LOCATION"
   declare -g "${locationName}=${2}"
   confirm_located_bucket ${gcsName} ${locationName}
+}
+
+#######################################
+# Manage the lifecycle of a GCS bucket: setting or removing the GCS lifecycle
+# rule of 'age'.
+# See: https://cloud.google.com/storage/docs/lifecycle#age
+# Arguments:
+#   Bucket name
+#######################################
+confirm_bucket_lifecycle() {
+  local bucket bucketMetadata lifecycle
+  bucket="${1}"
+  bucketMetadata="$(get_bucket_metadata "${bucket}")"
+  lifecycle="$(get_value_from_json_string "${bucketMetadata}" "lifecycle")"
+  if [[ -n "${lifecycle}" ]]; then
+    printf '%s\n' "There are lifecycle rules in this bucket: ${lifecycle}."
+    printf '%s' "Would you like to overwrite it? [N/y]:"
+    local confirmContinue
+    read -r confirmContinue
+    confirmContinue=${confirmContinue:-"N"}
+    if [[ ${confirmContinue} == "N" || ${confirmContinue} == "n" ]]; then
+      return 0
+    fi
+  else
+    printf '%s\n' "There is no lifecycle rules in this bucket."
+    printf '%s' "Would you like to create it? [Y/n]:"
+    local confirmContinue
+    read -r confirmContinue
+    confirmContinue=${confirmContinue:-"Y"}
+    if [[ ${confirmContinue} == "N" || ${confirmContinue} == "n" ]]; then
+      return 0
+    fi
+  fi
+  while :; do
+    printf '%s' "Enter the number of days that a file will be kept before it \
+is automatically removed in the bucket[${bucket}]. (enter 0 to remove all \
+existing lifecycle rules): "
+    local days
+    read -r days
+    days=${days}
+    if [[ "${days}" =~ ^[0-9]+$ ]]; then
+      local lifecycle
+      if [[ "${days}" == "0" ]]; then
+        lifecycle="{}"
+      else
+        lifecycle='{"rule":[{"action":{"type":"Delete"},"condition":{"age":'\
+"${days}}}]}"
+      fi
+      gsutil lifecycle set /dev/stdin gs://${bucket} <<< ${lifecycle}
+      return $?
+    fi
+  done
 }
 
 #######################################
@@ -1409,20 +1486,18 @@ EOF
 "client_id=${client_id}" "scope=${scope}")
     local auth_url
     auth_url="${OAUTH_BASE_URL}auth?${parameters}"
-    printf '%s\n' "3. Open the link in browser and finish authentication: \
-${auth_url}"
+    printf '%s\n' "3. Open the link in your browser and finish authentication. \
+    Do not close the redirected page: ${auth_url}"
     cat <<EOF
   Note:
+    The succeeded OAuth flow will land the browser on an error page - \
+"This site can't be reached". This is expected behavior. Copy the whole URL and continue.
     If the OAuth client is not for a native application, there will be an \
 "Error 400: redirect_uri_mismatch" shown up on the page. In this case, press \
 "Enter" to start again with a native application OAuth client ID.
-    If there is no local web server serving at ${REDIRECT_URI}, the \
-succeeded OAuth flow will land the browser on an error page ("This site can't \
-be reached"). This is an expected behavior. Copy the whole URL and continue.
 
 EOF
-    printf '%s' "4. Copy the authorization code or complete url from browser \
-and paste here: "
+    printf '%s' "4. Copy the complete URL from your browser and paste here: "
     read -r auth_code
     if [[ -z ${auth_code} ]]; then
       printf '%s\n\n' "No authorization code. Starting from beginning again..."
@@ -1507,6 +1582,7 @@ set_authentication_env_for_cloud_functions() {
 create_or_update_cloud_scheduler_for_pubsub(){
   check_authentication
   quit_if_failed $?
+  local location_flag="--location=${REGION}"
   local scheduler_flag=()
   scheduler_flag+=(--schedule="$2")
   scheduler_flag+=(--time-zone="$3")
@@ -1514,13 +1590,13 @@ create_or_update_cloud_scheduler_for_pubsub(){
   scheduler_flag+=(--message-body="$5")
   local exist_job
   exist_job=($(gcloud scheduler jobs list --filter="name~${1}" \
---format="value(state)"))
+--format="value(state)" "${location_flag}"))
   local action needPause
   if [[ ${#exist_job[@]} -gt 0 ]]; then
     action="update"
     scheduler_flag+=(--update-attributes=$6)
     if [[ "${exist_job[0]}" == "PAUSED" ]]; then
-      gcloud scheduler jobs resume "${1}"
+      gcloud scheduler jobs resume "${1}" "${location_flag}"
       if [[ $? -gt 0 ]]; then
         printf '%s\n' "Failed to resume paused Cloud Scheduler job [${1}]."
         return 1
@@ -1531,9 +1607,9 @@ create_or_update_cloud_scheduler_for_pubsub(){
     action="create"
     scheduler_flag+=(--attributes=$6)
   fi
-  gcloud scheduler jobs ${action} pubsub "$1" "${scheduler_flag[@]}"
+  gcloud scheduler jobs ${action} pubsub "$1" "${scheduler_flag[@]}" "${location_flag}"
   if [[ "${needPause}" == "true" ]]; then
-      gcloud scheduler jobs pause "${1}"
+      gcloud scheduler jobs pause "${1}" "${location_flag}"
   fi
 }
 
@@ -1613,7 +1689,9 @@ customized_install() {
   local tasks=("$@")
   local task
   for task in "${tasks[@]}"; do
-    ${task}
+    local cmd
+    eval "cmd=(${task})"
+    "${cmd[@]}"
     quit_if_failed $?
   done
 }
@@ -1921,3 +1999,11 @@ join_string_array() {
   shift
   printf %s "$first" "${@/#/$separator}"
 }
+
+# Import other bash files.
+_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_SELF}/google_ads.sh"
+source "${_SELF}/bigquery.sh"
+source "${_SELF}/apps_scripts.sh"
+
+printf '%s\n' "Common Bash Library is loaded."

@@ -24,7 +24,7 @@ const {
 } = require('@google-cloud/nodejs-common');
 const {api: {adsdatahub: {AdsDataHub}}} = require(
     '@google-cloud/nodejs-common');
-const {BaseTask, RetryableError,} = require('./base_task.js');
+const { BaseTask } = require('./base_task.js');
 const {TaskType, BigQueryTableConfig,} = require(
     '../task_config/task_config_dao.js');
 const {ErrorOptions} = require('../task_config/task_config_dao.js');

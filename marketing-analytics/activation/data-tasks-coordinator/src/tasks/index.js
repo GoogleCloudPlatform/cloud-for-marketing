@@ -17,20 +17,22 @@
  */
 
 'use strict';
-const {TaskType} = require('../task_config/task_config_dao.js');
-const {BaseTask, RetryableError,} = require('./base_task.js');
-const {LoadTask} = require('./bigquery/load_task.js');
-const {ExportTask} = require('./bigquery/export_task.js');
-const {QueryTask} = require('./bigquery/query_task.js');
-const {ExportSchemaTask} = require('./bigquery/export_schema_task.js');
-const {DeleteDatasetTask} = require('./bigquery/delete_dataset_task.js');
-const {DataTransferTask} = require('./bigquery/data_transfer_task.js');
-const {CopyGcsTask} = require('./copy_gcs_task.js');
-const {PredictTask} = require('./predict_task.js');
-const {QueryAdhTask} = require('./query_adh_task.js');
-const {ReportTask} = require('./report_task.js');
-const {KnotTask} = require('./knot_task.js');
-const {MultipleTask} = require('./multiple_task.js');
+const { TaskType } = require('../task_config/task_config_dao.js');
+const { ErrorHandledStatus } = require('./error/error_handled_status.js');
+const { RetryableError } = require('./error/retryable_error.js');
+const { BaseTask } = require('./base_task.js');
+const { LoadTask } = require('./bigquery/load_task.js');
+const { ExportTask } = require('./bigquery/export_task.js');
+const { QueryTask } = require('./bigquery/query_task.js');
+const { ExportSchemaTask } = require('./bigquery/export_schema_task.js');
+const { DeleteDatasetTask } = require('./bigquery/delete_dataset_task.js');
+const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
+const { CopyGcsTask } = require('./copy_gcs_task.js');
+const { PredictTask } = require('./predict_task.js');
+const { QueryAdhTask } = require('./query_adh_task.js');
+const { ReportTask } = require('./report_task.js');
+const { KnotTask } = require('./knot_task.js');
+const { MultipleTask } = require('./multiple_task.js');
 
 /**
  * All tasks Sentinel supports.
@@ -65,6 +67,7 @@ const buildTask = (taskConfig, parameters = {}) => {
 };
 
 module.exports = {
+  ErrorHandledStatus,
   BaseTask,
   buildTask,
   RetryableError,

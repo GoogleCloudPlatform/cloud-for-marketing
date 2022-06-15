@@ -18,6 +18,7 @@
 
 'use strict';
 
+const { ClientOptions } = require('google-gax');
 const {JobServiceClient} = require('@google-cloud/aiplatform');
 
 /**
@@ -29,7 +30,7 @@ class VertexAi {
 
   /**
    * Initialize an instance.
-   * @param {{keyFilename:(string|undefined)}} options
+   * @param {ClientOptions=} options
    */
   constructor(options = {}) {
     this.options = options;
@@ -105,9 +106,9 @@ class VertexAi {
    * @private
    */
   getJobServiceClient_(location) {
-    const clientOptions = {
+    const clientOptions = Object.assign({}, this.options, {
       apiEndpoint: this.getServiceEndpoint_(location),
-    };
+    });
     return new JobServiceClient(clientOptions);
   }
 }

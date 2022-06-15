@@ -22,7 +22,8 @@ const {utils: {wait}, storage: {StorageFile}} = require(
     '@google-cloud/nodejs-common');
 const {ErrorOptions} = require('../task_config/task_config_dao.js');
 const {Report, ReportConfig,} = require('./report/index.js');
-const {BaseTask, RetryableError,} = require('./base_task.js');
+const { RetryableError } = require('./error/retryable_error.js');
+const { BaseTask } = require('./base_task.js');
 const {
   TaskType,
   StorageFileConfig,
@@ -78,7 +79,7 @@ class ReportTask extends BaseTask {
     const report = this.getReport();
     try {
       const content = await report.getContent(this.parameters);
-      console.log('Got result from report');
+      this.logger.debug('Got result from report');
       const storageFile = StorageFile.getInstance(
           bucket,
           name,
@@ -89,19 +90,22 @@ class ReportTask extends BaseTask {
       if (!content.pipe) {
         storageFile.getFile().save(content);
       } else {
-        console.log('Start to output stream to gcs');
+        this.logger.debug('Start to output stream to gcs');
         const timeoutWatcher = wait(TIMEOUT_IN_MILLISECOND, false);
-        const outputStream = storageFile.getFile().createWriteStream();
+        const outputStream = storageFile.getFile().createWriteStream(
+          { resumable: false }
+        );
         const downloadReport = new Promise((resolve, reject) => {
-              content
-                  .on('error', (error) => outputStream.emit('error', error))
-                  .pipe(outputStream)
-                  .on('error', (error) => reject(error))
-                  .on('finish', () => {
-                    console.log('Uploaded to Cloud Storage');
-                    resolve(true);
-                  });
-            }
+          content
+            .on('end', () => outputStream.emit('finish'))
+            .on('error', (error) => outputStream.emit('error', error))
+            .pipe(outputStream)
+            .on('error', (error) => reject(error))
+            .on('finish', () => {
+              this.logger.debug('Uploaded to Cloud Storage');
+              resolve(true);
+            });
+        }
         );
         const result = await Promise.race([timeoutWatcher, downloadReport]);
         if (!result) throw new Error('Timeout');
@@ -109,12 +113,12 @@ class ReportTask extends BaseTask {
       return {parameters: this.appendParameter({reportFile: {bucket, name,}})};
     } catch (error) {
       if (report.isFatalError(error.toString())) {
-        console.error(
+        this.logger.error(
           'Fail immediately without retry for ReportTask error: ',
           error.toString());
         throw error;
       } else {
-        console.error('Retry for ReportTask error: ', error.toString());
+        this.logger.error('Retry for ReportTask error: ', error.toString());
         throw new RetryableError(error.toString());
       }
     }

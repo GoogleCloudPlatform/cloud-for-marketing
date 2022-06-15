@@ -174,7 +174,6 @@ Do you want to enable it? [Y/n]: "
     GOOGLE_CLOUD_PERMISSIONS["Logs Writer"]="logging.logEntries.create"
     GOOGLE_CLOUD_PERMISSIONS["Logs Configuration Writer"]=\
 "logging.sinks.create"
-    GOOGLE_CLOUD_PERMISSIONS["BigQuery Data Editor"]="bigquery.datasets.create"
 # Role 'Project IAM Admin' or 'Security Admin' has the permission
 # 'bigquery.datasets.setIamPolicy'
     GOOGLE_CLOUD_PERMISSIONS["Project IAM Admin"]=\
@@ -295,6 +294,26 @@ deploy_tentacles() {
 }
 
 #######################################
+# Reselect APIs to integrate.
+# Globals:
+#   None
+# Arguments:
+#   None
+#######################################
+reselect_api() {
+  load_config
+  check_in_cloud_shell
+  prepare_dependencies
+  confirm_integration_api
+  confirm_auth_method
+  enable_apis
+  create_subscriptions
+  do_authentication
+  deploy_cloud_functions_api_requester
+  post_installation
+}
+
+#######################################
 # Generate a default Log Router sink's name based on the project namespace.
 # Globals:
 #   PROJECT_NAMESPACE
@@ -387,7 +406,7 @@ complete_visualization() {
     local any
     read -n1 -s any
   done
-  create_all_views
+  create_visualization_views
   printf '%s\n' "OK. Views for visualization have been created."
 }
 
@@ -422,45 +441,7 @@ create_sink_for_visualization() {
 }
 
 #######################################
-# Checks whether the BigQuery object (table or view) exists.
-# Globals:
-#  GCP_PROJECT
-#  DATASET
-#  BIGQUERY_LOG_TABLE
-# Arguments:
-#  None
-#######################################
-check_existence_in_bigquery() {
-  bq show "${1}" >/dev/null 2>&1
-  printf '%d' $?
-}
-
-#######################################
-# Creates or updates the BigQuery view.
-# Globals:
-#  GCP_PROJECT
-#  DATASET
-# Arguments:
-#  The name of view.
-#  The query of view.
-#######################################
-create_or_update_view() {
-  local viewName viewQuery
-  viewName="${1}"
-  viewQuery=${2}
-  local action="mk"
-  if [[ $(check_existence_in_bigquery "${DATASET}.${viewName}") -eq 0 ]]; then
-    action="update"
-  fi
-  bq "${action}" \
-    --use_legacy_sql=false \
-    --view "${viewQuery}" \
-    --project_id ${GCP_PROJECT} \
-    "${DATASET}.${viewName}"
-}
-
-#######################################
-# Creates all views.
+# Creates all visualization views.
 # Globals:
 #  GCP_PROJECT
 #  DATASET
@@ -468,7 +449,7 @@ create_or_update_view() {
 # Arguments:
 #  none
 #######################################
-create_all_views() {
+create_visualization_views() {
   create_or_update_view RawJson '
     SELECT
       timestamp,
@@ -892,10 +873,9 @@ DEFAULT_INSTALL_TASKS=(
   load_config
   check_in_cloud_shell
   prepare_dependencies
-  confirm_namespace
   confirm_project
+  confirm_namespace
   confirm_region
-  confirm_firestore
   confirm_integration_api
   confirm_auth_method
   confirm_visualization
@@ -903,6 +883,7 @@ DEFAULT_INSTALL_TASKS=(
   enable_apis
   "confirm_located_bucket GCS_BUCKET BUCKET_LOC REGION"
   "confirm_folder OUTBOUND"
+  confirm_firestore
   prepare_visualization
   save_config
   create_subscriptions

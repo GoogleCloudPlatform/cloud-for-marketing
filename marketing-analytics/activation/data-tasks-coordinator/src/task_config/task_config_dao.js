@@ -59,7 +59,7 @@ let TaskGroup;
 /**
  * Options to set the way of error handling.
  *  1. 'retryTimes' retry how many times before failing the task. Note, retries
- *     only attempted after a RetryableError. @see RetryableError in BaseTask.
+ *     only attempted after a RetryableError. @see RetryableError.
  *  2. 'ignoreError' when a task is failed, whether to continue to its next
  *     task. One example is in Google Ads report tasks, a MCC account may have
  *     many CIDs, some CIDs may be unavailable through API due to its status. If
@@ -71,6 +71,9 @@ let TaskGroup;
  * }}
  */
 let ErrorOptions;
+
+/** @const{number} Default retry times. */
+const DEFAULT_RETRY_TIMES = 3;
 
 /**
  * Behaviors for how to export the data when the target (output) table exists
@@ -130,4 +133,5 @@ module.exports = {
   BigQueryTableConfig,
   StorageFileConfig,
   TaskConfigDao,
+  DEFAULT_RETRY_TIMES,
 };

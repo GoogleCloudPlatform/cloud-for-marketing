@@ -18,10 +18,20 @@
 
 const {
   pubsub: {EnhancedPubSub},
-  utils: {getLogger},
+  utils: { wait, getLogger },
 } = require('@google-cloud/nodejs-common');
-const {TaskGroup, TaskConfigDao} = require('./task_config/task_config_dao.js');
-const {TaskLogDao} = require('./task_log/task_log_dao.js');
+const {
+  TaskGroup,
+  TaskConfigDao,
+  DEFAULT_RETRY_TIMES,
+} = require('./task_config/task_config_dao.js');
+const {
+  TaskLogStatus,
+  TaskLogDao,
+  FIELD_NAMES,
+} = require('./task_log/task_log_dao.js');
+const { RetryableError } = require('./tasks/error/retryable_error.js');
+const { ErrorHandledStatus } = require('./tasks/error/error_handled_status.js');
 const {Report, ReportConfig} = require('./tasks/report/index.js');
 
 /**
@@ -69,6 +79,8 @@ class TaskManager {
   constructor(options) {
     /** @const {string} */ this.namespace = options.namespace;
     /** @const {!EnhancedPubSub} */ this.pubsub = options.pubsub;
+    /** @const {!TaskConfigDao} */ this.taskConfigDao = options.taskConfigDao;
+    /** @const {!TaskLogDao} */ this.taskLogDao = options.taskLogDao;
     /** @const {!Logger} */ this.logger = getLogger('TaskManager');
   }
 
@@ -102,7 +114,8 @@ class TaskManager {
    */
   startTasks(taskGroup, defaultAttributes = {}, parameterStr) {
     const tasks = getTaskArray(taskGroup);
-    return Promise.all(tasks.map((nextTask) => {
+    const reduceFn = async (previousResults, nextTask) => {
+      const results = await previousResults;
       let nextTaskId;
       let param = parameterStr;
       if (typeof nextTask === 'string') {
@@ -110,15 +123,21 @@ class TaskManager {
       } else {
         nextTaskId = nextTask.taskId;
         param = JSON.stringify(Object.assign(JSON.parse(parameterStr),
-            nextTask.appendedParameters));
+          nextTask.appendedParameters));
       }
       const attributes = {
         ...defaultAttributes,
         taskId: nextTaskId,
       };
       this.logger.debug(`Trigger next task: ${nextTaskId}`);
-      return this.sendTaskMessage(param, attributes);
-    }));
+      const [messageId] = await Promise.all([
+        this.sendTaskMessage(param, attributes),
+        wait(1000), // Wait one second between each task.
+      ]);
+      results.push(messageId);
+      return results;
+    };
+    return tasks.reduce(reduceFn, Promise.resolve([]));
   }
 
   /**
@@ -130,6 +149,53 @@ class TaskManager {
   async sendTaskMessage(parameters, attributes) {
     const topic = await this.getMonitorTopic();
     return this.pubsub.publish(topic, parameters, attributes);
+  }
+
+  /**
+   * Task error handling function.
+   * @param  {(string|number)} taskLogId
+   * @param {!TaskLog} taskLog
+   * @param {!Error} error
+   * @return {[ErrorHandledStatus,!Promise<string|number>]}
+   *   whether to trigger next task(s).
+   *   Ids of updated TaskLog entity.
+   */
+  async handleFailedTaks(taskLogId, taskLog, error) {
+    const taskConfig = await this.taskConfigDao.load(taskLog.taskId);
+    /**@type {!ErrorOptions} */
+    const errorOptions = Object.assign({
+      retryTimes: DEFAULT_RETRY_TIMES,
+      ignoreError: false, // Error is not ignored by default.
+    }, taskConfig.errorOptions);
+    if (error instanceof RetryableError) {
+      const retriedTimes = taskLog[FIELD_NAMES.RETRIED_TIMES] || 0;
+      if (retriedTimes < errorOptions.retryTimes) {
+        // Roll back task status from 'FINISHING' to 'STARTED' and set task
+        // needs regular status check (to trigger next retry).
+        // TODO(lushu) If there are tasks other than report task needs retry,
+        //  consider move this part into the detailed tasks.;
+        return [
+          ErrorHandledStatus.RETRIED,
+          this.taskLogDao.merge({
+            status: TaskLogStatus.STARTED,
+            [FIELD_NAMES.REGULAR_CHECK]: true,
+            [FIELD_NAMES.RETRIED_TIMES]: retriedTimes + 1,
+          }, taskLogId),
+        ];
+      }
+      this.logger.info(
+        'Reached the maximum retry times, continue to mark this task failed.');
+    }
+    if (errorOptions.ignoreError !== true) {
+      return [
+        ErrorHandledStatus.FAILED,
+        this.taskLogDao.saveErrorMessage(taskLogId, error),
+      ];
+    }
+    return [
+      ErrorHandledStatus.IGNORED,
+      this.taskLogDao.saveErrorMessage(taskLogId, error, true),
+    ];
   }
 }
 

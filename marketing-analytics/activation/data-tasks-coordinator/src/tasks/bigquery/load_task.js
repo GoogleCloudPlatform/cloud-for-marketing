@@ -19,7 +19,10 @@
 'use strict';
 
 const {Table, TableSchema: BqTableSchema} = require('@google-cloud/bigquery');
-const {storage: {StorageFile}} = require('@google-cloud/nodejs-common');
+const {
+  storage: { StorageFile },
+  utils: { wait },
+} = require('@google-cloud/nodejs-common');
 const {BigQueryAbstractTask} = require('./bigquery_abstract_task.js');
 const {ReportTask} = require('../report_task.js');
 const {
@@ -90,6 +93,14 @@ let LoadTaskDestination;
  * }}
  */
 let LoadTaskConfig;
+
+/**
+ * @const{number}
+ * Rerty times if failed to start task.
+ * When the schema is from external source, e.g. a Google Ads report, there is
+ * a chance that it failed to get the schema. A retry should solve this problem.
+ */
+const DEFAULT_RETRY_TIMES = 3;
 
 /** BigQuery load Cloud Storage file to table task class. */
 class LoadTask extends BigQueryAbstractTask {
@@ -236,7 +247,7 @@ class LoadTask extends BigQueryAbstractTask {
           destination.schemaSource);
       const task = new ReportTask(taskConfig, this.parameters);
       task.injectContext(this.options);
-      return task.getReport().generateSchema();
+      return this.getSchemaFromReportTask_(task);
     }
     if (destination.schemaFile) {
       this.logger.debug('External schema from file: ', destination.schemaFile);
@@ -246,6 +257,38 @@ class LoadTask extends BigQueryAbstractTask {
       return JSON.parse(await schemaFile.loadContent());
     }
     throw new Error('Not schema defined in config or externally');
+  }
+
+  /**
+   * Gets the schema from a ReportTask.
+   * It is only used for Google Ads Report currently. Google Ads API offers a
+   * service to return the report type definition can be used to generate
+   * BigQuery schema.
+   *
+   * @param {!ReportTask} task
+   * @param {number=} retriedTimes
+   */
+  async getSchemaFromReportTask_(task, retriedTimes = 0) {
+    try {
+      const schema = await task.getReport().generateSchema();
+      return schema;
+    } catch (error) {
+      if (task.getReport().isFatalError(error.toString())) {
+        this.logger.error(
+          'Fail immediately without retry for generateSchema error: ',
+          error.toString());
+        throw error;
+      } else if (retriedTimes > DEFAULT_RETRY_TIMES) {
+        this.logger.error(`Retried over ${DEFAULT_RETRY_TIMES} times.`,
+          error.toString());
+        throw error;
+      } else {
+        retriedTimes++;
+        await wait(retriedTimes * 1000);
+        this.logger.info('Retry for generateSchema error: ', error.toString());
+        return this.getSchemaFromReportTask_(task, retriedTimes);
+      }
+    }
   }
 
   /**
