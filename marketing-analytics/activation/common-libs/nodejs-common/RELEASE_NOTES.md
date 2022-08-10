@@ -1,5 +1,11 @@
 # Release Notes
 
+## 1.2.0 (2022-08-10)
+
+### Update to the v11 of the Google Ads API
+### Add new feature: Google Ads call conversions upload
+### Add new feature: support Google Ads OfflineUserDataService
+
 ## 1.1.0 (2022-04-07)
 
 ### Update to the v10 of the Google Ads API

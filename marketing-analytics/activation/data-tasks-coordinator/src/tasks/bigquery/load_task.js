@@ -105,13 +105,6 @@ const DEFAULT_RETRY_TIMES = 3;
 /** BigQuery load Cloud Storage file to table task class. */
 class LoadTask extends BigQueryAbstractTask {
 
-  /** @constructor */
-  constructor(config, parameters, defaultProject = undefined) {
-    super(config, parameters, defaultProject);
-    /** @type {boolean} If the target file is empty, skip loading. */
-    this.isEmptyFile = false;
-  }
-
   /** @override */
   getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
@@ -121,7 +114,9 @@ class LoadTask extends BigQueryAbstractTask {
 
   /** @override */
   async isDone() {
-    if (this.isEmptyFile) return true;
+    /** @type {boolean} If the target file is empty, skip loading. */
+    const { isEmptyFile } = this.parameters;
+    if (isEmptyFile) return true;
     return super.isDone();
   }
 
@@ -148,12 +143,13 @@ class LoadTask extends BigQueryAbstractTask {
           {projectId: this.getCloudProject(sourceFile)});
       const size = await storageFile.getFileSize();
       if (size === 0) {
-        this.isEmptyFile = true;
         this.logger.info('Skip for empty file:', sourceFile);
         return {
           warning: `Skip for empty file: ${sourceFile.name}`,
-          parameters: this.appendParameter(
-              {destinationTable: destination.table}),
+          parameters: this.appendParameter({
+            destinationTable: destination.table,
+            isEmptyFile: true,
+          }),
         };
       }
     }
@@ -172,13 +168,15 @@ class LoadTask extends BigQueryAbstractTask {
     const [job] = await storeTable.load(undefined, metadata);
     const errors = job.status.errors;
     if (errors && errors.length > 0) throw errors;
-    this.jobReference = job.jobReference;
-    const {jobId} = job.jobReference;
+    const { jobReference } = job;
+    const { jobId } = jobReference;
     this.logger.debug(`Job ${jobId} status ${job.status.state}.`);
     return {
       jobId,
-      parameters: this.appendParameter(
-          {destinationTable: destination.table}),
+      parameters: this.appendParameter({
+        destinationTable: destination.table,
+        jobReference,
+      }),
     };
   }
 

@@ -13,20 +13,23 @@
 // limitations under the License.
 
 /**
- * @fileoverview Tentacles API handler for Google Ads Click Conversions
+ * @fileoverview Tentacles API handler for Google Ads Call Conversions
  * uploading (Google Ads API (unofficial) Wrapper).
  */
 
 'use strict';
 
 const {
-  api: {googleads: {GoogleAds, ConversionConfig}},
-  utils: {apiSpeedControl, getLogger, getProperValue, BatchResult},
+  api: { googleads: { GoogleAds, ConversionConfig } },
+  utils: { apiSpeedControl, getLogger, getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
+const {
+  GoogleAdsConversionConfig,
+} = require('./google_ads_click_conversions_upload.js');
 
 /**
  * Conversions per request. Google Ads has a limit as 2000.
- * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
+ * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas#conversion_upload_service
  */
 const RECORDS_PER_REQUEST = 2000;
 /**
@@ -36,53 +39,37 @@ const RECORDS_PER_REQUEST = 2000;
 const QUERIES_PER_SECOND = 10;
 
 /** API name in the incoming file name. */
-exports.name = 'ACLC';
+exports.name = 'CALL';
 
 /** Data for this API will be transferred through GCS by default. */
 exports.defaultOnGcs = false;
 
 /**
- * Configuration for a Google Ads click conversions upload.
- * @typedef {{
- *   developerToken:string,
- *   customerId:string,
- *   loginCustomerId:(string|undefined),
- *   adsConfig:!ConversionConfig,
- *   recordsPerRequest:(number|undefined),
- *   qps:(number|undefined),
- *   debug:(boolean|undefined),
- * }}
- */
-let GoogleAdsConversionConfig;
-
-exports.GoogleAdsConversionConfig = GoogleAdsConversionConfig;
-
-/**
- * Sends out the data as click conversions to Google Ads API.
+ * Sends out the data as call conversions to Google Ads API.
  * This function exposes a googleAds parameter for test
  * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {string} records Data to send out as click conversions. Expected JSON
+ * @param {string} records Data to send out as call conversions. Expected JSON
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsConversionConfig} config
  * @return {!Promise<BatchResult>}
  */
 const sendDataInternal = async (googleAds, records, messageId, config) => {
-  const logger = getLogger('API.ACLC');
+  const logger = getLogger(`API.${exports.name}`);
   const recordsPerRequest =
-      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
+    getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
-  const {customerId, loginCustomerId, adsConfig} = config;
+  const { customerId, loginCustomerId, adsConfig } = config;
   if (adsConfig.custom_variable_tags) {
     try {
       adsConfig.customVariables = await Promise.all(
-          adsConfig.custom_variable_tags.map(async (tag) => {
-            const id = await googleAds.getConversionCustomVariableId(tag,
-                customerId, loginCustomerId);
-            if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);
-            return {[tag]: id};
-          }));
+        adsConfig.custom_variable_tags.map(async (tag) => {
+          const id = await googleAds.getConversionCustomVariableId(tag,
+            customerId, loginCustomerId);
+          if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);
+          return { [tag]: id };
+        }));
       logger.debug('Updated adsConfig', adsConfig);
     } catch (error) {
       /** @type {BatchResult} */ const batchResult = {
@@ -93,16 +80,16 @@ const sendDataInternal = async (googleAds, records, messageId, config) => {
       return batchResult;
     }
   }
-  const configuredUpload = googleAds.getUploadClickConversionFn(customerId,
-      loginCustomerId, adsConfig);
+  const configuredUpload = googleAds.getUploadCallConversionFn(customerId,
+    loginCustomerId, adsConfig);
   return managedSend(configuredUpload, records, messageId);
 };
 
 exports.sendDataInternal = sendDataInternal;
 
 /**
- * Sends out the data as click conversions to Google Ads API.
- * @param {string} records Data to send out as click conversions. Expected JSON
+ * Sends out the data as call conversions to Google Ads API.
+ * @param {string} records Data to send out as call conversions. Expected JSON
  *     string in each line.
  * @param {string} messageId Pub/sub message ID for log.
  * @param {!GoogleAdsConversionConfig} config

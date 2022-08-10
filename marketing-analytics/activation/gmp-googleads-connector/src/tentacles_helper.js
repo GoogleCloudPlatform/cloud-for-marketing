@@ -179,7 +179,7 @@ const localApiRequester = async (namespace, file, bucket = undefined) => {
     console.log(`API[${attributes.api}] is GCS based...`);
     if (bucket) {
       console.log(`... and this test is set on GCS file`);
-      const storageFile = new StorageFile.getInstance(bucket, file);
+      const storageFile = StorageFile.getInstance(bucket, file);
       const fileExists = await storageFile.getFile().exists();
       if (fileExists) {
         messageData = JSON.stringify({bucket, file});
@@ -187,16 +187,24 @@ const localApiRequester = async (namespace, file, bucket = undefined) => {
         throw new Error(`${file} doesn't exist on ${bucket}.`);
       }
     } else {
-      console.log(`... this test is set on local file.`);
+      throw new Error(`Unsupported local file test: ${file}`);
     }
   } else {
     console.log(
-        `API[${attributes.api} is PS based, tests based on local file.`);
-  }
-  if (fs.existsSync(file)) {
-    messageData = fs.readFileSync(file).toString();
-  } else {
-    throw new Error(`${file} doesn't exist.`);
+      `API[${attributes.api} is PS based, tests based on local file.`);
+    if (fs.existsSync(file)) { //local file
+      messageData = fs.readFileSync(file).toString();
+    } else if (bucket) {
+      const storageFile = StorageFile.getInstance(bucket, file);
+      const fileExists = await storageFile.getFile().exists();
+      if (fileExists) {
+        messageData = await storageFile.loadContent(0);
+      } else {
+        throw new Error(`gs://${bucket}/${file} doesn't exist.`);
+      }
+    } else {
+      throw new Error(`Coundn't find file: ${file}`);
+    }
   }
   const context = {eventId: 'test-demo-message'};
   const message = {

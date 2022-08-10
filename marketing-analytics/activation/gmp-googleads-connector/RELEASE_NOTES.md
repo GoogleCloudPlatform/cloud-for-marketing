@@ -1,5 +1,14 @@
 # Release Notes
 
+## 2.3.0 (2022-08-10)
+
+
+### Integrated APIs
+
+- Updated to the v11 of the Google Ads API.
+- Google Ads API for Call Conversions Upload
+- Google Ads API for OfflineUserDataService Upload
+
 ## 2.2.0 (2022-06-14)
 
 ### New Installation command

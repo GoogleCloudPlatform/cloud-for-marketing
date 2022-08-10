@@ -160,7 +160,7 @@ class TaskManager {
    *   whether to trigger next task(s).
    *   Ids of updated TaskLog entity.
    */
-  async handleFailedTaks(taskLogId, taskLog, error) {
+  async handleFailedTask(taskLogId, taskLog, error) {
     const taskConfig = await this.taskConfigDao.load(taskLog.taskId);
     /**@type {!ErrorOptions} */
     const errorOptions = Object.assign({

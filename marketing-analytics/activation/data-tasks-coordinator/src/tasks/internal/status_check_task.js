@@ -144,16 +144,23 @@ class StatusCheckTask extends BaseTask {
    * @private
    */
   async getCrashedTasks_() {
-    const startTime = new Date();
     const filter = { property: 'status', value: TaskLogStatus.FINISHING };
     const taskLogs = await this.options.taskLogDao.list([filter]);
     const now = new Date();
     return taskLogs.filter(({ id: taskLogId, entity: taskLog }) => {
-      if (now - taskLog.prefinishTime.toDate() > 9 * 60 * 1000) {
-        this.logger.warn('Got a timeout finishing task:', taskLog);
-        return true;
+      if (taskLog.prefinishTime) {
+        //Firestore returns Timestamp type which has the 'toDate' function,
+        //while Datastore returns as Date type.
+        const prefinishTime = taskLog.prefinishTime.toDate ?
+          taskLog.prefinishTime.toDate() : taskLog.prefinishTime;
+        if (now - prefinishTime > 9 * 60 * 1000) {
+          this.logger.warn('Got a timeout finishing task:', taskLog);
+          return true;
+        }
+      } else {
+        this.logger.warn(`Finishing task:[${taskLogId}] without prefinishTime`,
+          taskLog);
       }
-      this.logger.info('In time finishing task:', taskLogId);
       return false;
     });
   }
@@ -180,7 +187,7 @@ class StatusCheckTask extends BaseTask {
     } catch (error) {
       this.logger.error(`Error in task: ${taskLogId}`, error);
       const [errorHandledStatus] =
-        await this.taskManager.handleFailedTaks(taskLogId, taskLog, error);
+        await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
       switch (errorHandledStatus) {
         case ErrorHandledStatus.RETRIED:
           return { taskLogId, status: CHECKED_TASK_STATUS.RETRIED, };
@@ -221,7 +228,7 @@ class StatusCheckTask extends BaseTask {
       ({ taskLogId }) => !!mappedTaskLogs[taskLogId]
     );
     let checkedTimes = 0;
-    do {
+    while (this.hasDoneTasks_(checkedResults) && ++checkedTimes < EXTRA_CHECK_TIMES) {
       const runningTaskLogIds = checkedResults
         .filter(({ status }) => status === CHECKED_TASK_STATUS.RUNNING)
         .map(({ taskLogId }) => taskLogId);
@@ -232,7 +239,7 @@ class StatusCheckTask extends BaseTask {
         (id) => ({ id, entity: mappedTaskLogs[id] })
       ).reduce(this.getReduceFn(), []);
       results.push(...checkedResults);
-    } while (this.hasDoneTasks_(checkedResults) && ++checkedTimes < EXTRA_CHECK_TIMES)
+    }
     return results;
   }
 

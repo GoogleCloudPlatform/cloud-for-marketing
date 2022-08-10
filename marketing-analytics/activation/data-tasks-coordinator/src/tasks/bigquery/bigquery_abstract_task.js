@@ -23,6 +23,7 @@ const {BaseTask} = require('../base_task.js');
 
 /**
  * String value of BigQuery job status 'done' in BigQuery logging messages.
+ * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobStatus
  * @const {string}
  */
 const BIGQUERY_JOB_STATUS_DONE = 'DONE';
@@ -41,9 +42,27 @@ class BigQueryAbstractTask extends BaseTask {
   /** @override */
   async isDone() {
     const bigquery = this.getBigQueryForTask();
-    const {jobId} = this.jobReference;
-    const [job] = await bigquery.job(jobId, this.jobReference).get();
+    const { jobReference } = this.parameters;
+    const { jobId } = jobReference;
+    const [job] = await bigquery.job(jobId, jobReference).get();
     return job.metadata.status.state === BIGQUERY_JOB_STATUS_DONE;
+  }
+
+  /** @override */
+  async completeTask() {
+    const bigquery = this.getBigQueryForTask();
+    const { jobReference } = this.parameters;
+    const { jobId } = jobReference;
+    const [job] = await bigquery.job(jobId, jobReference).get();
+    const { status } = job.metadata;
+    if (status.errors && status.errors.length > 0) {
+      const errorMessage =
+        status.errors.map(({ message }) => message).join(' | ');
+      throw new Error(errorMessage);
+    }
+    if (status.state !== BIGQUERY_JOB_STATUS_DONE) {
+      throw new Error(`Wrong job state: ${status.state}.`);
+    }
   }
 
   /**

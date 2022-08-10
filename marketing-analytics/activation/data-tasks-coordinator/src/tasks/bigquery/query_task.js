@@ -81,15 +81,14 @@ class QueryTask extends BigQueryAbstractTask {
     }
     try {
       const [job] = await this.getBigQueryForTask().createQueryJob(options);
-      this.jobReference = job.metadata.jobReference;
-      const {jobId} = this.jobReference;
+      const { jobReference } = job.metadata;
+      const { jobId } = jobReference;
       const status = job.metadata.status.state;
       const sqlInfo = this.config.source.sql || this.config.source.file.name;
-      this.logger.info(
-          `Job[${this.jobId}] status ${status} on query [${sqlInfo}]`);
+      this.logger.info(`Job[${jobId}] status ${status} on query [${sqlInfo}]`);
       return {
         jobId,
-        parameters: this.appendParameter({destinationTable}),
+        parameters: this.appendParameter({ destinationTable, jobReference }),
       };
     } catch (error) {
       this.logger.error(`Error in query to BigQuery:`, error);

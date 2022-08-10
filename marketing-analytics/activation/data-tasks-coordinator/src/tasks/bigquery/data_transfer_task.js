@@ -38,15 +38,25 @@ const {TaskType} = require('../../task_config/task_config_dao.js');
  */
 let DataTransferTaskConfig;
 
+/**
+ * String value of BigQuery Data Transfer run states.
+ * @see https://cloud.google.com/bigquery-transfer/docs/reference/datatransfer/rest/v1/TransferState
+ * @const {string}
+ */
+const TRANSFER_STATE_SUCCEEDED = 'SUCCEEDED';
+const TRANSFER_STATE_FAILED = 'FAILED';
+const TRANSFER_STATE_CANCELLED = 'CANCELLED';
+
 /** Executes BigQuery Data Transfer run job. */
 class DataTransferTask extends BaseTask {
+
   /**
    * Gets a BigQuery Data Transfer service client instance.
-   * @param {Object<string,string>} options
    * @return {DataTransferServiceClient}
    * @private
    */
-  getDataTransfer_(options) {
+  getDataTransfer_() {
+    const options = this.config.source;
     const authOptions = {
       projectId: this.getCloudProject(options),
     };
@@ -65,9 +75,27 @@ class DataTransferTask extends BaseTask {
 
   /** @override */
   async isDone() {
-    const client = this.getDataTransfer_();
-    const {state} = await client.getTransferRun({name: this.jobId});
-    return state === 'SUCCEEDED' || state === 'FAILED';
+    const dataTransfer = this.getDataTransfer_();
+    const { transferRunName } = this.parameters;
+    const [transferRun] =
+      await dataTransfer.getTransferRun({ name: transferRunName });
+    return transferRun.state === TRANSFER_STATE_SUCCEEDED
+      || transferRun.state === TRANSFER_STATE_FAILED
+      || transferRun.state === TRANSFER_STATE_CANCELLED;
+  }
+
+  /** @override */
+  async completeTask() {
+    const dataTransfer = this.getDataTransfer_();
+    const { transferRunName } = this.parameters;
+    const [transferRun] =
+      await dataTransfer.getTransferRun({ name: transferRunName });
+    if (transferRun.errorStatus && transferRun.errorStatus.message) {
+      throw new Error(transferRun.errorStatus.message);
+    }
+    if (transferRun.state !== TRANSFER_STATE_SUCCEEDED) {
+      throw new Error(`Wrong run state: ${transferRun.state}.`);
+    }
   }
 
   /**
@@ -79,29 +107,26 @@ class DataTransferTask extends BaseTask {
     const dataTransferConfigName = this.getDataTransferConfigName_();
     try {
       const [runsRes] = await client.startManualTransferRuns({
-        requestedRunTime: {
-          seconds: Math.floor(Date.now() / 1000),
-        },
+        requestedRunTime: { seconds: Math.floor(Date.now() / 1000) },
         parent: dataTransferConfigName,
       });
       const transferRuns = runsRes.runs;
       if (transferRuns.length === 0) {
-        const errorMessage = `There is not any Data Transfer config be triggered by the given parent, ${dataTransferConfigName}.`;
-        this.logger.error(errorMessage);
-        throw new Error(errorMessage);
+        throw new Error(
+          `Data Transfer[${dataTransferConfigName}] can't be started manually.`);
       }
-      const jobId = transferRuns[0].name;
-      this.jobId = jobId;
-      return {jobId};
+      const transferRunName = transferRuns[0].name;
+      return {
+        jobId: transferRunName,
+        parameters: this.appendParameter({ transferRunName }),
+      };
     } catch (error) {
-      this.logger.error(
-        `Error when triggering Data Transfer config, ${dataTransferConfigName}`,
-        error
-      );
+      this.logger.error(`Error when trigger[${dataTransferConfigName}]`, error);
       throw error;
     }
   }
 }
+
 
 module.exports = {
   DataTransferTaskConfig,

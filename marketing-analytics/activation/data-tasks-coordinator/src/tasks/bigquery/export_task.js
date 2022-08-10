@@ -102,11 +102,14 @@ class ExportTask extends BigQueryAbstractTask {
     if (errors && errors.length > 0) throw errors;
     const fileCounts = job.statistics.extract.destinationUriFileCounts[0];
     const status = job.status.state;
-    this.jobReference = job.jobReference;
-    const {jobId} = job.jobReference;
+    const { jobReference } = job;
+    const { jobId } = jobReference;
     this.logger.info(
         `Job[${jobId}] status ${status} with ${fileCounts} files.`);
-    return {jobId};
+    return {
+      jobId,
+      parameters: this.appendParameter({ jobReference }),
+    };
   }
 }
 

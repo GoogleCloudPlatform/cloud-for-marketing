@@ -27,9 +27,15 @@ const {
   },
   resources: {
     GoogleAdsField,
+    OfflineUserDataJob,
   },
   services: {
+    CreateOfflineUserDataJobRequest,
+    AddOfflineUserDataJobOperationsRequest,
+    RunOfflineUserDataJobRequest,
+    UploadCallConversionsRequest,
     UploadClickConversionsRequest,
+    UploadCallConversionsResponse,
     UploadClickConversionsResponse,
     UploadConversionAdjustmentsRequest,
     UploadConversionAdjustmentsResponse,
@@ -40,6 +46,10 @@ const {
   },
   errors: {
     GoogleAdsFailure,
+  },
+  enums: {
+    OfflineUserDataJobTypeEnum: { OfflineUserDataJobType },
+    OfflineUserDataJobStatusEnum: { OfflineUserDataJobStatus },
   },
 } = googleAdsLib;
 const {GoogleAdsApi} = require('google-ads-api');
@@ -55,6 +65,7 @@ const API_SCOPES = Object.freeze(['https://www.googleapis.com/auth/adwords',]);
  * List of properties that will be taken from the data file as elements of a
  * conversion or a conversion adjustment.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/ClickConversion
+ * @see https://developers.google.com/google-ads/api/reference/rpc/latest/CallConversion
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/ConversionAdjustment
  * @type {Array<string>}
  */
@@ -63,6 +74,8 @@ const PICKED_PROPERTIES = [
   'cart_data',
   'user_identifiers',
   'gclid',
+  'caller_id',
+  'call_start_date_time',
   'conversion_action',
   'conversion_date_time',
   'conversion_value',
@@ -95,10 +108,11 @@ const IDENTIFIERS = [
 const MAX_IDENTIFIERS_PER_USER = 20;
 
 /**
- * Configuration for uploading click conversions or conversion adjustments for
- * Google Ads, includes:
+ * Configuration for uploading click conversions, call converions or conversion
+ * adjustments for Google Ads, includes:
  * gclid, conversion_action, conversion_date_time, conversion_value,
  * currency_code, order_id, external_attribution_data,
+ * caller_id, call_start_date_time,
  * adjustment_type, adjustment_date_time, user_agent, gclid_date_time_pair, etc.
  * @see PICKED_PROPERTIES
  *
@@ -119,7 +133,9 @@ const MAX_IDENTIFIERS_PER_USER = 20;
  * @typedef {{
  *   external_attribution_data: (GoogleAdsApi.ExternalAttributionData|undefined),
  *   cart_data: (object|undefined),
- *   gclid: string,
+ *   gclid: (string|undefined),
+ *   caller_id: (string|undefined),
+ *   call_start_date_time: (string|undefined),
  *   conversion_action: string,
  *   conversion_date_time: string,
  *   conversion_value: number,
@@ -138,7 +154,7 @@ let ConversionConfig;
 /**
  * Configuration for uploading customer match to Google Ads, includes:
  * customer_id, login_customer_id, list_id and operation.
- * operation must be one of the two: 'create' or 'remove';
+ * operation must be one of the two: 'create' or 'remove'.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
  * @typedef {{
  *   customer_id: string,
@@ -148,6 +164,24 @@ let ConversionConfig;
  * }}
  */
 let CustomerMatchConfig;
+
+/**
+ * Configuration for offline user data job, includes:
+ * customer_id, login_customer_id, list_id, operation and type.
+ * 'operation' should be one of the two: 'create' or 'remove',
+ * 'type' is OfflineUserDataJobType, it can be 'CUSTOMER_MATCH_USER_LIST' or
+ * 'STORE_SALES_UPLOAD_FIRST_PARTY'.
+ * @see https://developers.google.com/google-ads/api/reference/rpc/latest/OfflineUserDataJob
+ * @typedef {{
+ *   customer_id: string,
+ *   login_customer_id: string,
+ *   list_id: (undefined|string),
+ *   operation: 'create'|'remove',
+ *   type: !OfflineUserDataJobType,
+ *   storeSalesMetadata: (undefined|object),
+ * }}
+ */
+let OfflineUserDataJobConfig;
 
 /**
  * Configuration for uploading customer match data for Google Ads.
@@ -216,6 +250,19 @@ class GoogleAds {
   }
 
   /**
+   * Gets a report synchronously from a given Customer account.
+   * The enum fields are present as index number.
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @param {!ReportQueryConfig} reportQueryConfig
+   * @return {!ReadableStream}
+   */
+  async getReport(customerId, loginCustomerId, reportQueryConfig) {
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    return customer.report(reportQueryConfig);
+  }
+
+  /**
    * Gets report as generator of a given Customer account.
    * @param {string} customerId
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
@@ -261,6 +308,19 @@ class GoogleAds {
         .searchGoogleAdsFields(request);
     return results;
   }
+  /**
+   * Returns the function to send out a request to Google Ads API with a batch
+   * of call conversions.
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @param {!ConversionConfig} adsConfig Default call conversion params
+   * @return {!SendSingleBatch} Function which can send a batch of hits to
+   *     Google Ads API.
+   */
+  getUploadCallConversionFn(customerId, loginCustomerId, adsConfig) {
+    return this.getUploadConversionFnBase_(customerId, loginCustomerId,
+      adsConfig, 'uploadCallConversions', 'caller_id');
+  }
 
   /**
    * Returns the function to send out a request to Google Ads API with a batch
@@ -271,45 +331,9 @@ class GoogleAds {
    * @return {!SendSingleBatch} Function which can send a batch of hits to
    *     Google Ads API.
    */
-  getUploadConversionFn(customerId, loginCustomerId, adsConfig) {
-    /**
-     * Sends a batch of hits to Google Ads API.
-     * @param {!Array<string>} lines Data for single request. It should be
-     *     guaranteed that it doesn't exceed quota limitation.
-     * @param {string} batchId The tag for log.
-     * @return {!BatchResult}
-     */
-    return async (lines, batchId) => {
-      /** @type {!Array<ConversionConfig>} */
-      const conversions = lines.map(
-          (line) => buildClickConversionFromLine(line, adsConfig, customerId));
-      /** @const {BatchResult} */
-      const batchResult = {
-        result: true,
-        numberOfLines: lines.length,
-      };
-      try {
-        const response = await this.uploadClickConversions(conversions,
-            customerId, loginCustomerId);
-        const {results, partial_failure_error: failed} = response;
-        if (this.logger.isDebugEnabled()) {
-          const gclids = results.map((conversion) => conversion.gclid);
-          this.logger.debug('Uploaded gclids:', gclids);
-        }
-        if (failed) {
-          this.logger.info('partial_failure_error:', failed.message);
-          const failures = failed.details.map(
-              ({value}) => GoogleAdsFailure.decode(value));
-          this.extraFailedLines_(batchResult, failures, lines, 0);
-        }
-        return batchResult;
-      } catch (error) {
-        this.logger.error(
-            `Error in upload conversions batch: ${batchId}`, error);
-        this.updateBatchResultWithError_(batchResult, error, lines, 0);
-        return batchResult;
-      }
-    }
+  getUploadClickConversionFn(customerId, loginCustomerId, adsConfig) {
+    return this.getUploadConversionFnBase_(customerId, loginCustomerId,
+      adsConfig, 'uploadClickConversions', 'gclid');
   }
 
   /**
@@ -323,6 +347,26 @@ class GoogleAds {
    *     Google Ads API.
    */
   getUploadConversionAdjustmentFn(customerId, loginCustomerId, adsConfig) {
+    return this.getUploadConversionFnBase_(customerId, loginCustomerId,
+      adsConfig, 'uploadConversionAdjustments', 'order_id');
+  }
+
+  /**
+   * Returns the function to send call conversions, click conversions or
+   * conversion adjustment (enhanced conversions).
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @param {!ConversionConfig} adsConfig Default click conversion params
+   * @param {string} functionName The name of sending converions function, could
+   *   be `uploadClickConversions`, `uploadCallConversions` or
+   *   `uploadConversionAdjustments`.
+   * @param {string} propertyForDebug The name of property for debug info.
+   * @return {!SendSingleBatch} Function which can send a batch of hits to
+   *     Google Ads API.
+   * @private
+   */
+  getUploadConversionFnBase_(customerId, loginCustomerId, adsConfig,
+    functionName, propertyForDebug) {
     /**
      * Sends a batch of hits to Google Ads API.
      * @param {!Array<string>} lines Data for single request. It should be
@@ -333,30 +377,30 @@ class GoogleAds {
     return async (lines, batchId) => {
       /** @type {!Array<ConversionConfig>} */
       const conversions = lines.map(
-          (line) => buildClickConversionFromLine(line, adsConfig, customerId));
+        (line) => buildClickConversionFromLine(line, adsConfig, customerId));
       /** @const {BatchResult} */
       const batchResult = {
         result: true,
         numberOfLines: lines.length,
       };
       try {
-        const response = await this.uploadConversionAdjustments(conversions,
-            customerId, loginCustomerId);
-        const {results, partial_failure_error: failed} = response;
+        const response = await this[functionName](conversions, customerId,
+          loginCustomerId);
+        const { results, partial_failure_error: failed } = response;
         if (this.logger.isDebugEnabled()) {
-          const orderId = results.map((conversion) => conversion.order_id);
-          this.logger.debug('Uploaded order_id:', orderId);
+          const id = results.map((conversion) => conversion[propertyForDebug]);
+          this.logger.debug(`Uploaded ${propertyForDebug}:`, id);
         }
         if (failed) {
           this.logger.info('partial_failure_error:', failed.message);
           const failures = failed.details.map(
-              ({value}) => GoogleAdsFailure.decode(value));
+            ({ value }) => GoogleAdsFailure.decode(value));
           this.extraFailedLines_(batchResult, failures, lines, 0);
         }
         return batchResult;
       } catch (error) {
         this.logger.error(
-            `Error in upload conversion adjustments batch: ${batchId}`, error);
+          `Error in ${functionName} batch: ${batchId}`, error);
         this.updateBatchResultWithError_(batchResult, error, lines, 0);
         return batchResult;
       }
@@ -494,6 +538,27 @@ class GoogleAds {
   }
 
   /**
+   * Uploads call conversions to google ads account.
+   * It requires an array of call conversions and customer id.
+   * In DEBUG mode, this function will only validate the conversions.
+   * @param {Array<ConversionConfig>} callConversions Call Conversions
+   * @param {string} customerId
+   * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
+   * @return {!Promise<!UploadCallConversionsResponse>}
+   */
+  uploadCallConversions(callConversions, customerId, loginCustomerId) {
+    this.logger.debug('Upload call conversions for customerId:', customerId);
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const request = new UploadCallConversionsRequest({
+      conversions: callConversions,
+      customer_id: customerId,
+      validate_only: this.debugMode, // when true makes no changes
+      partial_failure: true, // Will still create the non-failed entities
+    });
+    return customer.conversionUploads.uploadCallConversions(request);
+  }
+
+  /**
    * Uploads click conversions to google ads account.
    * It requires an array of click conversions and customer id.
    * In DEBUG mode, this function will only validate the conversions.
@@ -613,9 +678,9 @@ class GoogleAds {
    * @return {!Promise<UploadUserDataResponse>}
    */
   async uploadUserDataToUserList(customerMatchRecords, customerMatchConfig) {
-    const customerId = customerMatchConfig.customer_id.replace(/-/g, '');
-    const loginCustomerId = customerMatchConfig.login_customer_id.replace(/-/g,
-        '');
+    const customerId = this.getCleanCid_(customerMatchConfig.customer_id);
+    const loginCustomerId = this.getCleanCid_(
+      customerMatchConfig.login_customer_id);
     const userListId = customerMatchConfig.list_id;
     const operation = customerMatchConfig.operation;
 
@@ -689,6 +754,181 @@ class GoogleAds {
   }
 
   /**
+   * Returns a integer format CID by removing dashes.
+   * @param {string} cid
+   * @return {string}
+   * @private
+   */
+  getCleanCid_(cid) {
+    return cid.replace(/-/g, '');
+  }
+
+  /**
+   * Get OfflineUserDataJob status.
+   * @param {OfflineUserDataJobConfig} config Offline user data job config.
+   * @param {string} resourceName
+   * @return {!OfflineUserDataJobStatus} Job status
+   */
+  async getOfflineUserDataJob(config, resourceName) {
+    const loginCustomerId = this.getCleanCid_(config.login_customer_id);
+    const customerId = this.getCleanCid_(config.customer_id);
+    const reportConfig = {
+      entity: 'offline_user_data_job',
+      attributes: [
+        'offline_user_data_job.id',
+        'offline_user_data_job.status',
+        'offline_user_data_job.type',
+        'offline_user_data_job.customer_match_user_list_metadata.user_list',
+        'offline_user_data_job.failure_reason',
+      ],
+      constraints: {
+        'offline_user_data_job.resource_name': resourceName,
+      },
+    };
+    const jobs = await this.getReport(customerId, loginCustomerId, reportConfig);
+    if (jobs.length === 0) {
+      throw new Error(`Can't find the OfflineUserDataJob: ${resourceName}`);
+    }
+    return OfflineUserDataJobStatus[jobs[0].offline_user_data_job.status];
+  }
+
+  //resource_name: 'customers/8368692804/offlineUserDataJobs/23130531867'
+  //'customers/8368692804/offlineUserDataJobs/23232922761'
+  /**
+   * Creates a OfflineUserDataJob and returns resource name.
+   * @param {OfflineUserDataJobConfig} config Offline user data job config.
+   * @return {string} The resouce name of the creaed job.
+   */
+  async createOfflineUserDataJob(config) {
+    const loginCustomerId = this.getCleanCid_(config.login_customer_id);
+    const customerId = this.getCleanCid_(config.customer_id);
+    const { list_id: userListId, type } = config;
+    this.logger.debug('Creating OfflineUserDataJob for CID:', customerId);
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    // if()CUSTOMER_MATCH_USER_LIST
+    const job = OfflineUserDataJob.create({
+      type,
+    });
+    // https://developers.google.com/google-ads/api/rest/reference/rest/latest/customers.offlineUserDataJobs?hl=en#CustomerMatchUserListMetadata
+    if (type.startsWith('CUSTOMER_MATCH')) {
+      const metadata = this.buildCustomerMatchUserListMetadata_(customerId,
+        userListId);
+      job.customer_match_user_list_metadata = metadata;
+      // https://developers.google.com/google-ads/api/rest/reference/rest/latest/customers.offlineUserDataJobs?hl=en#StoreSalesMetadata
+    } else if (type.startsWith('STORE_SALES')) {
+      // If there is StoreSalesMetadata in the config
+      if (config.storeSalesMetadata) {
+        job.store_sales_list_metadata = config.storeSalesMetadata;
+      }
+    } else {
+      throw new Error(`UNSUPPORTED OfflineUserDataJobType: ${type}.`);
+    }
+    const request = CreateOfflineUserDataJobRequest.create({
+      customer_id: customerId,
+      job,
+      validate_only: this.debugMode, // when true makes no changes
+      enable_match_rate_range_preview: true,
+    });
+    const { resource_name: resourceName } =
+      await customer.offlineUserDataJobs.createOfflineUserDataJob(request);
+    this.logger.info('Created OfflineUserDataJob:', resourceName);
+    return resourceName;
+  }
+
+  /**
+   * Adds user data in to the OfflineUserDataJob.
+   * @param {OfflineUserDataJobConfig} config Offline user data job config.
+   * @param {string} jobResourceName
+   * @param {!Array<CustomerMatchRecord>} customerMatchRecords user Ids
+   * @return {!Promise<AddOfflineUserDataJobOperationsResponse>}
+   */
+  async addOperationsToOfflineUserDataJob(config, jobResourceName, records) {
+    const start = new Date().getTime();
+    const loginCustomerId = this.getCleanCid_(config.login_customer_id);
+    const customerId = this.getCleanCid_(config.customer_id);
+    const operation = config.operation;
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const operationsList = this.buildOperationsList_(operation, records);
+    const request = AddOfflineUserDataJobOperationsRequest.create({
+      resource_name: jobResourceName,
+      operations: operationsList,
+      validate_only: false,//this.debugMode,
+      enable_partial_failure: true,
+      enable_warnings: true,
+    });
+    const response = await customer.
+      offlineUserDataJobs.addOfflineUserDataJobOperations(request);
+    this.logger.debug(`Added ${records.length} records in (ms):`,
+      new Date().getTime() - start);
+    return response;
+  }
+
+  /**
+   * Starts the OfflineUserDataJob.
+   * @param {OfflineUserDataJobConfig} config Offline user data job config.
+   * @param {string} jobResourceName
+   * @returns
+   */
+  async runOfflineUserDataJob(config, jobResourceName) {
+    const loginCustomerId = this.getCleanCid_(config.login_customer_id);
+    const customerId = this.getCleanCid_(config.customer_id);
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const request = RunOfflineUserDataJobRequest.create({
+      resource_name: jobResourceName,
+      validate_only: false,//this.debugMode,
+    });
+    const rawResponse = await customer.
+        offlineUserDataJobs.runOfflineUserDataJob(request);
+    const response = lodash.pick(rawResponse, ['name', 'done', 'error']);
+    this.logger.debug('runOfflineUserDataJob response: ', response);
+    return response;
+  }
+
+  /**
+   * Returns the function to send out a request to Google Ads API with
+   * user data as operations in OfflineUserDataJob.
+   * @param {!OfflineUserDataJobConfig} config
+   * @param {string} jobResourceName
+   * @return {!SendSingleBatch} Function which can send a batch of hits to
+   *     Google Ads API.
+   */
+  getAddOperationsToOfflineUserDataJobFn(config, jobResourceName) {
+    /**
+     * Sends a batch of hits to Google Ads API.
+     * @param {!Array<string>} lines Data for single request. It should be
+     *     guaranteed that it doesn't exceed quota limitation.
+     * @param {string} batchId The tag for log.
+     * @return {!Promise<BatchResult>}
+     */
+    return async (lines, batchId) => {
+      /** @type {Array<CustomerMatchRecord>} */
+      const records = lines.map((line) => JSON.parse(line));
+      /** @const {BatchResult} */ const batchResult = {
+        result: true,
+        numberOfLines: lines.length,
+      };
+      try {
+        const response = await this.addOperationsToOfflineUserDataJob(config,
+          jobResourceName, records);
+        this.logger.debug(`Add operation to job batch[${batchId}]`, response);
+        const { results, partial_failure_error: failed } = response;
+        if (failed) {
+          this.logger.info('partial_failure_error:', failed.message);
+          const failures = failed.details.map(
+            ({ value }) => GoogleAdsFailure.decode(value));
+          this.extraFailedLines_(batchResult, failures, lines, 0);
+        }
+        return batchResult;
+      } catch (error) {
+        this.logger.error(
+          `Error in OfflineUserDataJob add operations batch[${batchId}]`, error);
+        this.updateBatchResultWithError_(batchResult, error, lines, 2);
+        return batchResult;
+      }
+    }
+  }
+
+  /**
    * Returns an instance of GoogleAdsApi.Customer on google-ads-api.
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @param {string=} customerId Customer account ID, default is the same as
@@ -748,6 +988,8 @@ module.exports = {
   ConversionConfig,
   CustomerMatchRecord,
   CustomerMatchConfig,
+  OfflineUserDataJobType,
+  OfflineUserDataJobConfig,
   GoogleAds,
   ReportQueryConfig,
   GoogleAdsField,

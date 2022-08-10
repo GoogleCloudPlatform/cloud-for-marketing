@@ -384,6 +384,15 @@ solution installed [${GCP_PROJECT}]: "
     local input result
     read -r input
     input=${input:-"${GCP_PROJECT}"}
+    printf '%s' "Checking billing status for [${input}]..."
+    result=$(gcloud beta billing projects describe "${input}" \
+--format="csv[no-heading](billingEnabled)")
+    if [[ "${result}" != "True"  && "${result}" != "true"  ]]; then
+      printf '%s\n' " there is no billing account."
+      return 1
+    else
+      printf '%s\n' "succeeded."
+    fi
     result=$(gcloud config set project "${input}" --user-output-enabled=false \
 2>&1)
     if [[ -z ${result} ]]; then

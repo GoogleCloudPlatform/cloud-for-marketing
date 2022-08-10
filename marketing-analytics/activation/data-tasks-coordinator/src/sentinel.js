@@ -57,12 +57,6 @@ const {
 } = require('./task_manager.js');
 
 /**
- * String value of BigQuery job status 'done' in BigQuery logging messages.
- * @const {string}
- */
-const JOB_STATUS_DONE = 'DONE';
-
-/**
  * String value of BigQuery Data Transfer job status 'SUCCEEDED'
  * in BigQuery Data Transfer pubsub messages.
  * @const {string}
@@ -278,8 +272,7 @@ class Sentinel {
           && payload.protoPayload
           && payload.protoPayload.methodName === 'jobservice.jobcompleted';
     } catch (error) {
-      console.warn('Error when checking when the message is from BigQuery',
-          error);
+      this.logger.error('Checking whether the message is from BigQuery', error);
       return false;
     }
   }
@@ -302,7 +295,7 @@ class Sentinel {
           && attributes.payloadFormat === 'JSON_API_V1';
     } catch (error) {
       this.logger.error(
-          'Error when checking when the message is from BigQuery Data Transfer',
+        'Checking whether the message is from BigQuery Data Transfer',
           error
       );
       return false;
@@ -324,12 +317,11 @@ class Sentinel {
    * @return {!Promise<(string | number)>} taskLogId
    * @private
    */
-  startTask_(taskLogId, taskLog) {
+  async startTask_(taskLogId, taskLog) {
     // Get the 'lock' to start this task to prevent duplicate messages.
-    return this.taskLogDao.startTask(taskLogId, taskLog).then((started) => {
-      if (started) return this.startTaskJob_(taskLogId, taskLog);
-      console.warn(`TaskLog ${taskLogId} exists. Duplicated? Quit.`);
-    });
+    const started = await this.taskLogDao.startTask(taskLogId, taskLog);
+    if (started) return this.startTaskJob_(taskLogId, taskLog);
+    this.logger.warn(`TaskLog ${taskLogId} exists. Duplicated? Quit.`);
   }
 
   /**
@@ -438,14 +430,12 @@ class Sentinel {
    *     next task(s).
    * @private
    */
-  finishTask_(taskLogId) {
+  async finishTask_(taskLogId) {
     this.logger.debug(`Start to finish task ${taskLogId}`);
-    return this.taskLogDao.load(taskLogId).then((taskLog) => {
-      return this.taskLogDao.finishTask(taskLogId).then((finished) => {
-        if (finished) return this.finishTaskJob_(taskLogId, taskLog);
-        console.warn(`Fail to finish the taskLog [${taskLogId}]. Quit.`);
-      })
-    });
+    const taskLog = await this.taskLogDao.load(taskLogId);
+    const finished = await this.taskLogDao.finishTask(taskLogId);
+    if (finished) return this.finishTaskJob_(taskLogId, taskLog);
+    this.logger.warn(`Fail to finish the taskLog [${taskLogId}]. Quit.`);
   }
 
   /**
@@ -475,9 +465,9 @@ class Sentinel {
       // 'afterFinish' won't throw 'RetryableError' which can trigger retry.
       await this.taskLogDao.afterFinish(taskLogId, updatesToTaskLog);
     } catch (error) {
-      console.error(error);
+      this.logger.error(`Task[${taskLogId}] error:`, error);
       const [errorHandledStatus, result] =
-        await this.taskManager.handleFailedTaks(taskLogId, taskLog, error);
+        await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
       if (errorHandledStatus !== ErrorHandledStatus.IGNORED) {
         return result;
       }
@@ -503,28 +493,21 @@ class Sentinel {
    *     Returns undefined if there is no related taskLog.
    * @private
    */
-  handleBigQueryJobCompletedEvent_(event) {
+  async handleBigQueryJobCompletedEvent_(event) {
     const job = event.job;
     const eventName = event.eventName;
     const jobId = job.jobName.jobId;
     const jobStatus = job.jobStatus.state;
     this.logger.debug(`Task JobId[${jobId}] [${eventName}] [${jobStatus}]`);
     const filter = {property: 'jobId', value: jobId};
-    return this.taskLogDao.list([filter]).then((taskLogs) => {
-      if (taskLogs.length > 1) {
-        throw new Error(`Find more than one task with Job Id: ${jobId}`);
-      }
-      if (taskLogs.length === 1) {
-        const {id: taskLogId} = taskLogs[0];
-        if (jobStatus === JOB_STATUS_DONE) return this.finishTask_(taskLogId);
-        console.log(`Job Status is not DONE: `, event);
-        return this.taskLogDao.saveErrorMessage(taskLogId, job.jobStatus.error);
-      }
-      this.logger.debug(`BigQuery JobId[${jobId}] is not a Sentinel Job.`);
-    }).catch((error) => {
-      console.error(error);
-      throw error;
-    });
+    const taskLogs = await this.taskLogDao.list([filter]);
+    if (taskLogs.length > 1) {
+      throw new Error(`Find more than one task with Job Id: ${jobId}`);
+    }
+    if (taskLogs.length === 1) {
+      return this.finishTask_(taskLogs[0].id);
+    }
+    this.logger.debug(`BigQuery JobId[${jobId}] is not a Sentinel Job.`);
   }
 
   /**
@@ -542,38 +525,21 @@ class Sentinel {
    *     Returns undefined if there is no related taskLog.
    * @private
    */
-  handleBigQueryDataTransferTask_(payload) {
+  async handleBigQueryDataTransferTask_(payload) {
     const jobId = payload.name;
     const jobStatus = payload.state;
+    this.logger.debug(`Data Transfer job[${jobId}] status: ${jobStatus}`);
+    const filter = { property: 'jobId', value: jobId };
+    const taskLogs = await this.taskLogDao.list([filter]);
+    if (taskLogs.length > 1) {
+      throw new Error(`Find more than one task with Job Id: ${jobId}`);
+    }
+    if (taskLogs.length === 1) {
+      return this.finishTask_(taskLogs[0].id);
+    }
     this.logger.debug(
-        `The JobId of Data Transfer Run: ${jobId} and the status is: ${jobStatus}`
+      `BigQuery Data Transfer JobId[${jobId}] is not a Sentinel Job.`
     );
-    const filter = {property: 'jobId', value: jobId};
-    return this.taskLogDao
-        .list([filter])
-        .then((taskLogs) => {
-          if (taskLogs.length > 1) {
-            throw new Error(`Find more than one task with Job Id: ${jobId}`);
-          }
-          if (taskLogs.length === 1) {
-            const {id: taskLogId} = taskLogs[0];
-            if (jobStatus === DATATRANSFER_JOB_STATUS_DONE) {
-              return this.finishTask_(taskLogId);
-            }
-            this.logger.info(`Job Status is not DONE: `, payload);
-            return this.taskLogDao.saveErrorMessage(
-                taskLogId,
-                payload.errorStatus
-            );
-          }
-          this.logger.debug(
-              `BigQuery Data Transfer JobId[${jobId}] is not a Sentinel Job.`
-          );
-        })
-        .catch((error) => {
-          this.logger.error(error);
-          throw error;
-        });
   }
 }
 

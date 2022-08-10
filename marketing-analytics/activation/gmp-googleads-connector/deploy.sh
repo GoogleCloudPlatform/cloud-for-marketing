@@ -62,8 +62,10 @@ INTEGRATION_APIS_DESCRIPTION=(
   "Campaign Manager Conversions Upload"
   "Search Ads 360 Conversions Upload"
   "Google Ads API for Customer Match Upload"
+  "Google Ads API for Call Conversions Upload"
   "Google Ads API for Click Conversions Upload"
   "Google Ads API for Enhanced Conversions Upload"
+  "Google Ads API for Offline UserData Upload (OfflineUserDataService)"
   "Google Sheets API for Google Ads Conversions Upload based on Google Sheets"
   "SFTP Upload for Search Ads 360 Business Data Upload"
   "Pub/Sub Messages Send"
@@ -76,6 +78,8 @@ INTEGRATION_APIS=(
   "analytics.googleapis.com"
   "dfareporting.googleapis.com doubleclicksearch.googleapis.com"
   "doubleclicksearch.googleapis.com"
+  "googleads.googleapis.com"
+  "googleads.googleapis.com"
   "googleads.googleapis.com"
   "googleads.googleapis.com"
   "googleads.googleapis.com"
@@ -93,8 +97,10 @@ INTEGRATION_APIS_CODE=(
   "CM"
   "SA"
   "ACM"
+  "CALL"
   "ACLC"
   "ACA"
+  "AOUD"
   "GS"
   "SFTP"
   "PB"
@@ -806,6 +812,11 @@ trigger_transport(){
 # Invoke the Cloud Function 'API requester' directly based on a local file.
 # Note: The API configuration is still expected to be on Google Cloud. The API
 # configuration needs to be updated to Firestore for any modification.
+# Exampales:
+# 1. Test based on a GCS file:
+#    ./deploy.sh run_test_locally 'file_path_in_gcs' 'bucket_name'
+# 2. Test based on a local file (only works for Pub/sub based APIs):
+#    ./deploy.sh run_test_locally './loacl_file_path'
 # Globals:
 #   SA_KEY_FILE
 # Arguments:
@@ -829,7 +840,7 @@ EOF
   fi
   printf '%s\n' "  Setting environment variable of auth: ${auth}"
   env "${auth}" node -e "require('./index.js').localApiRequester(\
-    '${PROJECT_NAMESPACE}', process.argv[1])" "$@"
+    '${PROJECT_NAMESPACE}', process.argv[1], process.argv[2])" "$@"
 }
 
 #######################################

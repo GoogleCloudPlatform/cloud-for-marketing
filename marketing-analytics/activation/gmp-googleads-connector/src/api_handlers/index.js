@@ -27,12 +27,16 @@ const sftpUpload = require('./sftp_upload.js');
 const sheetsLoadCsv = require('./sheets_load_csv.js');
 const saConversionsInsert = require('./sa_conversions_insert.js');
 const pubsubMessageSend = require('./pubsub_message_send.js');
+const googleAdsCallConversionUpload = require(
+  './google_ads_call_conversions_upload.js');
 const googleAdsClickConversionUpload = require(
     './google_ads_click_conversions_upload.js');
 const googleAdsCustomerMatchUpload = require(
   './google_ads_customer_match_upload.js');
 const googleAdsConversionAdjustmentUpload = require(
   './google_ads_conversion_adjustments_upload.js');
+const googleAdsOfflineUserDataJobUpload = require(
+  './google_ads_offline_userdata_job.js');
 const ga4MeasurementProtocol = require('./ga4_measurement_protocol.js');
 
 const {GoogleAnalyticsConfig} = gaDataImport;
@@ -44,6 +48,7 @@ const {SearchAdsConfig} = saConversionsInsert;
 const {PubSubMessageConfig} = pubsubMessageSend;
 const {GoogleAdsConversionConfig} = googleAdsClickConversionUpload;
 const {GoogleAdsCustomerMatchConfig} = googleAdsCustomerMatchUpload;
+const { GoogleAdsOfflineUserDataJobConfig } = googleAdsOfflineUserDataJobUpload;
 const {MpGa4IntegrationConfig} = ga4MeasurementProtocol;
 
 /**
@@ -78,9 +83,11 @@ const API_HANDLERS = Object.freeze({
   [sheetsLoadCsv.name]: sheetsLoadCsv,
   [saConversionsInsert.name]: saConversionsInsert,
   [pubsubMessageSend.name]: pubsubMessageSend,
+  [googleAdsCallConversionUpload.name]: googleAdsCallConversionUpload,
   [googleAdsClickConversionUpload.name]: googleAdsClickConversionUpload,
   [googleAdsCustomerMatchUpload.name]: googleAdsCustomerMatchUpload,
   [googleAdsConversionAdjustmentUpload.name]: googleAdsConversionAdjustmentUpload,
+  [googleAdsOfflineUserDataJobUpload.name]: googleAdsOfflineUserDataJobUpload,
   [ga4MeasurementProtocol.name]: ga4MeasurementProtocol,
 });
 
