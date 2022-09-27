@@ -879,6 +879,11 @@ EOF
   fi
 }
 
+# For compatibility to the published doc.
+copy_file_to_gcs(){
+  copy_file_to_start "$@"
+}
+
 DEFAULT_INSTALL_TASKS=(
   "print_welcome Tentacles"
   load_config
