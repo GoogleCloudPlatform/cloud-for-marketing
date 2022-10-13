@@ -1,7 +1,16 @@
 # Release Notes
 
-## 2.3.0 (2022-08-10)
+## 2.4.0 (2022-10-14)
 
+### New Features
+- User list name is supported by Google Ads Customer Match upload (ACM)
+connector. If the list doesn't exist, it will be created automatically.
+Requires new configuration items. For details, see README
+- Fixed an issue related to 'Channel credentials must be a ChannelCredentials
+ object' error
+
+
+## 2.3.0 (2022-08-10)
 
 ### Integrated APIs
 

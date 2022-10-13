@@ -18,6 +18,7 @@
 
 'use strict';
 
+const { createGzip, gzip } = require('zlib');
 const {utils: {wait}, storage: {StorageFile}} = require(
     '@google-cloud/nodejs-common');
 const {ErrorOptions} = require('../task_config/task_config_dao.js');
@@ -87,17 +88,31 @@ class ReportTask extends BaseTask {
             projectId: destination.projectId,
             keyFilename: destination.keyFilename,
           });
+      let downloadReport;
       if (!content.pipe) {
-        storageFile.getFile().save(content);
+        this.logger.debug('Start to write string to gcs');
+        if (this.needCompression_(name)) {
+          downloadReport = new Promise((resolve, reject) => {
+            gzip(content, ((error, buffer) => {
+              if (error) reject(error);
+              resolve(storageFile.getFile().save(buffer));
+            }));
+          });
+        } else {
+          downloadReport = storageFile.getFile().save(content);
+        }
+        downloadReport = downloadReport.then(() => true);
       } else {
         this.logger.debug('Start to output stream to gcs');
-        const timeoutWatcher = wait(TIMEOUT_IN_MILLISECOND, false);
         const outputStream = storageFile.getFile().createWriteStream(
           { resumable: false }
         );
-        const downloadReport = new Promise((resolve, reject) => {
-          content
-            .on('end', () => outputStream.emit('finish'))
+        const inputStream = this.needCompression_(name)
+          ? content.pipe(createGzip())
+          : content;
+        downloadReport = new Promise((resolve, reject) => {
+          inputStream
+            .on('end', () => outputStream.end())
             .on('error', (error) => outputStream.emit('error', error))
             .pipe(outputStream)
             .on('error', (error) => reject(error))
@@ -107,9 +122,10 @@ class ReportTask extends BaseTask {
             });
         }
         );
-        const result = await Promise.race([timeoutWatcher, downloadReport]);
-        if (!result) throw new Error('Timeout');
       }
+      const timeoutWatcher = wait(TIMEOUT_IN_MILLISECOND, false);
+      const result = await Promise.race([timeoutWatcher, downloadReport]);
+      if (!result) throw new Error('Timeout');
       return {parameters: this.appendParameter({reportFile: {bucket, name,}})};
     } catch (error) {
       if (report.isFatalError(error.toString())) {
@@ -130,6 +146,16 @@ class ReportTask extends BaseTask {
    */
   getReport() {
     return this.options.buildReport(this.config.source);
+  }
+
+  /**
+   * Returns whether the report need to be compressed.
+   * @param {string} name File name.
+   * @return {boolean}
+   * @private
+   */
+  needCompression_(name) {
+    return name.toLowerCase().endsWith('.gz')
   }
 }
 

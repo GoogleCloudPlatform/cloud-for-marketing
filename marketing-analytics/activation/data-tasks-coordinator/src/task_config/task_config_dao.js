@@ -19,6 +19,7 @@
 
 'use strict';
 
+const lodash = require('lodash');
 const {firestore: {DataSource, DataAccessObject}} = require(
     '@google-cloud/nodejs-common');
 
@@ -76,6 +77,13 @@ let ErrorOptions;
 const DEFAULT_RETRY_TIMES = 3;
 
 /**
+ * A task config can inherit settings from its 'ancestor' task config, and so
+ * on. To prevent a loop, this is the most allowed hierarchy generations.
+ * @const{number}
+ */
+const MAX_ALLOWED_GENERATIONS = 10;
+
+/**
  * Behaviors for how to export the data when the target (output) table exists
  * in BigQuery.
  * See:
@@ -123,6 +131,23 @@ class TaskConfigDao extends DataAccessObject {
     super('TaskConfig', namespace, dataSource);
   }
 
+  /**
+   * Gets the task configuration with ancestor task configuration is inherited.
+   * @param {string|number} id TaskConfig Id.
+   * @param {number=} generation The generation of the loaded TaskConfig. It
+   *   can't be greater than `MAX_ALLOWED_GENERATIONS` to prevent a hierarchy
+   *   loop.
+   * @return {!Promise<(!Entity|undefined)>}
+   */
+  async load(id, generation = 0) {
+    if (generation > MAX_ALLOWED_GENERATIONS)
+      throw new Error(`TaskConfig ${id} Exceed the max inheritable times.`);
+    const config = await super.load(id);
+    if (!config || !config.ancestor)
+      return config;
+    const ancestor = await this.load(config.ancestor, ++generation);
+    return lodash.merge({}, ancestor, config);
+  }
 }
 
 module.exports = {

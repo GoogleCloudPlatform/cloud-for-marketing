@@ -28,6 +28,7 @@ const {
   resources: {
     GoogleAdsField,
     OfflineUserDataJob,
+    UserList,
   },
   services: {
     CreateOfflineUserDataJobRequest,
@@ -50,6 +51,9 @@ const {
   enums: {
     OfflineUserDataJobTypeEnum: { OfflineUserDataJobType },
     OfflineUserDataJobStatusEnum: { OfflineUserDataJobStatus },
+    UserListMembershipStatusEnum: { UserListMembershipStatus },
+    UserListTypeEnum: { UserListType },
+    CustomerMatchUploadKeyTypeEnum: { CustomerMatchUploadKeyType },
   },
 } = googleAdsLib;
 const {GoogleAdsApi} = require('google-ads-api');
@@ -154,13 +158,18 @@ let ConversionConfig;
 /**
  * Configuration for uploading customer match to Google Ads, includes:
  * customer_id, login_customer_id, list_id and operation.
+ * If audience list_id is not present, 'list_name' and 'upload_key_type' need to
+ * be there so they can be used to create a customer match user list.
  * operation must be one of the two: 'create' or 'remove'.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
+ * @see https://developers.google.com/google-ads/api/reference/rpc/latest/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
  * @typedef {{
- *   customer_id: string,
- *   login_customer_id: string,
- *   list_id: string,
- *   operation: 'create'|'remove',
+ *   customer_id: (string|number),
+ *   login_customer_id: (string|number),
+ *   list_id: (string|undefined),
+ *   list_name: (string|undefined),
+ *   upload_key_type: ('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
+ *   operation: ('create'|'remove'),
  * }}
  */
 let CustomerMatchConfig;
@@ -171,12 +180,17 @@ let CustomerMatchConfig;
  * 'operation' should be one of the two: 'create' or 'remove',
  * 'type' is OfflineUserDataJobType, it can be 'CUSTOMER_MATCH_USER_LIST' or
  * 'STORE_SALES_UPLOAD_FIRST_PARTY'.
+ * For job type 'CUSTOMER_MATCH_USER_LIST', if `list_id` is not present,
+ * 'list_name' and 'upload_key_type' need to be there so they can be used to
+ *  create a customer match user list.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/OfflineUserDataJob
  * @typedef {{
- *   customer_id: string,
- *   login_customer_id: string,
- *   list_id: (undefined|string),
- *   operation: 'create'|'remove',
+ *   customer_id: (string|number),
+ *   login_customer_id: (string|number),
+ *   list_id: (string|undefined),
+ *   list_name: (string|undefined),
+ *   upload_key_type: ('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
+ *   operation: ('create'|'remove'),
  *   type: !OfflineUserDataJobType,
  *   storeSalesMetadata: (undefined|object),
  * }}
@@ -625,6 +639,83 @@ class GoogleAds {
   }
 
   /**
+   * Gets the user list_id of a given list name and upload key type. It
+   * only looks for a CRM_BASED and OPEN list.
+   * @param {!CustomerMatchConfig} customerMatchConfig
+   * @return {number|undefined} User list_id if it exists.
+   */
+  async getCustomerMatchUserListId(customerMatchConfig) {
+    const customerId = this.getCleanCid_(customerMatchConfig.customer_id);
+    const loginCustomerId = this.getCleanCid_(
+      customerMatchConfig.login_customer_id);
+    const listName = customerMatchConfig.list_name;
+    const uploadKeyType = customerMatchConfig.upload_key_type;
+    const reportConfig = {
+      entity: 'user_list',
+      attributes: [
+        'user_list.id',
+        'user_list.resource_name',
+      ],
+      constraints: {
+        'user_list.name': listName,
+        'customer.id': customerId,
+        'user_list.type': UserListType.CRM_BASED,
+        'user_list.membership_status': UserListMembershipStatus.OPEN,
+        'user_list.crm_based_user_list.upload_key_type': uploadKeyType,
+      },
+    };
+    const userlists =
+      await this.getReport(customerId, loginCustomerId, reportConfig);
+    return userlists.length === 0 ? undefined : userlists[0].user_list.id;
+  }
+
+  /**
+   * Creates the user list based on a given customerMatchConfig and returns the
+   * Id. The user list would be a CRM_BASED type.
+   * Trying to create a list with an used name will fail.
+   * @param {!CustomerMatchConfig} customerMatchConfig
+   * @return {number} The created user list id. Note this is not the resource
+   *   name.
+   */
+  async createCustomerMatchUserList(customerMatchConfig) {
+    const customerId = this.getCleanCid_(customerMatchConfig.customer_id);
+    const loginCustomerId = this.getCleanCid_(
+      customerMatchConfig.login_customer_id);
+    const listName = customerMatchConfig.list_name;
+    const uploadKeyType = customerMatchConfig.upload_key_type;
+    const userList = UserList.create({
+      name: listName,
+      type: UserListType.CRM_BASED,
+      crm_based_user_list: { upload_key_type: uploadKeyType },
+    });
+    const options = {
+      validate_only: this.debugMode, // when true makes no changes
+      partial_failure: true, // Will still create the non-failed entities
+    };
+    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const response = await customer.userLists.create([userList], options);
+    const { results, partial_failure_error: failed } = response;
+    if (this.logger.isDebugEnabled()) {
+      this.logger.debug(`Created crm userlist from`, customerMatchConfig);
+    }
+    if (failed) {
+      const failures = failed.errors.map(({ message }) => message).join(' ');
+      this.logger.info('partial_failure_error:', failures);
+      throw new Error(failures);
+    }
+    if (!results[0]) {
+      if (this.debugMode) {
+        throw new Error('No UserList was created in DEBUG mode.');
+      } else {
+        throw new Error('No UserList was created.');
+      }
+    }
+    const resourceName = results[0].resource_name;
+    const splitted = resourceName.split('/');
+    return splitted[splitted.length - 1];
+  }
+
+  /**
    * Returns the function to send out a request to Google Ads API with
    * user ids for Customer Match upload
    * @param {!CustomerMatchConfig} customerMatchConfig
@@ -792,8 +883,6 @@ class GoogleAds {
     return OfflineUserDataJobStatus[jobs[0].offline_user_data_job.status];
   }
 
-  //resource_name: 'customers/8368692804/offlineUserDataJobs/23130531867'
-  //'customers/8368692804/offlineUserDataJobs/23232922761'
   /**
    * Creates a OfflineUserDataJob and returns resource name.
    * @param {OfflineUserDataJobConfig} config Offline user data job config.
@@ -818,7 +907,7 @@ class GoogleAds {
     } else if (type.startsWith('STORE_SALES')) {
       // If there is StoreSalesMetadata in the config
       if (config.storeSalesMetadata) {
-        job.store_sales_list_metadata = config.storeSalesMetadata;
+        job.store_sales_metadata = config.storeSalesMetadata;
       }
     } else {
       throw new Error(`UNSUPPORTED OfflineUserDataJobType: ${type}.`);

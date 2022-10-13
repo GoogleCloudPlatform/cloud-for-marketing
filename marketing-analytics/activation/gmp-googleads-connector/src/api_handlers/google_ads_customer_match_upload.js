@@ -21,7 +21,7 @@
 
 const {
   api: {googleads: {GoogleAds, CustomerMatchConfig}},
-  utils: {apiSpeedControl, getProperValue, BatchResult},
+  utils: { apiSpeedControl, getProperValue, BatchResult, getLogger },
 } = require('@google-cloud/nodejs-common');
 
 /**
@@ -61,6 +61,35 @@ let GoogleAdsCustomerMatchConfig;
 exports.GoogleAdsCustomerMatchConfig = GoogleAdsCustomerMatchConfig;
 
 /**
+ *
+ * @param {GoogleAds} googleAds Injected Google Ads instance.
+ * @param {{
+ *   list_id:(string|undefined),
+ *   list_name:(string|undefined),
+ *   upload_key_type:('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
+ * }} config
+ * @return User list Id.
+ */
+const getOrCreateUserList = async (googleAds, config) => {
+  const logger = getLogger(`API.${exports.name}`);
+  if (config.list_id) return config.list_id;
+  if (!config.list_name || !config.upload_key_type) {
+    throw new Error(
+      `Missing user list info in ${JSON.stringify(config)}`);
+  }
+  const listId = await googleAds.getCustomerMatchUserListId(config);
+  if (listId) {
+    logger.info(`Get UserList id ${listId}.`);
+    return listId;
+  } else {
+    const createdListId = await googleAds.createCustomerMatchUserList(config);
+    logger.info(`Create UserList id ${createdListId}.`);
+    return createdListId;
+  }
+}
+exports.getOrCreateUserList = getOrCreateUserList;
+
+/**
  * Sends out the data as user ids to Google Ads API.
  * This function exposes a googleAds parameter for test
  * @param {GoogleAds} googleAds Injected Google Ads instance.
@@ -70,13 +99,23 @@ exports.GoogleAdsCustomerMatchConfig = GoogleAdsCustomerMatchConfig;
  * @param {!GoogleAdsCustomerMatchConfig} config
  * @return {!Promise<BatchResult>}
  */
-const sendDataInternal = (googleAds, records, messageId, config) => {
+const sendDataInternal = async (googleAds, records, messageId, config) => {
+  const { customerMatchConfig } = config;
+  try {
+    customerMatchConfig.list_id =
+      await getOrCreateUserList(googleAds, customerMatchConfig);
+  } catch (error) {
+    return {
+      result: false,
+      errors: [error.message || error.toString()],
+    };
+  }
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
   const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
   const managedSend = apiSpeedControl(recordsPerRequest, qps, qps);
-  const configedUpload = googleAds.getUploadCustomerMatchFn(
-      config.customerMatchConfig);
+  const configedUpload =
+    googleAds.getUploadCustomerMatchFn(customerMatchConfig);
   return managedSend(configedUpload, records, messageId);
 };
 

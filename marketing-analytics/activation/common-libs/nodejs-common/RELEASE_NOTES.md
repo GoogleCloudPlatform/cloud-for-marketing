@@ -1,6 +1,11 @@
 # Release Notes
 
-## 1.2.0 (2022-08-10)
+## 1.4.0 (2022-10-10)
+
+### Add new feature: Query or create Google Ads Customer Match User Lists
+### Update dependent libraries to the latest version to solve an issue related to 'Channel credentials must be a ChannelCredentials object' error
+
+## 1.3.0 (2022-08-10)
 
 ### Update to the v11 of the Google Ads API
 ### Add new feature: Google Ads call conversions upload

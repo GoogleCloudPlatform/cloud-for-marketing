@@ -308,7 +308,7 @@ Follow these steps to get the dashboard ready:
 
 1. Join the [Tentacles External Users][group] group and wait for approval.
 2. After you joined the group, you can visit the [dashboard template][template].
-3. Click button `USE TEMPLATE` then `Copy Report` to create your own copy.
+3. Click button `Edit and Share` then `Copy Report` to create your own copy.
 4. In the Data Studio copied dashboard, use menu `Resource` -
    `Manage added data sources` to reconnect those data sources to your BigQuery.
    For more details, see this [tutorial][tutorial].
@@ -793,7 +793,8 @@ Attributed to a Google Click Identifier (`gclid`):
     "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
     "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
     "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-    "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE]",
+    "list_name": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+    "upload_key_type": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID",
     "operation": "create|remove"
   }
 }
@@ -803,11 +804,16 @@ Attributed to a Google Click Identifier (`gclid`):
   - `developerToken`, Developer token to access the API.
   - `customer_id`, Google Ads Customer account Id
   - `login_customer_id`, Login customer account Id (MCC Account Id)
-  - `list_id`, User List id for customer match audience
-  - `list_type`, Must be one of the following: hashed_email, hashed_phone_number, mobile_id, third_party_user_id or address_info; [Read more about id types][user_identifier]
+  - `list_id`, User List id for customer match audience. If `list_id` is
+  available `list_name` and `upload_key_type` will be ignored.
+  - `list_name`, User List name for customer match audience. If the list could
+  not be found, it will be created automatically.
+  - `upload_key_type`, Customer match upload key types. Must be one of the
+  following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
+  [Read more about upload key types][upload_key_type]
   - `operation`, Can be either create or remove in single file; [Read more about operation][user_data_operation]
 
-[user_identifier]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier
+[upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
 [user_data_operation]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
 
 Tip: For more details see

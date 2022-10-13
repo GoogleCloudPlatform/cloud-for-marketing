@@ -25,6 +25,8 @@ const {
   storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');
 
+const { getOrCreateUserList } = require('./google_ads_customer_match_upload.js');
+
 /**
  * @see https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match?hl=en#customer_match_considerations
  * The operations collection for each AddOfflineUserDataJobOperationsRequest can
@@ -93,8 +95,13 @@ const sendDataInternal = async (googleAds, message, messageId, config) => {
     records = message;
   }
   try {
+    const { offlineUserDataJobConfig } = config;
+    if (offlineUserDataJobConfig.type.startsWith('CUSTOMER_MATCH')) {
+      offlineUserDataJobConfig.list_id =
+        await getOrCreateUserList(googleAds, offlineUserDataJobConfig);
+    }
     const jobResourceName =
-      await googleAds.createOfflineUserDataJob(config.offlineUserDataJobConfig);
+      await googleAds.createOfflineUserDataJob(offlineUserDataJobConfig);
     logger.info('jobResourceName: ', jobResourceName);
     const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
@@ -105,7 +112,7 @@ const sendDataInternal = async (googleAds, message, messageId, config) => {
     const result = await managedSend(configedUpload, records, messageId);
     logger.info('add userdata result: ', result);
     await googleAds.runOfflineUserDataJob(
-      config.offlineUserDataJobConfig, jobResourceName);
+      offlineUserDataJobConfig, jobResourceName);
     return result;
   } catch (error) {
     logger.error('Error in UserdataOfflineDataService: ', error);

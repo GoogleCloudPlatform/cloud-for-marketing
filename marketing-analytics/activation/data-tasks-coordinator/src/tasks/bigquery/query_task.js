@@ -35,6 +35,12 @@ const {
  *   source:{
  *     sql:(string|undefined),
  *     file:(!StorageFileConfig|undefined),
+ *     reportToRefresh: ({
+ *        datasetId: string,
+ *        baseTable: string,
+ *        deltaTable: string,
+ *        reportTask: string
+ *     }|undefined),
  *     external:(boolean|undefined),
  *   },
  *   destination:{
@@ -84,7 +90,7 @@ class QueryTask extends BigQueryAbstractTask {
       const { jobReference } = job.metadata;
       const { jobId } = jobReference;
       const status = job.metadata.status.state;
-      const sqlInfo = this.config.source.sql || this.config.source.file.name;
+      const sqlInfo = this.getSqlInfo_();
       this.logger.info(`Job[${jobId}] status ${status} on query [${sqlInfo}]`);
       return {
         jobId,
@@ -95,6 +101,21 @@ class QueryTask extends BigQueryAbstractTask {
       this.logger.error(options.query);
       throw (error);
     }
+  }
+
+  /**
+   * Returns a string as the label of the sql for logs.
+   * @return {!Promise<string>}
+   * @private
+   */
+  getSqlInfo_() {
+    const { sql, file, reportToRefresh } = this.config.source;
+    if (sql) return sql;
+    if (file) return `file: ${file.name}`;
+    if (reportToRefresh) {
+      return `refresh report: ${reportToRefresh.reportTask}`;
+    }
+    return 'Unknown sql info';
   }
 
   /**
@@ -111,7 +132,50 @@ class QueryTask extends BigQueryAbstractTask {
           .getInstance(bucket, name, {projectId}).loadContent(0);
       return replaceParameters(sql, this.parameters);
     }
+    if (this.config.source.reportToRefresh) {
+      const sql =
+        await this.getRefreshSqlFromReport_(this.config.source.reportToRefresh);
+      return sql;
+    }
     throw new Error(`Fail to find source sql or file for Query Task `);
+  }
+
+  /**
+   * Returns a Promise of the query sql based on configuration.
+   * @return {!Promise<string>}
+   * @private
+   */
+  async getRefreshSqlFromReport_(config) {
+    const { datasetId, baseTable, deltaTable, reportTask } = config;
+    const { source } = await this.options.taskConfigDao.load(reportTask);
+    if (source.target !== 'ADS') {
+      throw new Error(
+        `Unsupported ${taskConfig.source.target} report for refresh query.`);
+    }
+    const { attributes, segments } = source.config.reportQuery;
+    const columns = attributes.concat(segments);
+    return `
+      WITH date_range AS (
+        SELECT MIN(segments.date) startDate, MAX(segments.date) endDate
+        FROM \`${datasetId}.${deltaTable}\`
+      )
+      SELECT * EXCEPT (updated, rank)
+      FROM (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (
+            PARTITION BY ${columns.join(',')} ORDER BY updated DESC
+          ) AS rank
+        FROM (
+          SELECT *, 1 AS updated FROM \`${datasetId}.${deltaTable}\`
+          UNION ALL
+          SELECT *, 0 AS updated FROM \`${datasetId}.${baseTable}\`
+        )
+      )
+      WHERE rank = 1
+        AND segments.date BETWEEN
+          (SELECT startDate FROM date_range) AND (SELECT endDate FROM date_range)
+    `;
   }
 }
 

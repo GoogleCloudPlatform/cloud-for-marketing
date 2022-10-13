@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/nodejs-common",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A NodeJs common library for solutions based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",
@@ -16,25 +16,25 @@
   },
   "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/common-libs/nodejs-common/README.md",
   "dependencies": {
-    "@google-cloud/aiplatform": "^1.19.0",
-    "@google-cloud/automl": "^2.5.2",
-    "@google-cloud/bigquery": "^6.0.0",
-    "@google-cloud/datastore": "^6.6.2",
-    "@google-cloud/firestore": "^5.0.2",
-    "@google-cloud/logging-winston": "^5.1.0",
-    "@google-cloud/pubsub": "^3.0.1",
-    "@google-cloud/storage": "^6.0.1",
-    "@google-cloud/scheduler": "^3.0.0",
-    "gaxios": "^5.0.0",
-    "google-ads-api": "^11.0.0",
-    "google-ads-node": "^9.0.0",
-    "google-auth-library": "^8.0.2",
-    "googleapis": "^100.0.0",
-    "winston": "^3.7.2",
+    "@google-cloud/aiplatform": "^2.3.0",
+    "@google-cloud/automl": "^3.1.0",
+    "@google-cloud/bigquery": "^6.0.3",
+    "@google-cloud/datastore": "^7.0.0",
+    "@google-cloud/firestore": "^6.3.0",
+    "@google-cloud/logging-winston": "^5.1.5",
+    "@google-cloud/pubsub": "^3.2.0",
+    "@google-cloud/storage": "^6.5.2",
+    "@google-cloud/scheduler": "^3.0.4",
+    "gaxios": "^5.0.2",
+    "google-ads-api": "^11.1.0",
+    "google-ads-node": "^9.1.0",
+    "google-auth-library": "^8.5.2",
+    "googleapis": "^108.0.0",
+    "winston": "^3.8.2",
     "lodash": "^4.17.21"
   },
   "devDependencies": {
-    "jasmine": "^4.1.0"
+    "jasmine": "^4.4.0"
   },
   "scripts": {
     "test": "node node_modules/jasmine/bin/jasmine"
