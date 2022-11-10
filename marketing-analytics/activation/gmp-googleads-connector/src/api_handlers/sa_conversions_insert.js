@@ -29,6 +29,7 @@ const {
   },
   utils: {apiSpeedControl, getProperValue, BatchResult, getLogger},
 } = require('@google-cloud/nodejs-common');
+const { getOption } = require('./handler_utilities.js');
 
 /**
  * Conversions per request.
@@ -60,6 +61,7 @@ exports.defaultOnGcs = false;
  *   numberOfThreads:(number|undefined),
  *   saConfig:!InsertConversionsConfig,
  *   availabilities:(!Array<!AvailabilityConfig>|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let SearchAdsConfig;
@@ -75,7 +77,7 @@ exports.SearchAdsConfig = SearchAdsConfig;
  * @return {!Promise<BatchResult>}
  */
 const sendData = async (records, messageId, config) => {
-  const doubleClickSearch = new DoubleClickSearch();
+  const doubleClickSearch = new DoubleClickSearch(getOption(config));
   const logger = getLogger('API.SA');
   if (records.trim() === '') {
     /** @type {!BatchResult} */

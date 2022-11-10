@@ -73,33 +73,43 @@ class Spreadsheets {
   constructor(spreadsheetId, env = process.env) {
     /** @const {string} */
     this.spreadsheetId = spreadsheetId;
-    const authClient = new AuthClient(API_SCOPES, env);
-    const auth = authClient.getDefaultAuth();
-    /** @const {!!google.sheets} */
-    this.instance = google.sheets({
-      version: API_VERSION,
-      auth,
-    });
+    this.authClient = new AuthClient(API_SCOPES, env);
     /**
      * Logger object from 'log4js' package where this type is not exported.
      */
     this.logger = getLogger('API.GS');
-    this.logger.debug(`Init ${this.constructor.name} for ${
-        this.spreadsheetId} in Debug Mode.`);
+  }
+
+  /**
+   * Prepares the Google Sheets instance.
+   * @return {!google.sheets}
+   * @private
+   */
+  async getApiClient_() {
+    if (this.sheets) return this.sheets;
+    await this.authClient.prepareCredentials();
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.sheets = google.sheets({
+      version: API_VERSION,
+      auth: this.authClient.getDefaultAuth(),
+    });
+    return this.sheets;
   }
 
   /**
    * Gets the Sheet Id of the given Spreadsheet and possible Sheet name. If the
    * Sheet name is missing, it will return the first Sheet's Id.
    * @param {string} sheetName Name of the Sheet.
-   * @return {!Promise<number>} Sheet Id.
+   * @return {!Promise<number>} The ID for the sheet that is unique to the
+   *   spreadsheet.
    */
   async getSheetId(sheetName) {
     const request = /** @type{Params$Resource$Spreadsheets$Get} */ {
       spreadsheetId: this.spreadsheetId,
       ranges: sheetName,
     };
-    const response = await this.instance.spreadsheets.get(request);
+    const sheets = await this.getApiClient_();
+    const response = await sheets.spreadsheets.get(request);
     const sheet = response.data.sheets[0];
     this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
     return sheet.properties.sheetId;
@@ -117,7 +127,8 @@ class Spreadsheets {
       range: sheetName,
     };
     try {
-      const response = await this.instance.spreadsheets.values.clear(request);
+      const sheets = await this.getApiClient_();
+      const response = await sheets.spreadsheets.values.clear(request);
       const data = response.data;
       this.logger.debug(`Clear sheet[${sheetName}}]: `, data);
     } catch (error) {
@@ -169,7 +180,8 @@ class Spreadsheets {
       ranges: sheetName,
     };
     try {
-      const response = await this.instance.spreadsheets.get(request);
+      const sheets = await this.getApiClient_();
+      const response = await sheets.spreadsheets.get(request);
       const sheet = response.data.sheets[0];
       const sheetId = sheet.properties.sheetId;
       const rowCount = sheet.properties.gridProperties.rowCount;
@@ -191,7 +203,7 @@ class Spreadsheets {
               columnCount}] to [${targetRows}, ${targetColumns}]`,
           JSON.stringify(requests.resource.requests));
       if (requests.resource.requests.length > 0) {
-        const {data} = await this.instance.spreadsheets.batchUpdate(requests);
+        const { data } = await sheets.spreadsheets.batchUpdate(requests);
         this.logger.debug(`Reshape Sheet [${sheetName}]: `, data);
       } else {
         this.logger.debug('No need to reshape.');
@@ -220,7 +232,8 @@ class Spreadsheets {
       numberOfLines: data.trim().split('\n').length,
     };
     try {
-      const response = await this.instance.spreadsheets.batchUpdate(request);
+      const sheets = await this.getApiClient_();
+      const response = await sheets.spreadsheets.batchUpdate(request);
       const data = response.data;
       this.logger.debug(`Batch[${batchId}] uploaded: `, data);
       batchResult.result = true;

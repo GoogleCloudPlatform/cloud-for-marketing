@@ -23,6 +23,7 @@ const {
   api: {measurementprotocol: {MeasurementProtocol}},
   utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
+const { getDebug } = require('./handler_utilities.js');
 
 /**
  * Hits per request. Measurement Protocol(MP) has a value as 20.
@@ -70,7 +71,7 @@ exports.MeasurementProtocolConfig = MeasurementProtocolConfig;
  * @return {!Promise<!BatchResult>}
  */
 exports.sendData = (records, messageId, config) => {
-  const debug = !!config.debug;
+  const debug = getDebug(config.debug);
   const measurementProtocol = new MeasurementProtocol(debug);
   const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);

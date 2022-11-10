@@ -25,6 +25,7 @@ const {
   storage: {StorageFile},
   utils: {BatchResult},
 } = require('@google-cloud/nodejs-common');
+const { getOption } = require('./handler_utilities.js');
 
 /** API name in the incoming file name. */
 exports.name = 'GA';
@@ -48,6 +49,7 @@ exports.defaultOnGcs = true;
  *   dataImportHeader:(string|undefined),
  *   gaConfig:!DataImportConfig,
  *   clearOption:(!DataImportClearConfig|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let GoogleAnalyticsConfig;
@@ -90,7 +92,7 @@ const prepareFile = async (bucket, fileName, dataImportHeader = undefined) => {
  * @return {!BatchResult}
  */
 const sendData = (message, messageId, config) => {
-  const analytics = new Analytics();
+  const analytics = new Analytics(getOption(config));
   return sendDataInternal(analytics, message, messageId, config);
 }
 exports.sendData = sendData;

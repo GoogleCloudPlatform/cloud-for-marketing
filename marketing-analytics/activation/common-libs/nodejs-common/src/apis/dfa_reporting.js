@@ -34,7 +34,7 @@ const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/dfareporting',
   'https://www.googleapis.com/auth/dfatrafficking',
 ]);
-const API_VERSION = 'v3.5';
+const API_VERSION = 'v4';
 
 /**
  * Configuration for preparing conversions for Campaign Manager, includes:
@@ -65,7 +65,7 @@ let InsertConversionsConfig;
 /**
  * List of properties that will be take from the data file as elements of a
  * conversion.
- * See https://developers.google.com/doubleclick-advertisers/rest/v3.5/Conversion
+ * See https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion
  * @type {Array<string>}
  */
 const PICKED_PROPERTIES = [
@@ -87,14 +87,34 @@ class DfaReporting {
    *     variables.
    */
   constructor(env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    this.auth = authClient.getDefaultAuth();
-    /** @const {!google.dfareporting} */
-    this.instance = google.dfareporting({
-      version: API_VERSION,
-      auth: this.auth,
-    });
+    this.authClient = new AuthClient(API_SCOPES, env);
     this.logger = getLogger('API.CM');
+  }
+
+  /**
+    * Prepares the Google DfaReport API instance.
+    * @return {!google.dfareporting}
+    * @private
+    */
+  async getApiClient_() {
+    if (this.dfareporting) return this.dfareporting;
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.dfareporting = google.dfareporting({
+      version: API_VERSION,
+      auth: await this.getAuth_(),
+    });
+    return this.dfareporting;
+  }
+
+  /**
+   * Gets the auth object.
+   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
+   */
+  async getAuth_() {
+    if (this.auth) return this.auth;
+    await this.authClient.prepareCredentials();
+    this.auth = this.authClient.getDefaultAuth();
+    return this.auth;
   }
 
   /**
@@ -105,13 +125,14 @@ class DfaReporting {
    * @return {!Promise<string>}
    */
   async getProfileId(accountId) {
-    const {data: {items}} = await this.instance.userProfiles.list();
+    const dfareporting = await this.getApiClient_();
+    const { data: { items } } = await dfareporting.userProfiles.list();
     const profiles = items.filter(
         (profile) => profile.accountId === accountId
     );
     if (profiles.length === 0) {
-      throw new Error(`Fail to find profile of current user for CM account ${
-          accountId}`);
+      throw new Error(
+        `Failed to find profile of current user for CM account ${accountId}`);
     } else {
       const {profileId, userName, accountId, accountName,} = profiles[0];
       this.logger.debug(`Find UserProfile: ${profileId}[${userName}] for`
@@ -166,7 +187,8 @@ class DfaReporting {
         numberOfLines: lines.length,
       };
       try {
-        const response = await this.instance.conversions.batchinsert({
+        const dfareporting = await this.getApiClient_();
+        const response = await dfareporting.conversions.batchinsert({
           profileId: config.profileId,
           requestBody: requestBody,
         });
@@ -194,9 +216,9 @@ class DfaReporting {
    * ConversionStatus object. This function extras failed lines and error
    * messages based on the 'errors'.
    * For 'ConversionStatus', see:
-   *   https://developers.google.com/doubleclick-advertisers/rest/v3.5/ConversionStatus
+   *   https://developers.google.com/doubleclick-advertisers/rest/v4/ConversionStatus
    * For 'ConversionError', see:
-   *   https://developers.google.com/doubleclick-advertisers/rest/v3.5/ConversionStatus#ConversionError
+   *   https://developers.google.com/doubleclick-advertisers/rest/v4/ConversionStatus#ConversionError
    * @param {!BatchResult} batchResult
    * @param {!Array<!Schema$ConversionStatus>} statuses
    * @param {!Array<string>} lines The original input data.
@@ -232,7 +254,8 @@ class DfaReporting {
    * @return {!Promise<!Array<string>>}
    */
   async listUserProfiles() {
-    const {data: {items}} = await this.instance.userProfiles.list();
+    const dfareporting = await this.getApiClient_();
+    const { data: { items } } = await dfareporting.userProfiles.list();
     return items.map(({profileId, userName, accountId, accountName}) => {
       return `Profile: ${profileId}[${userName}] `
           + `Account: ${accountId}[${accountName}]`;
@@ -261,7 +284,7 @@ class DfaReporting {
    * Runs a report and return the file Id. As an asynchronized process, the
    * returned file Id will be a placeholder until the status changes to
    * 'REPORT_AVAILABLE' in the response of `getFile`.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v3.5/reports/run
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/run
    *
    * @param {{
    *   accountId:(string|undefined),
@@ -272,7 +295,8 @@ class DfaReporting {
    */
   async runReport(config) {
     const profileId = await this.getProfileForOperation_(config);
-    const response = await this.instance.reports.run({
+    const dfareporting = await this.getApiClient_();
+    const response = await dfareporting.reports.run({
       profileId,
       reportId: config.reportId,
       synchronous: false,
@@ -282,9 +306,9 @@ class DfaReporting {
 
   /**
    * Returns file url from a report. If the report status is 'REPORT_AVAILABLE',
-   * then return the apiUrl from the response; if the status is 'PROCESSING',
-   * returns undefined; otherwise throws an error.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v3.5/reports/get
+   * then return the apiUrl from the response; if the status is 'PROCESSING' or
+   * 'QUEUED', returns undefined as it is unfinished; otherwise throws an error.
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/get
    *
    * @param {{
    *   accountId:(string|undefined),
@@ -296,13 +320,14 @@ class DfaReporting {
    */
   async getReportFileUrl(config) {
     const profileId = await this.getProfileForOperation_(config);
-    const response = await this.instance.reports.files.get({
+    const dfareporting = await this.getApiClient_();
+    const response = await dfareporting.reports.files.get({
       profileId,
       reportId: config.reportId,
       fileId: config.fileId,
     });
-    const {data} = response;
-    if (data.status === 'PROCESSING') return;
+    const { data } = response;
+    if (data.status === 'PROCESSING' || data.status === 'QUEUED') return;
     if (data.status === 'REPORT_AVAILABLE') return data.urls.apiUrl;
     throw new Error(`Unsupported report status: ${data.status}`);
   }
@@ -314,7 +339,8 @@ class DfaReporting {
    * @return {!Promise<string>}
    */
   async downloadReportFile(url) {
-    const headers = await this.auth.getRequestHeaders();
+    const auth = await this.getAuth_();
+    const headers = await auth.getRequestHeaders();
     const response = await request({
       method: 'GET',
       headers,

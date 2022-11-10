@@ -126,17 +126,34 @@ class DoubleClickSearch {
    *     variables.
    */
   constructor(env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    this.auth = authClient.getDefaultAuth();
-    /** @const {!google.doubleclicksearch} */
-    this.instance = google.doubleclicksearch({
-      version: API_VERSION,
-      auth: this.auth,
-    });
-    /**
-     * Logger object from 'log4js' package where this type is not exported.
-     */
+    this.authClient = new AuthClient(API_SCOPES, env);
     this.logger = getLogger('API.DS');
+  }
+
+  /**
+   * Prepares the Google SA360 instance.
+   * @return {!google.doubleclicksearch}
+   * @private
+   */
+  async getApiClient_() {
+    if (this.doubleclicksearch) return this.doubleclicksearch;
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.doubleclicksearch = google.doubleclicksearch({
+      version: API_VERSION,
+      auth: await this.getAuth_(),
+    });
+    return this.doubleclicksearch;
+  }
+
+  /**
+   * Gets the auth object.
+   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
+   */
+  async getAuth_() {
+    if (this.auth) return this.auth;
+    await this.authClient.prepareCredentials();
+    this.auth = this.authClient.getDefaultAuth();
+    return this.auth;
   }
 
   /**
@@ -155,7 +172,8 @@ class DoubleClickSearch {
     });
     this.logger.debug('Sending out availabilities', availabilities);
     try {
-      const response = await this.instance.conversion.updateAvailability(
+      const doubleclicksearch = await this.getApiClient_();
+      const response = await doubleclicksearch.conversion.updateAvailability(
           {requestBody: {availabilities}});
       this.logger.debug('Get response: ', response);
       return response.status === 200;
@@ -203,7 +221,8 @@ class DoubleClickSearch {
         numberOfLines: lines.length,
       };
       try {
-        const response = await this.instance.conversion.insert(
+        const doubleclicksearch = await this.getApiClient_();
+        const response = await doubleclicksearch.conversion.insert(
             {requestBody: {conversion: conversions}}
         );
         this.logger.debug('Response: ', response);
@@ -303,7 +322,8 @@ class DoubleClickSearch {
    * @return {!Promise<string>}
    */
   async requestReports(requestBody) {
-    const {status, data} = await this.instance.reports.request({requestBody});
+    const doubleclicksearch = await this.getApiClient_();
+    const { status, data } = await doubleclicksearch.reports.request({ requestBody });
     if (status >= 200 && status < 300) {
       return data.id;
     }
@@ -321,7 +341,8 @@ class DoubleClickSearch {
    * }>>}
    */
   async getReportUrls(reportId) {
-    const {status, data} = await this.instance.reports.get({reportId});
+    const doubleclicksearch = await this.getApiClient_();
+    const { status, data } = await doubleclicksearch.reports.get({ reportId });
     switch (status) {
       case 200:
         const {rowCount, files} = data;
@@ -346,7 +367,8 @@ class DoubleClickSearch {
    * @return {!Promise<string>}
    */
   async getReportFile(reportId, reportFragment) {
-    const response = await this.instance.reports.getFile(
+    const doubleclicksearch = await this.getApiClient_();
+    const response = await doubleclicksearch.reports.getFile(
         {reportId, reportFragment});
     if (response.status === 200) return response.data;
     const errorMsg =
@@ -363,7 +385,8 @@ class DoubleClickSearch {
    * @return {!Promise<ReadableStream>}
    */
   async getReportFileStream(url) {
-    const headers = await this.auth.getRequestHeaders();
+    const auth = await this.getAuth_();
+    const headers = await auth.getRequestHeaders();
     const response = await request({
       method: 'GET',
       headers,

@@ -37,6 +37,7 @@ way.
   - [4.8. ACM: Google Ads Customer Match upload via API](#48-acm-google-ads-customer-match-upload-via-api)
   - [4.9. MP_GA4: Measurement Protocol (Google Analytics 4)](#49-mp_ga4-measurement-protocol-google-analytics-4)
   - [4.10. ACA: Google Ads Enhanced Conversions upload via API](#410-aca-google-ads-enhanced-conversions-upload-via-api)
+  - [4.11. AOUD: Google Ads Offline User Data Upload (OfflineUserDataJobService)](#411-aoud-google-ads-offline-user-data-upload-offlineuserdatajobservice)
 
 ## 1. Key Concepts
 
@@ -777,7 +778,7 @@ Attributed to a Google Click Identifier (`gclid`):
 | Authorization Method   | OAuth                                                                                                                                                             |
 | Role in target system  | The user should at least has 'Standard' access.                                                                                                                   |
 | Request Type           | HTTP Request to RESTful endpoint                                                                                                                                  |
-| \# Records per request | 100                                                                                                                                                               |
+| \# Records per request | 10                                                                                                                                                                |
 | QPS                    | -                                                                                                                                                                 |
 | Reference              | [Overview: Customer Match][customer_match_overview]                                                                                                               |
 
@@ -805,12 +806,12 @@ Attributed to a Google Click Identifier (`gclid`):
   - `customer_id`, Google Ads Customer account Id
   - `login_customer_id`, Login customer account Id (MCC Account Id)
   - `list_id`, User List id for customer match audience. If `list_id` is
-  available `list_name` and `upload_key_type` will be ignored.
+    available `list_name` and `upload_key_type` will be ignored.
   - `list_name`, User List name for customer match audience. If the list could
-  not be found, it will be created automatically.
+    not be found, it will be created automatically.
   - `upload_key_type`, Customer match upload key types. Must be one of the
-  following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
-  [Read more about upload key types][upload_key_type]
+    following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
+    [Read more about upload key types][upload_key_type]
   - `operation`, Can be either create or remove in single file; [Read more about operation][user_data_operation]
 
 [upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
@@ -953,4 +954,77 @@ Or UserIdentifier with AddressInfo
 
 ```
 {"order_id":"2022040802", "hashed_email":"47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700","address_info":{"hashed_first_name":"ae3379ac2ab35c1c1cfe33b155f0fb39efaa894a8d84a4dcaa7db23816caffd9","hashed_last_name":"1ce3fb2cb03a19b8fd1afdb0e0bd4aa977b8254805e1d4e15d52b6f94cfd21c7","city":"Pyrmont","country_code":"AU","state":"NSW","postal_code":"2009","hashed_street_address":"6cf827c741a060e66b2642117ea91725a51116ea0af7c1809c0bab5297ecd2b7"}}
+```
+
+### 4.11. AOUD: Google Ads Offline User Data Upload (OfflineUserDataJobService)
+
+| API Specification      | Value                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API Code               | AOUD                                                                                                                                                                                                                                                                                                    |
+| Data Format            | JSONL                                                                                                                                                                                                                                                                                                   |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_node].                                                                                                                                       |
+| **Usage Scenarios**    | 1. Customer Match lets you use your online and offline data to reach and re-engage with your customers across Search, Shopping, Gmail, YouTube, and Display; <br>2. Uploading and matching transaction data from the business (store sales), shows how ads translate into offline purchases. |
+| Transfer Data on       | Cloud Storage                                                                                                                                                                                                                                                                                           |
+| Authorization Method   | OAuth                                                                                                                                                                                                                                                                                                   |
+| Role in target system  | The user should at least has 'Standard' access.                                                                                                                                                                                                                                                         |
+| Request Type           | HTTP Request to RESTful endpoint                                                                                                                                                                                                                                                                        |
+| \# Records per request | 100,000                                                                                                                                                                                                                                                                                                 |
+| QPS                    | -                                                                                                                                                                                                                                                                                                       |
+| Reference              | [Overview: Customer Match][customer_match_overview]<br> [Upload Store Sales Conversions][upload_store_sales_conversions]                                                                                                                                                                                |
+
+[google_ads_node]: https://github.com/Opteo/google-ads-api
+[customer_match_overview]: https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match
+[upload_store_sales_conversions]: https://developers.google.com/google-ads/api/docs/conversions/upload-store-sales-transactions
+
+- _Sample configuration piece:_
+
+```json
+{
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "debug": false,
+  "offlineUserDataJobConfig": {
+    "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+    "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+    "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+    "list_name": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+    "operation": "create|remove",
+    "type": "CUSTOMER_MATCH_USER_LIST|STORE_SALES_UPLOAD_FIRST_PARTY",
+    "upload_key_type": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
+    "storeSalesMetadata": "StoreSalesMetadata|undefined"
+  }
+}
+```
+
+- Fields' definition:
+  - `developerToken`, Developer token to access the API.
+  - `debug`, optional, default value is `false`. If it's set as `true`,
+  - `customer_id`, Google Ads Customer account Id
+  - `login_customer_id`, Login customer account Id (MCC Account Id)
+  - `list_id`, User List id for customer match audience. If `list_id` is
+    available `list_name` and `upload_key_type` will be ignored.
+  - `list_name`, User List name for customer match audience. If the list could
+    not be found, it will be created automatically.
+  - `operation`, Can be either create or remove in single file;
+    [Read more about operation][user_data_operation]
+  - `type`, type of user data. It should be `CUSTOMER_MATCH_USER_LIST` for
+    customer match uploading or `STORE_SALES_UPLOAD_FIRST_PARTY` for Store vistors
+    data uploading.
+  - `upload_key_type`, only presents for customer match uploading. Must be one
+    of the following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
+    [Read more about upload key types][upload_key_type]
+  - `storeSalesMetadata`, only presents for store sales data uploading. The
+    metadata for Store Sales Direct,
+    [see the details of the metadata][store_sales_metadata]
+
+[upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
+[user_data_operation]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
+[store_sales_metadata]: https://developers.google.com/google-ads/api/reference/rpc/latest/StoreSalesMetadata
+
+Tip: For more details see
+[Offline User Data Job Service](https://developers.google.com/google-ads/api/reference/rpc/latest/OfflineUserDataJobService)
+
+- _Sample Data file content:_
+
+```
+{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```

@@ -41,10 +41,20 @@ class AdsDataHub {
    *     variables.
    */
   constructor(options, customerId = undefined, env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    this.auth = authClient.getDefaultAuth();
+    this.authClient = new AuthClient(API_SCOPES, env);
     /** @const{GaxiosOptions} */ this.options = options || {};
     /** @const{string|undefined=} */ this.customerId = customerId;
+  }
+
+  /**
+   * Gets the auth object.
+   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
+   */
+  async getAuth_() {
+    if (this.auth) return this.auth;
+    await this.authClient.prepareCredentials();
+    this.auth = this.authClient.getDefaultAuth();
+    return this.auth;
   }
 
   /**
@@ -82,7 +92,8 @@ class AdsDataHub {
    * @private
    */
   async sendRequestAndReturnResponse_(path, method = 'GET', data = undefined) {
-    const headers = await this.auth.getRequestHeaders();
+    const auth = await this.getAuth_();
+    const headers = await auth.getRequestHeaders();
     const url = this.getRequestBaseUrl_() + path;
     const response = await request(/** @type {GaxiosOptions} */
         Object.assign({}, this.options, {

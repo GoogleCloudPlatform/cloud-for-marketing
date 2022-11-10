@@ -29,6 +29,7 @@ const {
   },
   storage: {StorageFile},
 } = require('@google-cloud/nodejs-common');
+const { getOption } = require('./handler_utilities.js');
 
 const MAXIMUM_REQUESTS_LENGTH = 10000000;  // Maximum requests size of this API.
 const NUMBER_OF_THREADS = 9;  // Maximum number of concurrent requests.
@@ -59,6 +60,7 @@ exports.defaultOnGcs = true;
  *   requestLength:(number|undefined),
  *   pasteData:!ParseDataRequest,
  *   numberOfThreads:(number|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let SheetsLoadConfig;
@@ -199,6 +201,6 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!BatchResult}
  */
 exports.sendData = async (message, messageId, config) => {
-  const spreadsheets = new Spreadsheets(config.spreadsheetId);
+  const spreadsheets = new Spreadsheets(config.spreadsheetId, getOption(config));
   return sendDataInternal(spreadsheets, message, messageId, config);
 };

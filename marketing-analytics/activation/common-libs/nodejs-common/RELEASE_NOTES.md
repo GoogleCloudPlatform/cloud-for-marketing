@@ -1,5 +1,11 @@
 # Release Notes
 
+## 1.5.0 (2022-11-10)
+
+### New feature: AuthClients supports Secret Managers as the credentials provider
+### Update to the v4 of the Campaign Manager 360 API
+### Add a method to acknowledge Pub/Sub messages with resolved Promise
+
 ## 1.4.0 (2022-10-10)
 
 ### Add new feature: Query or create Google Ads Customer Match User Lists

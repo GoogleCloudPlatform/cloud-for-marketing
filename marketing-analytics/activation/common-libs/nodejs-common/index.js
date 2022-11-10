@@ -24,6 +24,7 @@ exports.automl = require('./src/components/automl.js');
 exports.firestore = require('./src/components/firestore/index.js');
 exports.pubsub = require('./src/components/pubsub.js');
 exports.scheduler = require('./src/components/scheduler.js');
+exports.secretmanager = require('./src/components/secret_manager.js');
 exports.storage = require('./src/components/storage.js');
 exports.utils = require('./src/components/utils.js');
 exports.vertexai = require('./src/components/vertex_ai.js');

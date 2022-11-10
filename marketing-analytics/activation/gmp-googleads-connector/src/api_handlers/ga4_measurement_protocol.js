@@ -28,6 +28,7 @@ const {
   },
   utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
+const { getDebug } = require('./handler_utilities.js');
 
 /**
  * Hits per request. Measurement Protocol(GA4) has a value as 1.
@@ -75,7 +76,7 @@ exports.MpGa4IntegrationConfig = MpGa4IntegrationConfig;
  * @return {!Promise<!BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const debug = !!config.debug;
+  const debug = getDebug(config.debug);
   const mpGa4 = new MeasurementProtocolGA4(debug);
   return sendDataInternal(mpGa4, records, messageId, config);
 };

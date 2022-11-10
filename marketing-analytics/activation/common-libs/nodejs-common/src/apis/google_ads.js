@@ -251,14 +251,9 @@ class GoogleAds {
    *     variables.
    */
   constructor(developerToken, debugMode = false, env = process.env) {
+    this.developerToken = developerToken;
     this.debugMode = debugMode;
-    const oauthClient = new AuthClient(API_SCOPES, env).getOAuth2Token();
-    /** @const {GoogleAdsApi} */ this.apiClient = new GoogleAdsApi({
-      client_id: oauthClient.clientId,
-      client_secret: oauthClient.clientSecret,
-      developer_token: developerToken,
-    });
-    /** @const {string} */ this.refreshToken = oauthClient.refreshToken;
+    this.authClient = new AuthClient(API_SCOPES, env);
     this.logger = getLogger('API.ADS');
     this.logger.debug(`Init ${this.constructor.name} with Debug Mode.`);
   }
@@ -272,7 +267,8 @@ class GoogleAds {
    * @return {!ReadableStream}
    */
   async getReport(customerId, loginCustomerId, reportQueryConfig) {
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     return customer.report(reportQueryConfig);
   }
 
@@ -284,7 +280,8 @@ class GoogleAds {
    * @return {!ReadableStream}
    */
   async generatorReport(customerId, loginCustomerId, reportQueryConfig) {
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     return customer.reportStream(reportQueryConfig);
   }
 
@@ -296,7 +293,8 @@ class GoogleAds {
    * @return {!ReadableStream}
    */
   async streamReport(customerId, loginCustomerId, reportQueryConfig) {
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     return customer.reportStreamRaw(reportQueryConfig);
   }
 
@@ -313,7 +311,7 @@ class GoogleAds {
    */
   async searchMetaData(loginCustomerId, adFields, metadata = [
     'name', 'data_type', 'is_repeated', 'type_url',]) {
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId);
+    const customer = await this.getGoogleAdsApiCustomer_(loginCustomerId);
     const selectClause = metadata.join(',');
     const fields = adFields.join('","');
     const query = `SELECT ${selectClause} WHERE name IN ("${fields}")`;
@@ -560,9 +558,10 @@ class GoogleAds {
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @return {!Promise<!UploadCallConversionsResponse>}
    */
-  uploadCallConversions(callConversions, customerId, loginCustomerId) {
+  async uploadCallConversions(callConversions, customerId, loginCustomerId) {
     this.logger.debug('Upload call conversions for customerId:', customerId);
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const request = new UploadCallConversionsRequest({
       conversions: callConversions,
       customer_id: customerId,
@@ -581,9 +580,10 @@ class GoogleAds {
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @return {!Promise<!UploadClickConversionsResponse>}
    */
-  uploadClickConversions(clickConversions, customerId, loginCustomerId) {
+  async uploadClickConversions(clickConversions, customerId, loginCustomerId) {
     this.logger.debug('Upload click conversions for customerId:', customerId);
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const request = new UploadClickConversionsRequest({
       conversions: clickConversions,
       customer_id: customerId,
@@ -603,11 +603,12 @@ class GoogleAds {
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @return {!Promise<!UploadConversionAdjustmentsResponse>}
    */
-  uploadConversionAdjustments(conversionAdjustments, customerId,
+  async uploadConversionAdjustments(conversionAdjustments, customerId,
       loginCustomerId) {
     this.logger.debug('Upload conversion adjustments for customerId:',
         customerId);
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const request = new UploadConversionAdjustmentsRequest({
       conversion_adjustments: conversionAdjustments,
       customer_id: customerId,
@@ -626,7 +627,8 @@ class GoogleAds {
    * @return {Promise<number|undefined>} Returns undefined if can't find tag.
    */
   async getConversionCustomVariableId(tag, customerId, loginCustomerId) {
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const customVariables = await customer.query(`
         SELECT conversion_custom_variable.id,
                conversion_custom_variable.tag
@@ -692,7 +694,8 @@ class GoogleAds {
       validate_only: this.debugMode, // when true makes no changes
       partial_failure: true, // Will still create the non-failed entities
     };
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const response = await customer.userLists.create([userList], options);
     const { results, partial_failure_error: failed } = response;
     if (this.logger.isDebugEnabled()) {
@@ -775,7 +778,8 @@ class GoogleAds {
     const userListId = customerMatchConfig.list_id;
     const operation = customerMatchConfig.operation;
 
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const operationsList = this.buildOperationsList_(operation,
         customerMatchRecords);
     const metadata = this.buildCustomerMatchUserListMetadata_(customerId,
@@ -893,8 +897,8 @@ class GoogleAds {
     const customerId = this.getCleanCid_(config.customer_id);
     const { list_id: userListId, type } = config;
     this.logger.debug('Creating OfflineUserDataJob for CID:', customerId);
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
-    // if()CUSTOMER_MATCH_USER_LIST
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const job = OfflineUserDataJob.create({
       type,
     });
@@ -936,7 +940,8 @@ class GoogleAds {
     const loginCustomerId = this.getCleanCid_(config.login_customer_id);
     const customerId = this.getCleanCid_(config.customer_id);
     const operation = config.operation;
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const operationsList = this.buildOperationsList_(operation, records);
     const request = AddOfflineUserDataJobOperationsRequest.create({
       resource_name: jobResourceName,
@@ -961,7 +966,8 @@ class GoogleAds {
   async runOfflineUserDataJob(config, jobResourceName) {
     const loginCustomerId = this.getCleanCid_(config.login_customer_id);
     const customerId = this.getCleanCid_(config.customer_id);
-    const customer = this.getGoogleAdsApiCustomer_(loginCustomerId, customerId);
+    const customer = await this.getGoogleAdsApiCustomer_(
+      loginCustomerId, customerId);
     const request = RunOfflineUserDataJobRequest.create({
       resource_name: jobResourceName,
       validate_only: false,//this.debugMode,
@@ -1025,13 +1031,22 @@ class GoogleAds {
    * @return {GoogleAdsApi.Customer}
    * @private
    */
-  getGoogleAdsApiCustomer_(loginCustomerId, customerId = loginCustomerId) {
-    const googleAdsApiClient = this.apiClient;
-    return googleAdsApiClient.Customer({
+  async getGoogleAdsApiCustomer_(loginCustomerId, customerId = loginCustomerId) {
+    if (this.googleAds) return this.googleAds;
+    await this.authClient.prepareCredentials();
+    const oauthClient = await this.authClient.getOAuth2Token();
+    /** @const {GoogleAdsApi} */
+    const googleAdsApiClient = new GoogleAdsApi({
+      client_id: oauthClient.clientId,
+      client_secret: oauthClient.clientSecret,
+      developer_token: this.developerToken,
+    });
+    this.googleAds = googleAdsApiClient.Customer({
       customer_id: customerId,
       login_customer_id: loginCustomerId,
-      refresh_token: this.refreshToken,
+      refresh_token: oauthClient.refreshToken,
     });
+    return this.googleAds;
   }
 
 }

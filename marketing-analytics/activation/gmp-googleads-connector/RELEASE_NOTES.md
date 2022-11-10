@@ -1,14 +1,44 @@
 # Release Notes
 
+## 3.0.0 (2022-11-10)
+
+### New Features
+
+- [Secret Manager](https://cloud.google.com/secret-manager) is now used as the
+  preferred way to store and offer OAuth token (the content of the generated
+  `oauth.token.json` file). Each API configuration can have its own
+  authorization token now by setting a property `secretName` in the
+  configuration JSON.
+  - The explicit service account key file is going to be deprecated due to the concerns of security. If you want to use service account authorization for some APIs, use the default service account of Cloud Functions.
+- A new Google Sheets based tool will replace current `deploy.sh` to install
+  Tentacles. This tool also offers following functions:
+  - Update installed Tentacles to a new version
+  - Enable new API connectors
+  - Edit API configurations and upload them to Firestore
+  - Test Tentacles by uploading a temporary file with the given test data
+  - Create OAuth token and save it to Secret Manager
+  - List all available secret names in Secret Manager
+
+### Integrated APIs
+
+- Updated to the v4 of the Campaign Manager 360 API.
+
+### Bug fix
+
+- Fixed the problem of spammed logs from the Cloud Functions `tentacles_tran`
+  which is caused by the [failure of `message.ack()`](
+    https://github.com/googleapis/nodejs-pubsub/issues/1648).
+
 ## 2.4.0 (2022-10-14)
 
 ### New Features
-- User list name is supported by Google Ads Customer Match upload (ACM)
-connector. If the list doesn't exist, it will be created automatically.
-Requires new configuration items. For details, see README
-- Fixed an issue related to 'Channel credentials must be a ChannelCredentials
- object' error
 
+- User list name is supported by Google Ads Customer Match upload (ACM)
+  connector. If the list doesn't exist, it will be created automatically.
+  Requires new configuration items. For details,
+  see README
+- Fixed an issue related to 'Channel credentials must be a ChannelCredentials
+  object' error
 
 ## 2.3.0 (2022-08-10)
 
@@ -23,7 +53,7 @@ Requires new configuration items. For details, see README
 ### New Installation command
 
 - To activate other APIs that were not selected during the installation, run
- `./deploy.sh reselect_api` to reselect the APIs.
+  `./deploy.sh reselect_api` to reselect the APIs.
 
 ## 2.1.0 (2022-04-08)
 

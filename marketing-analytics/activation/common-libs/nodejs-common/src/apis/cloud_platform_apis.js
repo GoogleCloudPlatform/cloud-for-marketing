@@ -34,9 +34,19 @@ const API_VERSION = 'v1';
 class CloudPlatformApis {
   constructor(env = process.env) {
     /** @const {!AuthClient} */
-    const authClient = new AuthClient(API_SCOPES, env);
-    this.auth = authClient.getDefaultAuth();
+    this.authClient = new AuthClient(API_SCOPES, env);
     this.projectId = env['GCP_PROJECT'];
+  }
+
+  /**
+   * Gets the auth object.
+   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
+   */
+  async getAuth_() {
+    if (this.auth) return this.auth;
+    await this.authClient.prepareCredentials();
+    this.auth = this.authClient.getDefaultAuth();
+    return this.auth;
   }
 
   /**
@@ -67,7 +77,7 @@ class CloudPlatformApis {
   async testIamPermissions(permissions) {
     const resourceManager = google.cloudresourcemanager({
       version: API_VERSION,
-      auth: this.auth,
+      auth: await this.getAuth_(),
     });
     const projectId = await this.getProjectId_();
     const request = {

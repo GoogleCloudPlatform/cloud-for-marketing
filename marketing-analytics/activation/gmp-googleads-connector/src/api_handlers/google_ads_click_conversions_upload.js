@@ -23,7 +23,7 @@ const {
   api: {googleads: {GoogleAds, ConversionConfig}},
   utils: {apiSpeedControl, getLogger, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
-
+const { getGoogleAds } = require('./handler_utilities.js');
 /**
  * Conversions per request. Google Ads has a limit as 2000.
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
@@ -51,6 +51,7 @@ exports.defaultOnGcs = false;
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
  *   debug:(boolean|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let GoogleAdsConversionConfig;
@@ -109,8 +110,7 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!Promise<BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const debug = !!config.debug;
-  const googleAds = new GoogleAds(config.developerToken, debug);
+  const googleAds = getGoogleAds(config);
   return sendDataInternal(googleAds, records, messageId, config);
 };
 

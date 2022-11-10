@@ -23,6 +23,7 @@ const {
   api: {googleads: {GoogleAds, CustomerMatchConfig}},
   utils: { apiSpeedControl, getProperValue, BatchResult, getLogger },
 } = require('@google-cloud/nodejs-common');
+const { getGoogleAds } = require('./handler_utilities.js');
 
 /**
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
@@ -54,6 +55,7 @@ exports.defaultOnGcs = false;
  *   customerMatchConfig: !CustomerMatchConfig,
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let GoogleAdsCustomerMatchConfig;
@@ -130,7 +132,7 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!Promise<BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const googleAds = new GoogleAds(config.developerToken);
+  const googleAds = getGoogleAds(config);
   return sendDataInternal(googleAds, records, messageId, config);
 };
 

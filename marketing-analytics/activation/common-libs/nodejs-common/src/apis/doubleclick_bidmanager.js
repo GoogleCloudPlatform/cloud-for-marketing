@@ -21,6 +21,7 @@
 
 const {google} = require('googleapis');
 const AuthClient = require('./auth_client.js');
+const { getLogger } = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/doubleclickbidmanager',
@@ -62,13 +63,24 @@ class DoubleClickBidManager {
    *     variables.
    */
   constructor(env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    const auth = authClient.getDefaultAuth();
-    /** @const {!google.doubleclickbidmanager} */
-    this.instance = google.doubleclickbidmanager({
+    this.authClient = new AuthClient(API_SCOPES, env);
+    this.logger = getLogger('API.DV3');
+  }
+
+  /**
+   * Prepares the Google DBM instance.
+   * @return {!google.doubleclickbidmanager}
+   * @private
+   */
+  async getApiClient_() {
+    if (this.doubleclickbidmanager) return this.doubleclickbidmanager;
+    await this.authClient.prepareCredentials();
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.doubleclickbidmanager = google.doubleclickbidmanager({
       version: API_VERSION,
-      auth,
+      auth: this.authClient.getDefaultAuth(),
     });
+    return this.doubleclickbidmanager;
   }
 
   /**
@@ -80,7 +92,8 @@ class DoubleClickBidManager {
    * @return {!Promise<boolean>} Whether it starts successfully.
    */
   async runQuery(queryId, requestBody = undefined) {
-    const response = await this.instance.queries.runquery(
+    const doubleclickbidmanager = await this.getApiClient_();
+    const response = await doubleclickbidmanager.queries.runquery(
         {queryId, requestBody});
     return response.status >= 200 && response.status < 300;
   }
@@ -88,12 +101,13 @@ class DoubleClickBidManager {
   /**
    * Gets a query resource.
    * See https://developers.google.com/bid-manager/v1.1/queries/getquery
-   * @param {number} queryId
+   * @param {number} queryId Id of the query.
    * @return {!Promise<!QueryResource>} Query resource, see
    *     https://developers.google.com/bid-manager/v1.1/queries#resource
    */
   async getQuery(queryId) {
-    const response = await this.instance.queries.getquery({queryId});
+    const doubleclickbidmanager = await this.getApiClient_();
+    const response = await doubleclickbidmanager.queries.getquery({ queryId });
     return response.data.metadata;
   }
 
@@ -104,7 +118,8 @@ class DoubleClickBidManager {
    * @return {!Promise<number>} Id of created query.
    */
   async createQuery(query) {
-    const response = await this.instance.queries.createquery(
+    const doubleclickbidmanager = await this.getApiClient_();
+    const response = await doubleclickbidmanager.queries.createquery(
         {requestBody: query});
     return response.data.queryId;
   }
@@ -115,8 +130,9 @@ class DoubleClickBidManager {
    * @return {!Promise<boolean>} Whether the query was deleted.
    */
   async deleteQuery(queryId) {
+    const doubleclickbidmanager = await this.getApiClient_();
     try {
-      await this.instance.queries.deletequery({ queryId });
+      await doubleclickbidmanager.queries.deletequery({ queryId });
       return true;
     } catch (error) {
       console.error(error);

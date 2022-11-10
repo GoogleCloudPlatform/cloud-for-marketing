@@ -24,7 +24,7 @@ const {
   utils: { apiSpeedControl, getProperValue, getLogger, BatchResult },
   storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');
-
+const { getGoogleAds } = require('./handler_utilities.js');
 const { getOrCreateUserList } = require('./google_ads_customer_match_upload.js');
 
 /**
@@ -58,6 +58,7 @@ exports.defaultOnGcs = true;
  *   offlineUserDataJobConfig: !OfflineUserDataJobConfig,
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
+ *   secretName:(string|undefined),
  * }}
  */
 let GoogleAdsOfflineUserDataJobConfig;
@@ -135,8 +136,7 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!Promise<BatchResult>}
  */
 const sendData = (message, messageId, config) => {
-  const debug = !!config.debug;
-  const googleAds = new GoogleAds(config.developerToken, debug);
+  const googleAds = getGoogleAds(config);
   return sendDataInternal(googleAds, message, messageId, config);
 };
 

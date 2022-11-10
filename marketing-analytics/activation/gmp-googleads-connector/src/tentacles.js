@@ -322,6 +322,7 @@ class Tentacles {
    * @private
    */
   async passOneMessage_(sourceTopic, timeout, targetTopic) {
+    const subscriptionName = `${sourceTopic}-holder`;
     /**
      * Gets the message handler function for the pull subscription.
      * @param {function(*)} resolver Function to call when promise is fulfilled.
@@ -339,20 +340,20 @@ class Tentacles {
               Buffer.from(message.data, 'base64').toString(), attributes);
           this.logger.debug(`Forward ${messageTag} as [${messageId}]@[${
               targetTopic}]`);
-          message.ack();
+          await this.pubsub.acknowledge(subscriptionName, message.ackId);
           await this.tentaclesTask.updateTask(taskId,
               {apiMessageId: messageId});
           resolver(TransportResult.DONE);
         } else {
           this.logger.warn(`Wrong status for ${
               messageTag} (maybe duplicated). Task ID: [${taskId}].`);
-          message.ack();
+          await this.pubsub.acknowledge(subscriptionName, message.ackId);
           resolver(TransportResult.DUPLICATED);
         }
       };
     };
     const subscription = await this.pubsub.getOrCreateSubscription(
-        sourceTopic, `${sourceTopic}-holder`,
+      sourceTopic, subscriptionName,
         {ackDeadlineSeconds: 300, flowControl: {maxMessages: 1}});
     this.logger.debug(`Get subscription ${subscription.name}.`);
     const subscriber = new Promise((resolver) => {

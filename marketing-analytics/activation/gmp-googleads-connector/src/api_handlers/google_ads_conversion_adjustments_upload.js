@@ -23,7 +23,7 @@ const {
   api: { googleads: { GoogleAds } },
   utils: { apiSpeedControl, getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-
+const { getGoogleAds } = require('./handler_utilities.js');
 const {
   GoogleAdsConversionConfig,
 } = require('./google_ads_click_conversions_upload.js');
@@ -77,8 +77,7 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!Promise<BatchResult>}
  */
 const sendData = (records, messageId, config) => {
-  const debug = !!config.debug;
-  const googleAds = new GoogleAds(config.developerToken, debug);
+  const googleAds = getGoogleAds(config);
   return sendDataInternal(googleAds, records, messageId, config);
 };
 

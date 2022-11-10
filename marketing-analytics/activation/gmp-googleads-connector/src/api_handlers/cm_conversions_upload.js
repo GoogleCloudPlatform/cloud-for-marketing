@@ -23,6 +23,7 @@ const {
   api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
   utils: {apiSpeedControl, getProperValue, BatchResult},
 } = require('@google-cloud/nodejs-common');
+const { getOption } = require('./handler_utilities.js');
 
 /**
  * Conversions per request. Campaign Manager has a limit as 1000.
@@ -59,6 +60,7 @@ exports.defaultOnGcs = false;
  *   qps:(number|undefined),
  *   numberOfThreads:(number|undefined),
  *   cmConfig:!InsertConversionsConfig,
+ *   secretName:(string|undefined),
  * }}
  */
 let CampaignManagerConfig;
@@ -107,7 +109,7 @@ exports.sendDataInternal = sendDataInternal;
  * @return {!Promise<BatchResult>}
  */
 exports.sendData = (records, messageId, config) => {
-  const dfaReporting = new DfaReporting();
+  const dfaReporting = new DfaReporting(getOption(config));
   return sendDataInternal(dfaReporting, records, messageId, config);
 };
 

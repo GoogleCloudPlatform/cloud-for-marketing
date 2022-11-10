@@ -162,6 +162,15 @@ class TaskManager {
    */
   async handleFailedTask(taskLogId, taskLog, error) {
     const taskConfig = await this.taskConfigDao.load(taskLog.taskId);
+    if (!taskConfig) {
+      this.logger.warn(
+        `Obsolete task: ${taskLog.taskId} in TaskLog[${taskLogId}].`);
+      return [
+        ErrorHandledStatus.FAILED,
+        this.taskLogDao.saveErrorMessage(taskLogId,
+          new Error(`Task[${taskLog.taskId}] does not exist any more.`)),
+      ];
+    }
     /**@type {!ErrorOptions} */
     const errorOptions = Object.assign({
       retryTimes: DEFAULT_RETRY_TIMES,

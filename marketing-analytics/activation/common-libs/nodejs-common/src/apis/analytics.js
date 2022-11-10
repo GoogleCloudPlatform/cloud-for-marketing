@@ -62,15 +62,24 @@ class Analytics {
    *     variables.
    */
   constructor(env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    const auth = authClient.getDefaultAuth();
-    /** @type {!google.analytics} */
-    this.instance = google.analytics({
-      version: API_VERSION,
-      auth,
-    });
+    this.authClient = new AuthClient(API_SCOPES, env);
     this.logger = getLogger('API.GA');
-    this.logger.debug(`Init ${this.constructor.name} with Debug Mode.`);
+  }
+
+  /**
+   * Prepares the Google Analytics instace.
+   * @return {!google.analytics}
+   * @private
+   */
+  async getApiClient_() {
+    if (this.analytics) return this.analytics;
+    await this.authClient.prepareCredentials();
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.analytics = google.analytics({
+      version: API_VERSION,
+      auth: this.authClient.getDefaultAuth(),
+    });
+    return this.analytics;
   }
 
   /**
@@ -92,7 +101,9 @@ class Analytics {
           }
         },
         config);
-    const response = await this.instance.management.uploads.uploadData(
+
+    const analytics = await this.getApiClient_();
+    const response = await analytics.management.uploads.uploadData(
         uploadConfig);
     this.logger.debug('Configuration: ', config);
     this.logger.debug('Upload Data: ', data);
@@ -140,7 +151,8 @@ class Analytics {
    * @return {!Promise<!Schema$Upload>} Updated data import Job status.
    */
   async checkJobStatus(jobConfig) {
-    const {data: job} = await this.instance.management.uploads.get(jobConfig);
+    const analytics = await this.getApiClient_();
+    const { data: job } = await analytics.management.uploads.get(jobConfig);
     if (job.status !== 'PENDING') return job;
     this.logger.debug(
         `GA Data Import Job[${jobConfig.uploadId}] is not finished.`);
@@ -157,7 +169,8 @@ class Analytics {
    * @return {!Promise<!Array<string>>}
    */
   async listAccounts() {
-    const response = await this.instance.management.accounts.list();
+    const analytics = await this.getApiClient_();
+    const response = await analytics.management.accounts.list();
     return response.data.items.map(
         (account) => `Account id: ${account.name}[${account.id}]`
     );
@@ -169,7 +182,8 @@ class Analytics {
    * @return {!Promise<!Array<Object>>}
    */
   async listUploads(config) {
-    const response = await this.instance.management.uploads.list(config);
+    const analytics = await this.getApiClient_();
+    const response = await analytics.management.uploads.list(config);
     return response.data.items;
   }
 
@@ -189,7 +203,8 @@ class Analytics {
     const request = Object.assign({}, config, {
       resource: {customDataImportUids},
     });
-    await this.instance.management.uploads.deleteUploadData(request);
+    const analytics = await this.getApiClient_();
+    await analytics.management.uploads.deleteUploadData(request);
     this.logger.debug('Delete uploads: ', customDataImportUids);
   }
 

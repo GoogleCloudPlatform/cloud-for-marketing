@@ -166,16 +166,27 @@ class YouTube {
    *     variables.
    */
   constructor(env = process.env) {
-    const authClient = new AuthClient(API_SCOPES, env);
-    this.auth = authClient.getDefaultAuth();
-    /** @const {!google.youtube} */
-    this.instance = google.youtube({
-      version: API_VERSION,
-    });
+    this.authClient = new AuthClient(API_SCOPES, env);
     /**
      * Logger object from 'log4js' package where this type is not exported.
      */
     this.logger = getLogger('API.YT');
+  }
+
+  /**
+     * Prepares the Google YouTube instance.
+     * @return {!google.youtube}
+     * @private
+     */
+  async getApiClient_() {
+    if (this.youtube) return this.youtube;
+    await this.authClient.prepareCredentials();
+    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
+    this.youtube = google.youtube({
+      version: API_VERSION,
+      auth: this.authClient.getDefaultAuth(),
+    });
+    return this.youtube;
   }
 
   /**
@@ -186,12 +197,11 @@ class YouTube {
    * @return {!Promise<Array<Schema$Channel>>}
    */
   async listChannels(config) {
-    const channelListRequest = Object.assign({
-      auth: this.auth,
-    }, config);
+    const channelListRequest = Object.assign({}, config);
     channelListRequest.part = channelListRequest.part.join(',')
     try {
-      const response = await this.instance.channels.list(channelListRequest);
+      const youtube = await this.getApiClient_();
+      const response = await youtube.channels.list(channelListRequest);
       this.logger.debug('Response: ', response);
       return response.data.items;
     } catch (error) {
@@ -210,12 +220,11 @@ class YouTube {
    * @return {!Promise<Array<Schema$Video>>}
    */
   async listVideos(config) {
-    const videoListRequest = Object.assign({
-      auth: this.auth,
-    }, config);
+    const videoListRequest = Object.assign({}, config);
     videoListRequest.part = videoListRequest.part.join(',')
     try {
-      const response = await this.instance.videos.list(videoListRequest);
+      const youtube = await this.getApiClient_();
+      const response = await youtube.videos.list(videoListRequest);
       this.logger.debug('Response: ', response);
       return response.data.items;
     } catch (error) {
@@ -235,13 +244,11 @@ class YouTube {
    * @return {!Promise<Array<Schema$CommentThread>>}
    */
   async listCommentThreads(config) {
-    const commentThreadsRequest = Object.assign({
-      auth: this.auth,
-    }, config);
+    const commentThreadsRequest = Object.assign({}, config);
     commentThreadsRequest.part = commentThreadsRequest.part.join(',')
     try {
-      const response = await this.instance.commentThreads.list(
-        commentThreadsRequest);
+      const youtube = await this.getApiClient_();
+      const response = await youtube.commentThreads.list(commentThreadsRequest);
       this.logger.debug('Response: ', response.data);
       return response.data.items;
     } catch (error) {
@@ -265,7 +272,7 @@ class YouTube {
     if (resultLimit <= 0) return [];
 
     const playlistsRequest = Object.assign({
-        auth: this.auth,
+        // auth: this.auth,
     }, config, {
         pageToken
     });
@@ -275,8 +282,8 @@ class YouTube {
     }
 
     try {
-      const response = await this.instance.playlists.list(
-        playlistsRequest);
+      const youtube = await this.getApiClient_();
+      const response = await youtube.playlists.list(playlistsRequest);
       this.logger.debug('Response: ', response.data);
       if (response.data.nextPageToken) {
         this.logger.debug(
@@ -310,18 +317,15 @@ class YouTube {
   async listSearchResults(config, resultLimit = 1000, pageToken = null) {
     if (resultLimit <= 0) return [];
 
-    const searchRequest = Object.assign({
-        auth: this.auth,
-    }, config, {
-        pageToken
-    });
+    const searchRequest = Object.assign({}, config, { pageToken });
 
     if (Array.isArray(searchRequest.part)) {
       searchRequest.part = searchRequest.part.join(',');
     }
 
     try {
-      const response = await this.instance.search.list(searchRequest);
+      const youtube = await this.getApiClient_();
+      const response = await youtube.search.list(searchRequest);
       this.logger.debug('Response: ', response.data);
       if (response.data.nextPageToken) {
         this.logger.debug(

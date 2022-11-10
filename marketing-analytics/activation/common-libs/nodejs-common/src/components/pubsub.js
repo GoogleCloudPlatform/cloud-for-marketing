@@ -20,7 +20,13 @@
 'use strict';
 
 const {
-  PubSub, Message, Topic, Subscription, ClientConfig, CreateSubscriptionOptions,
+  PubSub,
+  Message,
+  Topic,
+  Subscription,
+  ClientConfig,
+  CreateSubscriptionOptions,
+  v1: { SubscriberClient },
 } = require('@google-cloud/pubsub');
 
 /**
@@ -28,6 +34,7 @@ const {
  * 1. gets or creates a topic.
  * 2. gets or creates a subscription.
  * 3. publishes a message after confirms the topic exists.
+ * 4. acknowledge message(s).
  */
 class EnhancedPubSub {
   /**
@@ -38,6 +45,8 @@ class EnhancedPubSub {
   constructor(options = undefined) {
     /** @type {!PubSub} */
     this.pubsub = new PubSub(options);
+    /** @type {!SubscriberClient} */
+    this.subClient = new SubscriberClient(options);
   }
 
   /**
@@ -117,6 +126,23 @@ class EnhancedPubSub {
       console.error('ERROR:', error);
     }
   };
+
+  /**
+   * Using `SubscriberClient` to acknowledge messages.
+   * 2022.11.02 The methon `ack()` in Message doesn't work properly due to a
+   * unknown reason. Use this function to acknowledge a message for now.
+   *
+   * @param {string} subscription Subscription name.
+   * @param {(string|!Array<string>)} ackIds Message ackIds.
+   */
+  async acknowledge(subscription, ackIds) {
+    const projectId = await this.subClient.getProjectId();
+    const ackRequest = {
+      subscription: this.subClient.subscriptionPath(projectId, subscription),
+      ackIds: Array.isArray(ackIds) ? ackIds : [ackIds],
+    };
+    await this.subClient.acknowledge(ackRequest);
+  }
 
   /**
    * Returns a new instance of this class. Using this function to replace
