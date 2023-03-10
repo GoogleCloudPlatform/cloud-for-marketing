@@ -78,7 +78,7 @@ install_dependencies() {
     rm -rf focvs-env
     temp_install_py38_virtualenv # virtualenv focvs-env
     source focvs-env/bin/activate
-    pip install -r requirements.txt
+    pip install -r requirements.txt --require-hashes --no-deps
     printf "\nINFO - Python dependencies installed successfully!\n"
   fi
 }
