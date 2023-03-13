@@ -158,9 +158,9 @@ information. Below is an example:
 [custom_variable]:https://support.google.com/dcm/answer/2823222?hl=en
 
 ```json
-{"gclid":"EAIaIQobChMI-v2WxM7g4wIVg4BwCh2KKwWdEAAYASAAEgLFAKE_BwE","ordinal":"334376","U2":"a","actionedDate":"2019-10-03 17:18:57","timestampMicros":"1570123137000000"}
-{"gclid":"EAIaIQobChMI-v2WxM7g4wIVg4BwCh2KKwWdEAAYASAAEgLFAKE_BwE","ordinal":"334434","U2":"b","actionedDate":"2019-10-03 17:03:15","timestampMicros":"1570122195000000"}
-{"gclid":"EAIaIQobChMI1Jyfyvz-5AIVlRmPCh0NlgqjEAAYASAAEgIFAKE_BwE","ordinal":"334248","U2":"a|b","actionedDate":"2019-10-03 15:23:15","timestampMicros":"1570116195000000"}
+{"gclid":"EAIaIQobChMI-v2WxM7g4wIVg4BwCh2KKwWdEAAYASAAEgLFAKE_BwE","ordinal":"334376","U2":"a","timestampMicros":"2019-10-03 17:18:57","timestampMicros":"1570123137000000"}
+{"gclid":"EAIaIQobChMI-v2WxM7g4wIVg4BwCh2KKwWdEAAYASAAEgLFAKE_BwE","ordinal":"334434","U2":"b","timestampMicros":"2019-10-03 17:03:15","timestampMicros":"1570122195000000"}
+{"gclid":"EAIaIQobChMI1Jyfyvz-5AIVlRmPCh0NlgqjEAAYASAAEgIFAKE_BwE","ordinal":"334248","U2":"a|b","timestampMicros":"2019-10-03 15:23:15","timestampMicros":"1570116195000000"}
 
 ```
 

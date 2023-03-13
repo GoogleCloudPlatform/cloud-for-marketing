@@ -26,7 +26,7 @@ const { getLogger } = require('../components/utils.js');
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/doubleclickbidmanager',
 ]);
-const API_VERSION = 'v1.1';
+const API_VERSION = 'v2';
 
 /**
  * The returned information of get a query.
@@ -85,43 +85,49 @@ class DoubleClickBidManager {
 
   /**
    * Starts to run a query.
-   * See https://developers.google.com/bid-manager/v1.1/queries/runquery
-   * This API returns empty HTTP content.
+   * See https://developers.google.com/bid-manager/reference/rest/v2/queries/run
    * @param {number} queryId
    * @param {!RequestBody|undefined=} requestBody Data range of the report.
-   * @return {!Promise<boolean>} Whether it starts successfully.
+   * @return {!Promise<number>} Report Id.
    */
   async runQuery(queryId, requestBody = undefined) {
     const doubleclickbidmanager = await this.getApiClient_();
-    const response = await doubleclickbidmanager.queries.runquery(
+    const response = await doubleclickbidmanager.queries.run(
         {queryId, requestBody});
-    return response.status >= 200 && response.status < 300;
+    return response.data.key.reportId;
   }
 
   /**
    * Gets a query resource.
-   * See https://developers.google.com/bid-manager/v1.1/queries/getquery
+   * See https://developers.google.com/bid-manager/reference/rest/v2/queries/get
    * @param {number} queryId Id of the query.
    * @return {!Promise<!QueryResource>} Query resource, see
-   *     https://developers.google.com/bid-manager/v1.1/queries#resource
+   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#Query
    */
   async getQuery(queryId) {
     const doubleclickbidmanager = await this.getApiClient_();
-    const response = await doubleclickbidmanager.queries.getquery({ queryId });
+    const response = await doubleclickbidmanager.queries.get({ queryId });
     return response.data.metadata;
   }
 
   /**
    * Creates a query.
    * @param {Object} query The DV360 query object, for more details, see:
-   *     https://developers.google.com/bid-manager/v1.1/queries#resource
+   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#Query
    * @return {!Promise<number>} Id of created query.
    */
   async createQuery(query) {
     const doubleclickbidmanager = await this.getApiClient_();
-    const response = await doubleclickbidmanager.queries.createquery(
+    const response = await doubleclickbidmanager.queries.create(
         {requestBody: query});
     return response.data.queryId;
+  }
+
+  async getQueryReport(queryId, reportId) {
+    const doubleclickbidmanager = await this.getApiClient_();
+    const response = await doubleclickbidmanager.queries.reports.get(
+      { queryId, reportId });
+    return response.data.metadata;
   }
 
   /**
@@ -132,8 +138,8 @@ class DoubleClickBidManager {
   async deleteQuery(queryId) {
     const doubleclickbidmanager = await this.getApiClient_();
     try {
-      await doubleclickbidmanager.queries.deletequery({ queryId });
-      return true;
+      const { status } = await doubleclickbidmanager.queries.delete({ queryId });
+      return status === 200;
     } catch (error) {
       console.error(error);
       return false;

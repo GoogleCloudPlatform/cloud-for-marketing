@@ -28,6 +28,9 @@ const { ExportSchemaTask } = require('./bigquery/export_schema_task.js');
 const { DeleteDatasetTask } = require('./bigquery/delete_dataset_task.js');
 const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
 const { CopyGcsTask } = require('./copy_gcs_task.js');
+const { GmcXmlFeedToJsonlTask } = require('./gmc/gmc_xml_feed_to_jsonl_task.js');
+const { GmcWebpageFetch } = require('./gmc/gmc_webpage_fetcher.js');
+const { DownloadTask } = require('./download_task.js');
 const { PredictTask } = require('./predict_task.js');
 const { QueryAdhTask } = require('./query_adh_task.js');
 const { ReportTask } = require('./report_task.js');
@@ -46,6 +49,9 @@ const ALL_TASKS = Object.freeze({
   [TaskType.DELETE_DATASET]: DeleteDatasetTask,
   [TaskType.DATA_TRANSFER]: DataTransferTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
+  [TaskType.DOWNLOAD]: DownloadTask,
+  [TaskType.GMC_XML_FEED_TO_JSONL]: GmcXmlFeedToJsonlTask,
+  [TaskType.GMC_WEBPAGE_FETECHER]: GmcWebpageFetch,
   [TaskType.PREDICT]: PredictTask,
   [TaskType.QUERY_ADH]: QueryAdhTask,
   [TaskType.REPORT]: ReportTask,

@@ -11,6 +11,7 @@
 .gitignore
 .gcloudignore
 .idea
+.history
 *.template
 *.sh
 *.iml

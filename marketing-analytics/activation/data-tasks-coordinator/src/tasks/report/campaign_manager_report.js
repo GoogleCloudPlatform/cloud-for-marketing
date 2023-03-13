@@ -24,9 +24,9 @@ const {Report} = require('./base_report.js');
 /** Campaign Manager Report class. */
 class CampaignManagerReport extends Report {
 
-  constructor(config, dfa = new DfaReporting()) {
+  constructor(config, dfa) {
     super(config);
-    this.dfa = dfa;
+    this.dfa = dfa || new DfaReporting(super.getOption());
   }
 
   /** @override */

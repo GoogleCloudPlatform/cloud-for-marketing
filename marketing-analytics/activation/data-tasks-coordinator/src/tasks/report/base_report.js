@@ -104,6 +104,22 @@ class Report {
   }
 
   /**
+   * Gets option object to create a new API object.
+   * By default, the API classes will figure out the authorization from env
+   * variables. The authorization can also be set in the 'config' so each
+   * integration can have its own authorization. This function is used to get the
+   * authorization related information from the 'config' object and form an
+   * 'option' object for the API classes.
+   *
+   * @return {{SECRET_NAME:(string|undefined)}}
+   */
+  getOption() {
+    const options = {};
+    if (this.config.secretName) options.SECRET_NAME = this.config.secretName;
+    return options;
+  }
+
+  /**
    * Checks the given error message is a fatal error that should fail
    *  immediately without retry.
    * @param {string} errorMessage

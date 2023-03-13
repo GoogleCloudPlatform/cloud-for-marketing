@@ -58,9 +58,9 @@ let ListConfig;
 /** YouTube Report class. */
 class YouTubeReport extends Report {
 
-  constructor(config, yt = new YouTube()) {
+  constructor(config, yt) {
     super(config);
-    this.yt = yt;
+    this.yt = yt || new YouTube(super.getOption());
   }
 
   /** @override */

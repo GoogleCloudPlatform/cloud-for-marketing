@@ -25,9 +25,13 @@ const {
   getLogger,
   SendSingleBatch,
   BatchResult,
+  wait,
 } = require('../components/utils.js');
 /** Base URL for Google Analytics service. */
 const BASE_URL = 'https://www.google-analytics.com';
+
+/** @const{number} Times to retry when server responds an error. */
+const RETRY_TIMES = 2;
 
 /**
  * Configuration for Measurement Protocol GA4.
@@ -109,39 +113,62 @@ class MeasurementProtocolGA4 {
               .map((param) => `${param}=${params[param]}`)
               .join('&');
         },
+        validateStatus: () => true,
         body: JSON.stringify(hit),
-        headers: {'User-Agent': 'Tentacles/MeasurementProtocol-GA4'}
+        headers: { 'User-Agent': 'Tentacles/MeasurementProtocol-GA4' },
       };
-      const response = await request(requestOptions);
       /** @type {BatchResult} */ const batchResult = {
         numberOfLines: lines.length,
       };
-      if (response.status < 200 || response.status >= 300) {
-        const errorMessages = [
-          `Measurement Protocol GA4 [${batchId}] didn't succeed.`,
-          `Get response code: ${response.status}`,
-          `response: ${response.data}`,
-        ];
-        this.logger.error(errorMessages.join('\n'));
-        batchResult.errors = errorMessages;
-        batchResult.result = false;
-        return batchResult;
-      }
-      this.logger.debug('Configuration:', config);
-      this.logger.debug('Input Data:   ', lines);
-      this.logger.debug(`Batch[${batchId}] status: ${response.status}`);
-      this.logger.debug(response.data);
-      // There is not enough information from the non-debug mode.
-      if (!this.debugMode) {
-        batchResult.result = true;
-      } else {
-        batchResult.result = response.data.validationMessages.length === 0;
-        if (!batchResult.result) {
-          batchResult.failedLines = lines;
-          batchResult.errors = response.data.validationMessages.map(
-              ({description}) => description);
-          batchResult.groupedFailed = {[batchResult.errors.join()]: [lines[0]]};
+      let retriedTimes = 0;
+      let response;
+      while (retriedTimes <= RETRY_TIMES) {
+        try {
+          response = await request(requestOptions);
+          if (response.status < 500) break; // Only retry when server errors.
+          this.logger.warn('Got a 5XX error', response);
+        } catch (error) {
+          this.logger.warn('Got an error', error);
+          if (retriedTimes === RETRY_TIMES) {
+            this.logger.error('Maximum retry times exceeded.');
+            batchResult.result = false;
+            batchResult.errors = [error.toString()];
+            break;
+          }
         }
+        retriedTimes++;
+        await wait(retriedTimes * 1000);
+        this.logger.warn('Will retry now...');
+      };
+      if (response) {
+        this.logger.debug('Configuration:', config);
+        this.logger.debug('Input Data:   ', lines);
+        this.logger.debug(`Batch[${batchId}] status: ${response.status}`);
+        this.logger.debug(response.data);
+        // There is not enough information from the non-debug mode.
+        if (!this.debugMode) {
+          if (response.status >= 200 && response.status < 300) {
+            batchResult.result = true;
+          } else {
+            batchResult.result = false;
+            const errorMessage =
+              `MP GA4 [${batchId}] http status ${response.status}.`;
+            this.logger.error(errorMessage, line);
+            batchResult.errors = [errorMessage];
+          }
+        } else {
+          if (response.data.validationMessages.length === 0) {
+            batchResult.result = true;
+          } else {
+            batchResult.result = false;
+            batchResult.errors = response.data.validationMessages.map(
+              ({ description }) => description);
+          }
+        }
+      }
+      if (!batchResult.result) {
+        batchResult.failedLines = [line];
+        batchResult.groupedFailed = { [batchResult.errors.join()]: [line] };
       }
       return batchResult;
     };

@@ -1,5 +1,11 @@
 # Release Notes
 
+## 1.6.0 (2023-03-08)
+
+### Update to the v12 of the Google Ads API
+### Update to the v2 of the DV360 API
+### Add new feature: Store sales data upload through OfflineUserDataJobService
+
 ## 1.5.0 (2022-11-10)
 
 ### New feature: AuthClients supports Secret Managers as the credentials provider

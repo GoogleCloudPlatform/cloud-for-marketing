@@ -92,6 +92,17 @@ const sendDataInternal = async (pubsub, records, messageId, config) => {
       numberOfLines: 1,
     };
     const args = JSON.parse(lines[0]);
+    // JSON string values need to be escaped
+    Object.keys(args).forEach((key) => {
+      try {
+        if (typeof args[key] === 'string') {
+          args[key] = args[key].replace(/\n/g, '\\n').replace(/\"/g, '\\"');
+        }
+      } catch (error) {
+        logger.error(key, typeof args[key]);
+        logger.error(error);
+      }
+    })
     const originalMessage = typeof (config.message) === 'object'
         ? JSON.stringify(config.message) : config.message;
     const message = replaceParameters(originalMessage || '', args, true);

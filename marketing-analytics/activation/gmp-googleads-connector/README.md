@@ -1,4 +1,4 @@
-# GMP and Google Ads Connector
+# GMP and Google Ads Connector<!-- omit from toc -->
 
 <!--* freshness: { owner: 'lushu' reviewed: '2022-03-30' } *-->
 
@@ -9,7 +9,7 @@ based on Google Cloud Platform. It can send a massive amount data to GMP (e.g.
 Google Analytics, Campaign Manager) or Google Ads in an automatic and reliable
 way.
 
-## Contents
+## Contents<!-- omit from toc -->
 
 - [1. Key Concepts](#1-key-concepts)
   - [1.1. Challenges for sending data to APIs](#11-challenges-for-sending-data-to-apis)
@@ -35,8 +35,8 @@ way.
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
   - [4.7. ACLC: Google Ads Click Conversions upload via API](#47-aclc-google-ads-click-conversions-upload-via-api)
   - [4.8. ACM: Google Ads Customer Match upload via API](#48-acm-google-ads-customer-match-upload-via-api)
-  - [4.9. MP_GA4: Measurement Protocol (Google Analytics 4)](#49-mp_ga4-measurement-protocol-google-analytics-4)
-  - [4.10. ACA: Google Ads Enhanced Conversions upload via API](#410-aca-google-ads-enhanced-conversions-upload-via-api)
+  - [4.9. MP\_GA4: Measurement Protocol (Google Analytics 4)](#49-mp_ga4-measurement-protocol-google-analytics-4)
+  - [4.10. ACA: Google Ads Conversion Adjustments upload via API](#410-aca-google-ads-conversion-adjustments-upload-via-api)
   - [4.11. AOUD: Google Ads Offline User Data Upload (OfflineUserDataJobService)](#411-aoud-google-ads-offline-user-data-upload-offlineuserdatajobservice)
 
 ## 1. Key Concepts
@@ -95,6 +95,16 @@ LEGEND                          │                V        ▒               �
 during installation.
 
 ## 2. Installation
+
+---
+>**NOTE:** The new Google Sheets based tool now is available. Users are
+suggested to using that tool to install, upgrade or manage Tentacles. For more
+details, see
+[Install Tentacles in a Google Sheets based tool](tutorials/install_tentacles_in_google_sheets.md)
+<br>
+The following content in `Chapter 2 Installation` is kept here for reference.<!-- omit from toc -->
+---
+
 
 ### 2.1. Create/use a Google Cloud Project(GCP) with a billing account
 
@@ -401,6 +411,7 @@ Follow these steps to get the dashboard ready:
 
 ```json
 {
+  "secretName":"[YOUR-OAUTH-SECRET-NAME]",
   "dataImportHeader": "[YOUR-DATA-IMPORT-HEADER]",
   "gaConfig": {
     "accountId": "[YOUR-GA-ACCOUNT-ID]",
@@ -416,6 +427,7 @@ Follow these steps to get the dashboard ready:
 
 - Fields' definition:
 
+  - `secretName` is the name of Secret Manager
   - `dataImportHeader` is the header of uploading a CSV file. It is fixed in
     Google Analytics when the user set up the Data Import item, and it must
     exist in the file uploaded.
@@ -892,23 +904,24 @@ Tip: For more details see
 {"app_instance_id": "cbd7d1056fexxxxxxxxxxxxxx08ff", "timestamp_micros": 1617508786220000}
 ```
 
-### 4.10. ACA: Google Ads Enhanced Conversions upload via API
+### 4.10. ACA: Google Ads Conversion Adjustments upload via API
 
-| API Specification      | Value                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| API Code               | ACA                                                                                                  |
-| Data Format            | JSONL                                                                                                |
-| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API. |
-| **Usage Scenarios**    | Uploading enhanced conversions to the target converion.                                              |
-| Transfer Data on       | Pub/Sub                                                                                              |
-| Authorization Method   | OAuth                                                                                                |
-| Role in target system  | The user should at least has 'Standard' access.                                                      |
-| Request Type           | HTTP Request to RESTful endpoint                                                                     |
-| \# Records per request | 2,000                                                                                                |
-| QPS                    | -                                                                                                    |
-| Reference              | [Enhanced Conversions][enhanced_converions]                                                          |
+| API Specification      | Value                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------     |
+| API Code               | ACA                                                                                                      |
+| Data Format            | JSONL                                                                                                    |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API.     |
+| **Usage Scenarios**    | Uploading conversion adjustments (e.g. enhanced conversions) to the target conversion.                   |
+| Transfer Data on       | Pub/Sub                                                                                                  |
+| Authorization Method   | OAuth                                                                                                    |
+| Role in target system  | The user should at least has 'Standard' access.                                                          |
+| Request Type           | HTTP Request to RESTful endpoint                                                                         |
+| \# Records per request | 2,000                                                                                                    |
+| QPS                    | -                                                                                                        |
+| Reference              | [Upload Conversion Adjustments][conversion_adjustments]<br>[Enhanced Conversions][enhanced_converions]  |
 
 [enhanced_converions]: https://developers.google.com/google-ads/api/docs/conversions/enhance-conversions
+[conversion_adjustments]: https://developers.google.com/google-ads/api/docs/conversions/upload-adjustments
 
 - _Sample configuration piece:_
 
@@ -920,7 +933,7 @@ Tip: For more details see
   "debug": false,
   "adsConfig": {
     "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
-    "adjustment_type": "ENHANCEMENT",
+    "adjustment_type": "ENHANCEMENT"|"RETRACTION"|"RESTATEMENT",
     "user_identifier_source": "FIRST_PARTY"
   }
 }
@@ -932,28 +945,34 @@ Tip: For more details see
   - `developerToken`, Developer token to access the API.
   - `debug`, optional, default value is `false`. If it's set as `true`,
     the request is validated but not executed. Only errors are returned.
-  - `adsConfig`, configuration items for [enhanced conversions][enhanced_conversion]:
+  - `adsConfig`, configuration items for [conversion adjustments][conversion_adjustments]:
     - `conversion_action`, Resource name of the conversion action in the
       format `customers/${customerId}/conversionActions/${conversionActionId}`.
-    - `adjustment_type`, must be `ENHANCEMENT`.
+    - `adjustment_type`, for enhanced conversions, it should be `ENHANCEMENT`.
     - `user_identifier_source`: If you uploaded user identifiers in the
       conversions, you need to specify the [source][user_identifier].
 
-[enhanced_conversion]: https://developers.google.com/google-ads/api/reference/rpc/v10/ConversionAdjustment
+[conversion_adjustments]: https://developers.google.com/google-ads/api/reference/rpc/latest/ConversionAdjustment
 [user_identifier]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier
 
 - _Sample Data file content:_
 
-UserIdentifier to an order (`order_id`):
+For an enhanced conversion (`adjustment_type` is `ENHANCEMENT`) with hashed email as the [`UserIdentifier`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier):
 
 ```
 {"order_id": "2022032803", "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```
 
-Or UserIdentifier with AddressInfo
+For an enhanced conversion with `AddressInfo` in `UserIdentifier`:
 
 ```
 {"order_id":"2022040802", "hashed_email":"47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700","address_info":{"hashed_first_name":"ae3379ac2ab35c1c1cfe33b155f0fb39efaa894a8d84a4dcaa7db23816caffd9","hashed_last_name":"1ce3fb2cb03a19b8fd1afdb0e0bd4aa977b8254805e1d4e15d52b6f94cfd21c7","city":"Pyrmont","country_code":"AU","state":"NSW","postal_code":"2009","hashed_street_address":"6cf827c741a060e66b2642117ea91725a51116ea0af7c1809c0bab5297ecd2b7"}}
+```
+
+For a `RESTATEMENT` type conversions adjustment:
+
+```
+{"order_id":"2022040801", "restatement_value": {"adjusted_value":"1", "currency_code":"AUD"}, "adjustment_date_time":"2023-02-23 18:01:23+00:00"}
 ```
 
 ### 4.11. AOUD: Google Ads Offline User Data Upload (OfflineUserDataJobService)
@@ -990,7 +1009,9 @@ Or UserIdentifier with AddressInfo
     "operation": "create|remove",
     "type": "CUSTOMER_MATCH_USER_LIST|STORE_SALES_UPLOAD_FIRST_PARTY",
     "upload_key_type": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
-    "storeSalesMetadata": "StoreSalesMetadata|undefined"
+    "store_sales_metadata": "StoreSalesMetadata|undefined",
+    "transaction_attribute": "TransactionAttribute|undefined",
+    "user_attribute": "UserAttribute|undefined"
   }
 }
 ```
@@ -1012,19 +1033,64 @@ Or UserIdentifier with AddressInfo
   - `upload_key_type`, only presents for customer match uploading. Must be one
     of the following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
     [Read more about upload key types][upload_key_type]
-  - `storeSalesMetadata`, only presents for store sales data uploading. The
+  - `store_sales_metadata`, only presents for store sales data uploading. The
     metadata for Store Sales Direct,
     [see the details of the metadata][store_sales_metadata]
+  - `transaction_attribute`, used in a `STORE_SALES_UPLOAD_FIRST_PARTY` job for
+    shared additional attributes of transactions,
+   [see transaction attribute][transaction_attribute]
+  - `user_attribute`, used in a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job for shared
+    additional attributes of users, [see transaction attribute][user_attribute]
 
 [upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
 [user_data_operation]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
 [store_sales_metadata]: https://developers.google.com/google-ads/api/reference/rpc/latest/StoreSalesMetadata
+[transaction_attribute]: https://developers.google.com/google-ads/api/reference/rpc/latest/TransactionAttribute
+[user_attribute]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserAttribute
 
 Tip: For more details see
 [Offline User Data Job Service](https://developers.google.com/google-ads/api/reference/rpc/latest/OfflineUserDataJobService)
 
 - _Sample Data file content:_
 
+For a `CUSTOMER_MATCH_USER_LIST` job:
 ```
 {"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+```
+
+For a `STORE_SALES_UPLOAD_FIRST_PARTY` job, a `transaction_attribute` can be put in `config` for those shared attributes:
+```json
+{
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "debug": false,
+  "offlineUserDataJobConfig": {
+    .......
+    "transaction_attribute": {
+      "currency_code": "AUD",
+      "conversion_action": "customers/${mcc}/conversionActions/${conversionId}",
+    }
+  }
+}
+```
+With that, the data can be simple like:
+```
+{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "transaction_attribute": {"transaction_date_time": "2018-03-05 09:15:00", "transaction_amount_micros": 10000, "order_id": "1234567890"}}
+```
+
+For a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job, a `user_attribute` can be put in `config` and `data`:
+```json
+{
+  "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+  "debug": false,
+  "offlineUserDataJobConfig": {
+    .......
+    "user_attribute": {
+      "lifetime_value_bucket": 10
+    }
+  }
+}
+```
+Data would be:
+```
+{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "user_attribute": {"lifetime_value_micros": 1000000}}
 ```

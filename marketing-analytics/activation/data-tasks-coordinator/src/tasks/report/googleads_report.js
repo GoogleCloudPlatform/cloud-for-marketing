@@ -39,9 +39,10 @@ const FatalErrors = ['PERMISSION_DENIED: The caller does not have permission'];
 /** Google Ads Report class. */
 class GoogleAdsReport extends Report {
 
-  constructor(config, ads = new GoogleAds(config.developerToken)) {
+  constructor(config, ads) {
     super(config);
-    this.ads = ads;
+    this.ads = ads ||
+      new GoogleAds(config.developerToken, false, super.getOption());
   }
 
   /** @override */

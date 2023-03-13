@@ -27,7 +27,7 @@ const {
   ErrorOptions,
 } = require('../task_config/task_config_dao.js');
 const {FIELD_NAMES} = require('../task_log/task_log_dao.js');
-const {KnotTask} = require('./knot_task.js');
+const { KnotTask } = require('./knot_task.js');
 
 /**
  * `estimateRunningTime` Number of minutes to wait before doing the first task
@@ -46,10 +46,12 @@ const {KnotTask} = require('./knot_task.js');
  *     taskId:string,
  *     target:'pubsub',
  *     qps:number|undefined,
+ *     recordSize: number|undefined,
  *   }|{
  *     taskId:string,
  *     target:'gcs',
  *     file:!StorageFileConfig,
+*      recordSize: number|undefined,
  *   },
  *   multiple:{
  *     estimateRunningTime:(number|undefined),
@@ -93,19 +95,19 @@ class MultipleTask extends KnotTask {
     } else if (this.config.source.csv) {
       records = this.getRecordsFromCsv_(this.config.source.csv);
     } else {
-      console.error('Unknown source for Multiple Task', this.config.source);
+      this.logger.error('Unknown source for Multiple Task', this.config.source);
       throw new Error('Unknown source for Multiple Task');
     }
-    console.log(records);
-    const numberOfTasks = records.length;
-    if (numberOfTasks === 0) {
-      return {parameters: this.appendParameter({numberOfTasks})};
+    if (records.length === 0) {
+      return { parameters: this.appendParameter({ numberOfTasks: 0 }) };
     }
+    this.recordSize = getProperValue(this.config.destination.recordSize, 1, false);
+    let numberOfTasks;
     const multipleTag = nanoid();
     if (this.config.destination.target === 'pubsub') {
-      await this.startThroughPubSub_(multipleTag, records);
+      numberOfTasks = await this.startThroughPubSub_(multipleTag, records);
     } else {
-      await this.startThroughStorage_(multipleTag, records);
+      numberOfTasks = await this.startThroughStorage_(multipleTag, records);
     }
     return {
       parameters: this.appendParameter({
@@ -122,28 +124,36 @@ class MultipleTask extends KnotTask {
    * @param {!Array<string>} records Array of multiple task instances data. Each
    *     element is a JSON string of the 'appendedParameters' object for an task
    *     instance.
-   * @return {!Promise<boolean>} Whether messages are all sent out successfully.
+   * @return {!Promise<number>} Number of multiple tasks.
    * @private
    */
-  startThroughPubSub_(tag, records) {
+  async startThroughPubSub_(tag, records) {
     const qps = getProperValue(this.config.destination.qps, 1, false);
-    const managedSend = apiSpeedControl(1, 1, qps);
+    const managedSend = apiSpeedControl(
+      this.recordSize, 1, qps, (batchResult) => batchResult);
     const sendSingleMessage = async (lines, batchId) => {
-      if (lines.length !== 1) {
+      if (this.recordSize === 1 && lines.length !== 1) {
         throw Error('Wrong number of Pub/Sub messages.');
+      }
+      let extraParameters;
+      extraParameters = JSON.parse(lines[0]);
+      if (this.recordSize > 1) {
+        extraParameters.records = lines.join('\n');
       }
       try {
         await this.taskManager.startTasks(
-            this.config.destination.taskId, {[FIELD_NAMES.MULTIPLE_TAG]: tag},
-            JSON.stringify(
-                Object.assign({}, this.parameters, JSON.parse(lines[0]))));
+          this.config.destination.taskId,
+          { [FIELD_NAMES.MULTIPLE_TAG]: tag },
+          JSON.stringify(Object.assign({}, this.parameters, extraParameters)));
         return true;
       } catch (error) {
-        console.error(`Pub/Sub message[${batchId}] failed.`, error);
+        this.logger.error(`Pub/Sub message[${batchId}] failed.`, error);
         return false;
       }
     };
-    return managedSend(sendSingleMessage, records, `multiple_task_${tag}`);
+    const results =
+      await managedSend(sendSingleMessage, records, `multiple_task_${tag}`);
+    return results.length;
   }
 
   /**
@@ -188,19 +198,28 @@ class MultipleTask extends KnotTask {
    * @param {!Array<string>} records Array of multiple task instances data. Each
    *     element is a JSON string of the 'appendedParameters' object for an task
    *     instance.
+   * @return {!Promise<number>} Number of multiple tasks.
    * @private
    */
   async startThroughStorage_(tag, records) {
-    const content = records.map((record) => {
-      return JSON.stringify(Object.assign(
-          {},
-          this.parameters,
-          JSON.parse(record),
-          {
-            taskId: this.config.destination.taskId,
-            [FIELD_NAMES.MULTIPLE_TAG]: tag,
-          }));
-    }).join('\n');
+    const tasks = [];
+    for (let i = 0; i < records.length; i += this.recordSize) {
+      const chunk = records.slice(i, i + this.recordSize);
+      const task = Object.assign(
+        {},
+        this.parameters,
+        JSON.parse(chunk[0]),
+        {
+          taskId: this.config.destination.taskId,
+          [FIELD_NAMES.MULTIPLE_TAG]: tag,
+        });
+      if (this.recordSize > 1) {
+        task.records = chunk.join('\n');
+      }
+      tasks.push(JSON.stringify(task));
+    }
+    const content = tasks.join('\n');
+
     /** @type {StorageFileConfig} */
     const destination = this.config.destination.file;
     const outputFile = StorageFile.getInstance(
@@ -209,6 +228,7 @@ class MultipleTask extends KnotTask {
           keyFilename: destination.keyFilename,
         });
     await outputFile.getFile().save(content);
+    return tasks.length;
   }
 
   /**

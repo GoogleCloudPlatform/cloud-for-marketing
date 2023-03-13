@@ -115,6 +115,7 @@ class DatastoreModeAccess {
         .save({
           key: key,
           data: data,
+          excludeLargeProperties: true,
         })
         .then((apiResponse) => {
           // Default key in Datastore is a number in response like following.

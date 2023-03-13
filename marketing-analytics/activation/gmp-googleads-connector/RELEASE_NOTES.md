@@ -1,5 +1,26 @@
 # Release Notes
 
+## 3.1.0 (2023-03-08)
+
+### New Features
+
+- Google Ads conversion adjustment upload service (code `ACA`) supports
+`RESTATEMENT` conversion adjustment
+- Google Ads conversion upload service (code `ACLC`) supports `gbraid` and
+`wbraid` as click identifier
+- Google Ads offline user data job service (code `AOUD`) suports new types of job:
+  - `STORE_SALES_UPLOAD_FIRST_PARTY` with [`TransactionAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/TransactionAttribute)
+  - `CUSTOMER_MATCH_WITH_ATTRIBUTES` with [`UserAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserAttribute)
+
+### Integrated APIs
+
+- Updated to the v12 of the Google Ads API.
+
+### Bug fix
+
+- Fixed: task was terminated immediately when Measurement Protocol for GA4 got a 502 error from the server.
+- Fixed: workflow was broken when there were too many failed records which could not be saved in to Firestore `datastore` mode.
+
 ## 3.0.0 (2022-11-10)
 
 ### New Features

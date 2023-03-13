@@ -346,7 +346,7 @@ const apiSpeedControl = (recordSize = 1, numberOfThreads = 1, qps = 1,
     /** @const {!Array<!BatchResult>} */
     const taskResult = await roundArray.reduce(reduceFn, []);
     /** @const {!BatchResult} */
-    const mergedTaskResult = mergeBatchResults(taskResult, taskId);
+    const mergedTaskResult = mergeFn(taskResult, taskId);
     logger.debug(
         `Task [${taskId}]: ${mergedTaskResult.result ? 'succeeded' : 'failed'}.`
     );

@@ -284,6 +284,10 @@ class DfaReporting {
    * Runs a report and return the file Id. As an asynchronized process, the
    * returned file Id will be a placeholder until the status changes to
    * 'REPORT_AVAILABLE' in the response of `getFile`.
+   * Campaign Manager reports use a fixed timezone(America/Los Angeles) when it
+   * has a relative date range, e.g. YESTERDAY. To solve this, if there are
+   * `startDate` and `endDate` available in the given `config`, they will be
+   * used to update the report before the report is started to run.
    * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/run
    *
    * @param {{
@@ -296,6 +300,24 @@ class DfaReporting {
   async runReport(config) {
     const profileId = await this.getProfileForOperation_(config);
     const dfareporting = await this.getApiClient_();
+    const { startDate, endDate } = config;
+    if (startDate && endDate) {
+      const { data: report } = await dfareporting.reports.get({
+        profileId,
+        reportId: config.reportId,
+      });
+      report.criteria.dateRange = { startDate, endDate };
+      const updated = await dfareporting.reports.update({
+        profileId,
+        reportId: config.reportId,
+        requestBody: report
+      });
+      if (updated.status >= 400) {
+        this.logger.error(
+          'Failed to update data range of CM360 report', config.reportId);
+        this.logger.error('Report to be updated', report);
+      }
+    }
     const response = await dfareporting.reports.run({
       profileId,
       reportId: config.reportId,

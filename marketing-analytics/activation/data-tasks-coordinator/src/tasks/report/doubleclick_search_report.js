@@ -25,9 +25,9 @@ const {Report} = require('./base_report.js');
 /** DoubleClick Search 360 Report class. */
 class DoubleClickSearchReport extends Report {
 
-  constructor(config, ds = new DoubleClickSearch()) {
+  constructor(config, ds) {
     super(config);
-    this.ds = ds;
+    this.ds = ds || new DoubleClickSearch(super.getOption());
   }
 
   /** @override */

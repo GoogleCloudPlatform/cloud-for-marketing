@@ -35,6 +35,10 @@ const TaskType = {
   DATA_TRANSFER: 'data_transfer',
   EXPORT_SCHEMA: 'export_schema',
   DELETE_DATASET: 'delete_dataset',
+  // GMC Feed convertor tasks
+  DOWNLOAD: 'download',
+  GMC_XML_FEED_TO_JSONL: 'gmc_xml_feed_to_jsonl',
+  GMC_WEBPAGE_FETECHER: 'gmc_webpage_fetcher',
   // Cloud Storage tasks
   COPY_GCS: 'copy_gcs',
   // AutoML Tables API

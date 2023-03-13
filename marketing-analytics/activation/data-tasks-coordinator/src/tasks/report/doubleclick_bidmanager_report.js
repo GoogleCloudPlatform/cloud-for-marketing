@@ -25,11 +25,11 @@ const {Report} = require('./base_report.js');
 /** DoubleClick BidManager (DV360) Report class. */
 class DoubleClickBidManagerReport extends Report {
 
-  constructor(config, dbm = new DoubleClickBidManager()) {
+  constructor(config, dbm) {
     super(config);
     this.queryId = this.config.queryId;
     this.requestBody = this.config.requestBody;
-    this.dbm = dbm;
+    this.dbm = dbm || new DoubleClickBidManager(super.getOption());
   }
 
   /**
@@ -49,28 +49,22 @@ class DoubleClickBidManagerReport extends Report {
    * @override
    */
   async generate(parameters) {
-    const {running, latestReportRunTimeMs} = await this.dbm.getQuery(
-        this.queryId);
-    if (running) {
-      console.warn(`DBM Query[${this.queryId}] is running when try to start.`);
-    }
-    const started = await this.dbm.runQuery(this.queryId, this.requestBody);
-    if (started) return {latestReportRunTimeMs};
+    const reportId = await this.dbm.runQuery(this.queryId, this.requestBody);
+    if (reportId) return { reportId };
     throw new Error(`Failed to start DV360 report ${this.queryId}`);
   }
 
   /** @override */
   async isReady(parameters) {
-    const {running, latestReportRunTimeMs} = await this.dbm.getQuery(
-        this.queryId);
-    return !running &&
-        (latestReportRunTimeMs - parameters.latestReportRunTimeMs > 0);
+    const { status } =
+      await this.dbm.getQueryReport(this.queryId, parameters.reportId);
+    return status && status.state === 'DONE';
   }
 
   /** @override */
   async getContent(parameters) {
-    const {googleCloudStoragePathForLatestReport: url} = await this.dbm.getQuery(
-        this.queryId);
+    const { googleCloudStoragePath: url } =
+      await this.dbm.getQueryReport(this.queryId, parameters.reportId);
     const response = await request({method: 'GET', url,});
     return this.clean(response.data);
   }

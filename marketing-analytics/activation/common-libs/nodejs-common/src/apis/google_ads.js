@@ -21,9 +21,12 @@ const {protos: {google: {ads: {googleads}}}} = require('google-ads-node');
 const googleAdsLib = googleads[Object.keys(googleads)[0]];
 const {
   common: {
+    CustomerMatchUserListMetadata,
+    StoreSalesMetadata,
+    TransactionAttribute,
+    UserAttribute,
     UserData,
     UserIdentifier,
-    CustomerMatchUserListMetadata,
   },
   resources: {
     GoogleAdsField,
@@ -31,24 +34,25 @@ const {
     UserList,
   },
   services: {
-    CreateOfflineUserDataJobRequest,
     AddOfflineUserDataJobOperationsRequest,
+    CreateOfflineUserDataJobRequest,
     RunOfflineUserDataJobRequest,
+    SearchGoogleAdsFieldsRequest,
     UploadCallConversionsRequest,
-    UploadClickConversionsRequest,
     UploadCallConversionsResponse,
+    UploadClickConversionsRequest,
     UploadClickConversionsResponse,
     UploadConversionAdjustmentsRequest,
     UploadConversionAdjustmentsResponse,
     UploadUserDataRequest,
     UploadUserDataResponse,
     UserDataOperation,
-    SearchGoogleAdsFieldsRequest,
   },
   errors: {
     GoogleAdsFailure,
   },
   enums: {
+    OfflineUserDataJobFailureReasonEnum: { OfflineUserDataJobFailureReason },
     OfflineUserDataJobTypeEnum: { OfflineUserDataJobType },
     OfflineUserDataJobStatusEnum: { OfflineUserDataJobStatus },
     UserListMembershipStatusEnum: { UserListMembershipStatus },
@@ -77,6 +81,8 @@ const PICKED_PROPERTIES = [
   'external_attribution_data',
   'cart_data',
   'user_identifiers',
+  'gbraid',
+  'wbraid',
   'gclid',
   'caller_id',
   'call_start_date_time',
@@ -86,6 +92,7 @@ const PICKED_PROPERTIES = [
   'currency_code',
   'order_id',
   'adjustment_type',
+  'restatement_value',
   'adjustment_date_time',
   'user_agent',
   'gclid_date_time_pair',
@@ -102,6 +109,16 @@ const IDENTIFIERS = [
   'mobile_id',
   'third_party_user_id',
   'address_info',
+];
+
+/**
+ * Additional attributes in user data for store sales data or customer match.
+ * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserData
+ * @type {Array<string>}
+ */
+const USERDATA_ADDITIONAL_ATTRIBUTES = [
+  'transaction_attribute',
+  'user_attribute',
 ];
 
 /**
@@ -178,11 +195,17 @@ let CustomerMatchConfig;
  * Configuration for offline user data job, includes:
  * customer_id, login_customer_id, list_id, operation and type.
  * 'operation' should be one of the two: 'create' or 'remove',
- * 'type' is OfflineUserDataJobType, it can be 'CUSTOMER_MATCH_USER_LIST' or
- * 'STORE_SALES_UPLOAD_FIRST_PARTY'.
+ * 'type' is OfflineUserDataJobType, it can be 'CUSTOMER_MATCH_USER_LIST',
+ * 'CUSTOMER_MATCH_WITH_ATTRIBUTES' or 'STORE_SALES_UPLOAD_FIRST_PARTY'.
  * For job type 'CUSTOMER_MATCH_USER_LIST', if `list_id` is not present,
  * 'list_name' and 'upload_key_type' need to be there so they can be used to
  *  create a customer match user list.
+ * For job type 'CUSTOMER_MATCH_WITH_ATTRIBUTES', 'user_attribute' can be used
+ * to store shared additional user attributes.
+ * For job type 'STORE_SALES_UPLOAD_FIRST_PARTY', `store_sales_metadata` is
+ * required to offer StoreSalesMetadata. Besides that, for the store sales data,
+ * common data (e.g. `currency_code`, `conversion_action`) in
+ * `transaction_attribute` can be put here as well.
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/OfflineUserDataJob
  * @typedef {{
  *   customer_id: (string|number),
@@ -192,7 +215,9 @@ let CustomerMatchConfig;
  *   upload_key_type: ('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
  *   operation: ('create'|'remove'),
  *   type: !OfflineUserDataJobType,
- *   storeSalesMetadata: (undefined|object),
+ *   store_sales_metadata: (undefined|StoreSalesMetadata),
+ *   transaction_attribute: (undefined|TransactionAttribute),
+ *   user_attribute: (undefined|UserAttribute),
  * }}
  */
 let OfflineUserDataJobConfig;
@@ -801,10 +826,16 @@ class GoogleAds {
    * @see https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
    * @param {string} operationType either 'create' or 'remove'
    * @param {Array<CustomerMatchRecord>} customerMatchRecords userIds
+   * @param {{
+   *   transaction_attribute: TransactionAttribute|undefined,
+   *   user_attribute: UserAttribute,
+   * }} additionalAttributes Additional attributes for 'UserData', includes
+   * 'transaction_attribute' or 'user_attribute'.
    * @return {Array<UserDataOperation>}
    * @private
    */
-  buildOperationsList_(operationType, customerMatchRecords) {
+  buildOperationsList_(operationType, customerMatchRecords,
+    additionalAttributes = {}) {
     return customerMatchRecords.map((customerMatchRecord) => {
       const userIdentifiers = [];
       IDENTIFIERS.forEach((idType) => {
@@ -819,17 +850,24 @@ class GoogleAds {
           }
         }
       });
-      let userData;
+      const userData = {};
       if (userIdentifiers.length <= MAX_IDENTIFIERS_PER_USER) {
-        userData = UserData.create({user_identifiers: userIdentifiers});
+        userData.user_identifiers = userIdentifiers;
       } else {
         this.logger.warn(
             `Too many user identifiers, will only send ${MAX_IDENTIFIERS_PER_USER}:`,
             JSON.stringify(customerMatchRecord));
-        userData = UserData.create({user_identifiers: userIdentifiers}.slice(0,
-            MAX_IDENTIFIERS_PER_USER));
+        userData.user_identifiers =
+          userIdentifiers.slice(0, MAX_IDENTIFIERS_PER_USER);
       }
-      return UserDataOperation.create({[operationType]: userData});
+      USERDATA_ADDITIONAL_ATTRIBUTES.forEach((attribute) => {
+        if (additionalAttributes[attribute] || customerMatchRecord[attribute]) {
+          userData[attribute] = lodash.merge(
+            {}, additionalAttributes[attribute], customerMatchRecord[attribute]);
+        }
+      })
+      return UserDataOperation.create(
+        { [operationType]: UserData.create(userData) });
     });
   }
 
@@ -884,7 +922,12 @@ class GoogleAds {
     if (jobs.length === 0) {
       throw new Error(`Can't find the OfflineUserDataJob: ${resourceName}`);
     }
-    return OfflineUserDataJobStatus[jobs[0].offline_user_data_job.status];
+    const { failure_reason: failure, status } = jobs[0].offline_user_data_job;
+    if (failure > 0) {
+      this.logger.warn(`Offline UserData Job [${resourceName}] failed: `,
+        OfflineUserDataJobFailureReason[failure])
+    }
+    return OfflineUserDataJobStatus[status];
   }
 
   /**
@@ -909,9 +952,10 @@ class GoogleAds {
       job.customer_match_user_list_metadata = metadata;
       // https://developers.google.com/google-ads/api/rest/reference/rest/latest/customers.offlineUserDataJobs?hl=en#StoreSalesMetadata
     } else if (type.startsWith('STORE_SALES')) {
-      // If there is StoreSalesMetadata in the config
-      if (config.storeSalesMetadata) {
-        job.store_sales_metadata = config.storeSalesMetadata;
+      // Support previous property 'StoreSalesMetadata' for compatibility.
+      if (config.store_sales_metadata || config.StoreSalesMetadata) {
+        job.store_sales_metadata = config.store_sales_metadata
+          || config.StoreSalesMetadata;
       }
     } else {
       throw new Error(`UNSUPPORTED OfflineUserDataJobType: ${type}.`);
@@ -942,7 +986,7 @@ class GoogleAds {
     const operation = config.operation;
     const customer = await this.getGoogleAdsApiCustomer_(
       loginCustomerId, customerId);
-    const operationsList = this.buildOperationsList_(operation, records);
+    const operationsList = this.buildOperationsList_(operation, records, config);
     const request = AddOfflineUserDataJobOperationsRequest.create({
       resource_name: jobResourceName,
       operations: operationsList,
