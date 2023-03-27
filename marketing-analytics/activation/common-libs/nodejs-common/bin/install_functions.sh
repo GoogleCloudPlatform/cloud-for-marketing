@@ -16,6 +16,7 @@
 
 # Cloud Functions Runtime Environment.
 CF_RUNTIME="${CF_RUNTIME:=nodejs14}"
+CF_MEMORY="${CF_MEMORY:=2048MB}"
 
 # Counter for steps.
 STEP=0
@@ -1551,7 +1552,7 @@ set_cloud_functions_default_settings() {
   local -n default_cf_flag=$1
   default_cf_flag+=(--region="${REGION}")
   default_cf_flag+=(--no-allow-unauthenticated)
-  default_cf_flag+=(--timeout=540 --memory=2048MB --runtime="${CF_RUNTIME}")
+  default_cf_flag+=(--timeout=540 --memory="${CF_MEMORY}" --runtime="${CF_RUNTIME}")
   default_cf_flag+=(--set-env-vars=GCP_PROJECT="${GCP_PROJECT}")
   default_cf_flag+=(--set-env-vars=PROJECT_NAMESPACE="${PROJECT_NAMESPACE}")
   default_cf_flag+=(--set-env-vars=DEBUG="${DEBUG}")
