@@ -30,15 +30,21 @@ const {ApiLock} = require('./api_lock.js');
 class ApiLockDummy {
 
   /** @override */
-  getLock(topicName) {
-    console.log(`[Dummy AppLock] lock [${topicName}]: OK.`);
+  async getLock(lockId, token) {
+    console.log(`[Dummy AppLock] lock [${lockId}] token[${token}]: OK.`);
     return Promise.resolve(true);
   }
 
   /** @override */
-  unlock(topicName) {
-    console.log(`[Dummy AppLock] unlock [${topicName}]: OK.`);
+  async unlock(lockId, token) {
+    console.log(`[Dummy AppLock] unlock [${lockId}] token[${token}]: OK.`);
     return Promise.resolve(true);
+  }
+
+  /** @override */
+  async hasAvailableLock(lockId) {
+    console.log(`[Dummy AppLock] has available lock [${lockId}]: NO.`);
+    return Promise.resolve(false);
   }
 }
 

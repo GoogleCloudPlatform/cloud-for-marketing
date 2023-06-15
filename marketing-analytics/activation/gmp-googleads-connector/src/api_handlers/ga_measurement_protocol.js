@@ -20,10 +20,10 @@
 'use strict';
 
 const {
-  api: {measurementprotocol: {MeasurementProtocol}},
-  utils: {apiSpeedControl, getProperValue, BatchResult},
+  api: { measurementprotocol: { MeasurementProtocol } },
+  utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getDebug } = require('./handler_utilities.js');
+const { ApiHandler } = require('./api_handler.js');
 
 /**
  * Hits per request. Measurement Protocol(MP) has a value as 20.
@@ -33,12 +33,6 @@ const { getDebug } = require('./handler_utilities.js');
 const RECORDS_PER_REQUEST = 20;  // Maximum value defined by this API.
 const QUERIES_PER_SECOND = 20;
 const NUMBER_OF_THREADS = 10;
-
-/** API name in the incoming file name. */
-exports.name = 'MP';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
 
 /**
  * Measurement Protocol configuration.
@@ -53,31 +47,50 @@ exports.defaultOnGcs = false;
  */
 let MeasurementProtocolConfig;
 
-exports.MeasurementProtocolConfig = MeasurementProtocolConfig;
-
 /**
- * Sends out the data to Google Analytics Measurement Protocol (MP).
- * MP pings are composed by 'string' parameters and values. Put those common
- * parameters in the 'mpConfig' object, e.g. Protocol Version, Tracking ID / Web
- * Property ID, etc, and put other customized parameters, e.g. Client ID or
- * Custom Dimensions into 'records'.
- * For reference, see:
- *     https://developers.google.com/analytics/devguides/collection/protocol/v1/parameters
- * @param {string} records Data to send out to Google Analytics. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!MeasurementProtocolConfig} config Configuration for Measurement
- *     Protocol.
- * @return {!Promise<!BatchResult>}
+ * Measurement Protocol for Google Analytics.
  */
-exports.sendData = (records, messageId, config) => {
-  const debug = getDebug(config.debug);
-  const measurementProtocol = new MeasurementProtocol(debug);
-  const recordsPerRequest =
+class GoogleAnalyticsMeasurementProtocol extends ApiHandler {
+
+  /** @override */
+  getSpeedOptions(config) {
+    const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
-  const numberOfThreads =
+    const numberOfThreads =
       getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  return apiSpeedControl(recordsPerRequest, numberOfThreads, qps)(
-      measurementProtocol.getSinglePingFn(config.mpConfig), records, messageId);
+    const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
+    return { recordsPerRequest, numberOfThreads, qps };
+  }
+
+  /**
+   * Sends out the data to Google Analytics Measurement Protocol (MP).
+   * MP pings are composed by 'string' parameters and values. Put those common
+   * parameters in the 'mpConfig' object, e.g. Protocol Version, Tracking ID / Web
+   * Property ID, etc, and put other customized parameters, e.g. Client ID or
+   * Custom Dimensions into 'records'.
+   * For reference, see:
+   *     https://developers.google.com/analytics/devguides/collection/protocol/v1/parameters
+   * @param {string} records Data to send out to Google Analytics. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!MeasurementProtocolConfig} config Configuration for Measurement
+   *     Protocol.
+   * @return {!Promise<!BatchResult>}
+   * @override
+   */
+  sendData(records, messageId, config) {
+    const debug = this.getDebug(config.debug);
+    const measurementProtocol = new MeasurementProtocol(debug);
+    const managedSend = this.getManagedSendFn(config);
+    const configedUpload = measurementProtocol.getSinglePingFn(config.mpConfig);
+    return managedSend(configedUpload, records, messageId);
+  }
+}
+
+/** API name in the incoming file name. */
+GoogleAnalyticsMeasurementProtocol.code = 'MP';
+
+module.exports = {
+  MeasurementProtocolConfig,
+  GoogleAnalyticsMeasurementProtocol,
 };

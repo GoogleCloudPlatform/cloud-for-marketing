@@ -24,6 +24,7 @@
  */
 const TaskStatus = {
   QUEUING: 'queuing',
+  TRANSPORTED: 'transported',
   SENDING: 'sending',
   DONE: 'done',
   FAILED: 'failed',
@@ -66,6 +67,14 @@ class TentaclesTask {
   createTask(entitySkeleton) {}
 
   /**
+   * Checks whether this message has been transported or not. If not, transport
+   * it and changes its status to 'TRANSPORTED' and returns true.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @return {!Promise<boolean>} Whether this task is transported successfully.
+   */
+  transport(id) { }
+
+  /**
    * Saves the Pub/Sub message ID in Tentacles Task.
    * @param {string|number|undefined} id Tentacles Task ID.
    * @param {!Object<string,string>} taskData Task data that will be updated
@@ -87,10 +96,10 @@ class TentaclesTask {
   /**
    * Finishes a task by updating the status 'DONE'.
    * @param {string|number|undefined} id Tentacles Task ID.
-   * @param {boolean} status Whether this task succeeded.
+   * @param {boolean} taskDone Whether this task succeeded.
    * @return {!Promise<boolean>} Whether this task finished successfully.
    */
-  finish(id, status) {}
+  finish(id, taskDone) { }
 
   /**
    * Logs error message in the Task.

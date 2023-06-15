@@ -1,5 +1,29 @@
 # Release Notes
 
+## 4.0.0 (2023-06-15)
+
+### New Features
+
+- Auto-sizing: when there is no `size` configuration in the file name, Tentacles
+  will automatically decide a size based on QPS and average length of lines.
+- Auto-retry: when unexpected errors or timeout happen, Cloud Functions
+  **apirequester** will auto retry upto 3 times.
+- Speed up: for some connectors, e.g. `MP_GA4`, `MP`, `ACLC`, `ACA` and `ACM`,
+  multiple instances of Cloud Functions **apirequester** are availabe now.
+  The sending rate can be increased 5 to 10 times.
+
+
+### Integrated APIs
+
+- Updated to the v13 of the Google Ads API.
+
+### Bug fix
+
+- Fixed: Some Google Ads related errors can not be show properly in the dashboard.
+- Fixed: If there was a [BOM](https://en.wikipedia.org/wiki/Byte_order_mark) at
+ the beginning of data files, the first line is not a valid JSON string and the
+ process will fail. Now, Tentacles will ignore the BOM.
+
 ## 3.1.0 (2023-03-08)
 
 ### New Features

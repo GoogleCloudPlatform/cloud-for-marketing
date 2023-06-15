@@ -2003,11 +2003,11 @@ quit_if_failed() {
 #   Array of string.
 #######################################
 join_string_array() {
-  local separator=$1;
+  local separator=\\$1;
   shift
   local first=$1;
   shift
-  printf %s "$first" "${@/#/$separator}"
+  printf %s "$first" "${@/#/$separator}" | sed -e "s/\\$separator/$separator/g"
 }
 
 # Import other bash files.

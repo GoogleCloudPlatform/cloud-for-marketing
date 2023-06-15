@@ -19,17 +19,20 @@
 
 'use strict';
 const {
-  firestore: {DataSource, Entity, DataAccessObject},
-  utils: {getLogger,}
+  firestore: { DataSource, Entity, DataAccessObject, DatastoreDocumentFacade },
+  utils: { getLogger }
 } = require('@google-cloud/nodejs-common');
 const {TaskStatus, TentaclesTask} = require('./tentacles_task.js');
 
 /**
- * Returns updated Task entity based on the given one.
+ * Returns an operation on the specified task.
  * This function is used for Task changing to next status.
- * @typedef {function(!Entity):!Promise<!Entity|undefined>}
+ * @typedef {function(!DatastoreDocumentFacade):!Promise<!Entity|undefined>}
  */
-let GetUpdatedTask;
+let TaskOperation;
+
+/** @const{number} Default process times. It will retry 3 times by default. */
+const DEFAULT_PROCESS_TIMES = 4;
 
 /**
  * Tentacles Task data object Firestore native mode or Datastore mode.
@@ -44,7 +47,10 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
    */
   constructor(dataSource, namespace = 'tentacles') {
     super('Task', namespace, dataSource);
-    this.logger = getLogger('TentaclesTask');
+    // This logger is used to send data to BigQuery for the dashboard.
+    this.loggerForDashboard = getLogger('TentaclesTask');
+    // This logger is for regular logging.
+    this.logger = getLogger('T.TASK');
   }
 
   /**
@@ -64,40 +70,46 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
   }
 
   /**
-   * Updates Task entity in a checked context. It checks the existence of the
-   * 'Task' before updates it with the value that passed in function returns.
-   * The function passed in will return new values of Task entity if its status
-   * is correct, otherwise it returns undefined.
-   * @param {string|number} id Tentacles Task ID.
-   * @param {!GetUpdatedTask} fn The function that does the update work.
-   * @return {!Promise<boolean>} Whether the update is successful.
+   * Carries out the operation in a transaction and returns whether the
+   * operation is successful. It checks the existence of the'Task' before
+   * updating it with the value that is returned by the function `operationFn`.
+   * @param {(string|number)} id Tentacles Task Id.
+   * @param {!TaskOperation} operationFn
+   * @return {!Promise<boolean>} Whether the operation is successful.
    * @private
    */
-  checkedSave_(id, fn) {
+  async operateInTransaction_(id, operationFn) {
     if (!id) {
-      console.log(`Empty Task ID (test mode), always returns TRUE.`);
-      return Promise.resolve(true);
+      this.logger.info('Empty Task ID (test mode), always returns TRUE.');
+      return true;
     }
-    id = this.parseTaskId_(id);
-    return this.load(id).then((task) => {
-      if (!task) {
-        console.warn(`Can't find the Task[${id}]. Quit.`);
-        return false;
-      }
-      return Promise.resolve(fn(task))
-          .then((task) => {
-            if (!task) return false;
-            return this.update(task, id).then(() => {
-              this.logger.info(
-                  JSON.stringify(Object.assign({id, action: fn.name}, task)));
-              return true;
-            });
-          })
-          .catch((error) => {
-            console.error(error);
+    try {
+      const transactionOperation =
+        (documentSnapshot, documentReference, transaction) => {
+          if (!documentSnapshot.exists) {
+            this.logger.warn(`Can't find the Task[${id}]. Quit.`);
             return false;
-          });
-    });
+          }
+          const taskEntity = operationFn(documentSnapshot);
+          const status = documentSnapshot.get('status');
+          if (!taskEntity) {
+            this.logger.warn(
+              `Fail to ${operationFn.name} Task[${id}] status[${status}].`);
+            return false;
+          }
+          transaction.update(documentReference, taskEntity);
+          this.logger.debug(`${operationFn.name} task[${id}] status[${status}].`);
+          this.loggerForDashboard.info(JSON.stringify(
+            Object.assign({ id, status, action: operationFn.name }, taskEntity)
+          ));
+          return true;
+        };
+      const transactionFunction = this.wrapInTransaction(id, transactionOperation);
+      return await this.runTransaction(transactionFunction);
+    } catch (error) {
+      this.logger.error(error);
+      return false;
+    }
   }
 
   /** @override */
@@ -106,56 +118,92 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
         {}, entitySkeleton,
         {status: TaskStatus.QUEUING, createdAt: new Date()});
     const id = await this.create(entity);
-    this.logger.info(
+    this.loggerForDashboard.info(
         JSON.stringify(Object.assign({action: 'createTask', id}, entity)));
     return id;
   }
 
   /** @override */
   updateTask(id, data) {
-    const addMessageId = /** @type {!GetUpdatedTask} */(task) => {
-      return Object.assign({}, task, data);
-    };
-    return this.checkedSave_(id, addMessageId);
+    /** @type {!TaskOperation} */
+    const appendInfo = () => data;
+    return this.operateInTransaction_(id, appendInfo);
   }
 
   /** @override */
-  start(id) {
-    const startTask = /** @type {!GetUpdatedTask} */(task) => {
-      if (task.status === TaskStatus.QUEUING) {
-        return Object.assign(
-            {}, task, {status: TaskStatus.SENDING, startSending: new Date()});
+  transport(id) {
+    /** @type {!TaskOperation} */
+    const transport = (documentSnapshot) => {
+      const status = documentSnapshot.get('status');
+      if (status === TaskStatus.QUEUING) {
+        return {
+          status: TaskStatus.TRANSPORTED,
+          transportedTime: new Date(),
+        };
       }
-      console.warn(`Wrong status[${task.status}] to Start for Task[${id}].`);
     };
-    return this.checkedSave_(id, startTask);
+    return this.operateInTransaction_(id, transport);
   }
 
   /** @override */
-  finish(id, status) {
-    const finishTask = /** @type {!GetUpdatedTask} */(task) => {
-      if (task.status === TaskStatus.SENDING) {
-        return Object.assign({}, task, {
-          status: status ? TaskStatus.DONE : TaskStatus.FAILED,
+  async start(id) {
+    // Errors can't be passed out of a transaction, so use it to hold errors.
+    const errors = [];
+    /** @type {!TaskOperation} */
+    const startTask = (documentSnapshot) => {
+      const status = documentSnapshot.get('status');
+      const processedTimes = documentSnapshot.get('processedTimes') || 0;
+      if (status === TaskStatus.TRANSPORTED && processedTimes === 0) {
+        return {
+          status: TaskStatus.SENDING,
+          startSending: new Date(),
+          processedTimes: 1,
+        };
+      } else if (status === TaskStatus.SENDING) { // 'retry'
+        if (processedTimes < DEFAULT_PROCESS_TIMES) {
+          return {
+            status: TaskStatus.SENDING,
+            startSending: new Date(),
+            processedTimes: processedTimes + 1,
+          };
+        }
+        errors.push(
+          `Task[${id}] has been processed ${DEFAULT_PROCESS_TIMES} times.`
+        );
+      }
+    };
+    const result = await this.operateInTransaction_(id, startTask);
+    if (errors.length > 0) throw new Error(errors.join('|'));
+    return result;
+  }
+
+  /** @override */
+  finish(id, taskDone) {
+    /** @type {!TaskOperation} */
+    const finish = (documentSnapshot) => {
+      const status = documentSnapshot.get('status');
+      if (status === TaskStatus.SENDING) {
+        return {
+          status: taskDone ? TaskStatus.DONE : TaskStatus.FAILED,
           finishedTime: new Date(),
-        });
+        };
       }
-      console.warn(`Wrong status[${task.status}] to Finish for Task[${id}].`);
     };
-    return this.checkedSave_(id, finishTask);
+    return this.operateInTransaction_(id, finish);
   }
 
   /** @override */
   logError(id, error) {
-    const saveErrorMessage = /** @type {!GetUpdatedTask} */(task) => {
-      console.warn(`Error in this task[${id}]: `, error);
-      return Object.assign({}, task, {
+    /** @type {!TaskOperation} */
+    const saveErrorMessage = (task) => {
+      this.logger.warn(`Error in this task[${id}]: `, error);
+      return {
         status: TaskStatus.ERROR,
         finishedTime: new Date(),
         error: error.toString(),
-      });
+      };
     };
-    return this.checkedSave_(id, saveErrorMessage);
+    return this.operateInTransaction_(id, saveErrorMessage);
   }
 }
 

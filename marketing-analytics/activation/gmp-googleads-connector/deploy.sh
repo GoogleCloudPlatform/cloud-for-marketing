@@ -248,6 +248,7 @@ deploy_cloud_functions_transporter(){
   local cf_flag=()
   cf_flag+=(--entry-point=transport)
   cf_flag+=(--trigger-topic="${PROJECT_NAMESPACE}-trigger")
+  cf_flag+=(--retry)
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 2. '${PROJECT_NAMESPACE}_tran' is triggered by new messages \
 from Pub/Sub topic [${PROJECT_NAMESPACE}-trigger]."
@@ -266,6 +267,7 @@ deploy_cloud_functions_api_requester(){
   local cf_flag=()
   cf_flag+=(--entry-point=requestApi)
   cf_flag+=(--trigger-topic="${PROJECT_NAMESPACE}-push")
+  cf_flag+=(--retry)
   set_authentication_env_for_cloud_functions cf_flag
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 3. '${PROJECT_NAMESPACE}_api' is triggered by new messages \

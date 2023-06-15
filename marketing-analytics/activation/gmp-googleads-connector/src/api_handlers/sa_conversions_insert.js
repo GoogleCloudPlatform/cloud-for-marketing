@@ -21,15 +21,12 @@
 
 const {
   api: {
-    doubleclicksearch: {
-      DoubleClickSearch,
-      InsertConversionsConfig,
-      AvailabilityConfig,
-    }
+    doubleclicksearch:
+    { DoubleClickSearch, InsertConversionsConfig, AvailabilityConfig }
   },
-  utils: {apiSpeedControl, getProperValue, BatchResult, getLogger},
+  utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getOption } = require('./handler_utilities.js');
+const { ApiHandler } = require('./api_handler.js');
 
 /**
  * Conversions per request.
@@ -41,15 +38,6 @@ const RECORDS_PER_REQUEST = 200;
  */
 const QUERIES_PER_SECOND = 20;
 const NUMBER_OF_THREADS = 10;
-
-/** @const {string} API name in the incoming file name. */
-exports.name = 'SA';
-
-/**
- * @const {boolean} Data for this API will be transferred through GCS by
- * default.
- */
-exports.defaultOnGcs = false;
 
 /**
  * Configuration for a Search Ads 360(SA) conversions upload.
@@ -66,44 +54,72 @@ exports.defaultOnGcs = false;
  */
 let SearchAdsConfig;
 
-exports.SearchAdsConfig = SearchAdsConfig;
-
 /**
- * Sends out the data as conversions to DoubleClick Search Ads (DS).
- * @param {string} records Data to send out as conversions. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!SearchAdsConfig} config
- * @return {!Promise<BatchResult>}
+ * Conversion upload for Search Ads.
  */
-const sendData = async (records, messageId, config) => {
-  const doubleClickSearch = new DoubleClickSearch(getOption(config));
-  const logger = getLogger('API.SA');
-  if (records.trim() === '') {
-    /** @type {!BatchResult} */
-    const batchResult = {
-      numberOfLines: 0,
-    };
-    if (config.availabilities) {
-      batchResult.result = await doubleClickSearch.updateAvailability(
-          config.availabilities);
-    } else {
-      const error = 'Empty file with no availabilities settings. Quit.';
-      logger.error(error);
-      batchResult.result = false;
-      batchResult.errors = [error];
-    }
-    return batchResult;
-  }
-  const recordsPerRequest =
-      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST, false);
-  const numberOfThreads =
-      getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND);
-  const managedSend = apiSpeedControl(recordsPerRequest, numberOfThreads, qps);
-  const configedUpload =
-      doubleClickSearch.getInsertConversionFn(config.saConfig);
-  return managedSend(configedUpload, records, messageId);
-};
+class SearchAdsConversionUpload extends ApiHandler {
 
-exports.sendData = sendData;
+  /** @override */
+  getSpeedOptions(config) {
+    const recordsPerRequest =
+      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST, false);
+    const numberOfThreads =
+      getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
+    const qps = getProperValue(config.qps, QUERIES_PER_SECOND);
+    return { recordsPerRequest, numberOfThreads, qps };
+  }
+  /**
+   * Sends out the data as conversions to Search Ads (SA).
+   * @param {string} records Data to send out as conversions. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!SearchAdsConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  sendData(records, messageId, config) {
+    const doubleClickSearch = new DoubleClickSearch(this.getOption(config));
+    return this.sendDataInternal(doubleClickSearch, records, messageId, config);
+  }
+
+  /**
+   * Sends out the data as conversions to Search Ads (SA).
+   * This function exposes a DoubleClickSearch parameter for test.
+   * @param {DoubleClickSearch} doubleClickSearch DoubleClickSearch instance.
+   * @param {string} records Data to send out as conversions. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!SearchAdsConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  async sendDataInternal(doubleClickSearch, records, messageId, config) {
+    if (records.trim() === '') {
+      /** @type {!BatchResult} */
+      const batchResult = {
+        numberOfLines: 0,
+      };
+      if (config.availabilities) {
+        batchResult.result = await doubleClickSearch.updateAvailability(
+          config.availabilities);
+      } else {
+        const error = 'Empty file with no availabilities settings. Quit.';
+        this.logger.error(error);
+        batchResult.result = false;
+        batchResult.errors = [error];
+      }
+      return batchResult;
+    }
+    const managedSend = this.getManagedSendFn(config);
+    const configedUpload =
+      doubleClickSearch.getInsertConversionFn(config.saConfig);
+    return managedSend(configedUpload, records, messageId);
+  }
+
+}
+
+/** @const {string} API name in the incoming file name. */
+SearchAdsConversionUpload.code = 'SA';
+
+module.exports = {
+  SearchAdsConfig,
+  SearchAdsConversionUpload,
+};

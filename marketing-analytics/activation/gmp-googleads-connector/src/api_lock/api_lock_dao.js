@@ -20,19 +20,28 @@
 'use strict';
 
 const {
-  firestore: {TransactionOperation, DataAccessObject},
+  firestore: { TransactionOperation, DatastoreDocumentFacade, DataAccessObject },
   utils: {getLogger},
 } = require('@google-cloud/nodejs-common');
 const {ApiLock} = require('./api_lock.js');
 
 /**
  * The 'ApiLock' is a document in Firestore (or entity in Datastore) with the
- * unique key from the name of API. Getting lock will turn the object with the
- * property 'available' as 0, while unlocking changes it back to 1.
+ * unique key(lockId) from the name of API.
+ * 'max' is the maximum available instances for this lock. It depends on the
+ * API specification.
+ * 'tokens' stands for different instances of the lock.
+ * Getting a lock will registed the given 'token' to 'tokens' and reduce the
+ * the property 'available' for 1, while unlocking a 'token' will remove that
+ * element from the array 'tokens' and increases 'available' 1.
  *
  * @typedef {{
+ *   max: number,
  *   available: number,
- *   updatedAt: number,
+ *   tokens: Array<{
+ *     token: string,
+ *     updatedAt: number,
+ *   }
  * }}
  */
 let ApiLockObject;
@@ -48,6 +57,7 @@ class ApiLockDao extends DataAccessObject {
     super('Lock', namespace, dataSource);
     /**
      * Maximum time (milliseconds) for a process to hold an ApiLock.
+     * By default, it is 10 mintues.
      * @type {number}
      */
     this.maxTimeForLocks = 10 * 60 * 1000;
@@ -55,124 +65,212 @@ class ApiLockDao extends DataAccessObject {
   }
 
   /** @override */
-  getLock(topicName) {
-    return this.runTransaction(
-        this.wrapInTransaction(topicName, this.getLockOperation(topicName)))
-        .catch((error) => {
-          console.log(`Error in getLock ${topicName}. Reason:`, error);
-          return false;
-        });
+  async getLock(lockId, token) {
+    this.logger.debug(`Try to add Token[${token}] for Lock[${lockId}]`);
+    try {
+      const transactionOperation = this.getLockOperation(lockId, token);
+      const transactionFunction =
+        this.wrapInTransaction(lockId, transactionOperation);
+      return await this.runTransaction(transactionFunction);
+    } catch (error) {
+      this.logger.error(
+        `Error in getLock ${lockId} for Token[${token}]. Reason:`, error);
+      return false;
+    }
   }
 
   /** @override */
-  unlock(topicName) {
-    return this.runTransaction(
-        this.wrapInTransaction(topicName, this.getUnlockOperation(topicName)))
-        .catch((error) => {
-          console.log(`Error in unlock ${topicName}. Reason:`, error);
-          return false;
-        });
+  async unlock(lockId, token) {
+    this.logger.debug(`Try to release Token[${token}] for Lock[${lockId}]`);
+    try {
+      const transactionOperation = this.getUnlockOperation(lockId, token);
+      const transactionFunction =
+        this.wrapInTransaction(lockId, transactionOperation);
+      return await this.runTransaction(transactionFunction);
+    } catch (error) {
+      this.logger.error(
+        `Error in unlock ${lockId} for Token[${token}]. Reason:`, error);
+      return false;
+    }
+  }
+
+  /** @override */
+  async hasAvailableLock(lockId) {
+    const { max, tokens = [] } = await this.load(lockId);
+    return max > tokens.length;
   }
 
   /**
    * Get the operation that gets a lock in a transaction. It returns true when
    * 1. There is no such lock. Or
-   * 2. The lock is available;
-   * It will change lock to unavailable to get the lock.
+   * 2. There are available lock(s). If there are no available locks, it will
+   * release those expired locks (from the oldest) to get a lock.
    *
-   * @param {string} topicName
+   * @param {string} lockId
+   * @param {string} token
    * @return {!TransactionOperation}
-   * @private
    */
-  getLockOperation(topicName) {
+  getLockOperation(lockId, token) {
     return (documentSnapshot, documentReference, transaction) => {
       if (!documentSnapshot.exists) {
-        console.log(`Create the lock for [${topicName}].`);
-        transaction.create(documentReference, this.getLockObject());
+        transaction.create(documentReference, this.getNewLockEntity(lockId, token));
+        this.logger.info(`Created new Lock[${lockId}] with Token[${token}]`);
         return true;
       }
-      if (!this.isLockAvailable(
-          documentSnapshot.get('available'),
-          documentSnapshot.get('updatedAt'))) {
-        console.log(`There is no available Lock for [${topicName}].`);
+      this.logger.debug(`Get Lock[${lockId}], try to register token:`, token);
+      const lockEntity =
+        this.registerTokenForLock(documentSnapshot, lockId, token);
+      if (!lockEntity) {
+        this.logger.warn(
+          `There is no available Lock[${lockId}] with Token[${token}].`);
         return false;
       }
-      transaction.update(documentReference, this.getLockObject(),
-          {updatedAt: documentSnapshot.updatedAt});
-      this.logger.debug(`Get lock of ${topicName} successfully.`);
+      transaction.update(documentReference, lockEntity);
+      this.logger.debug(`Register Token[${token}] for Lock[${lockId}].`);
       return true;
     };
   }
 
   /**
-   * Releases the lock. It returns false when there is already available lock.
-   * Otherwise, it will create the available lock (if it doesn't exist) or
-   * update the lock to available status.
+   * Releases the lock. It returns false when there is not a such token for the
+   * lock.
+   * Otherwise, it will create the lock (if it doesn't exist) or release the
+   * token of the lock.
    *
-   * @param {string} topicName
+   * @param {string} lockId
+   * @param {string} token
    * @return {!TransactionOperation}
    * @private
    */
-  getUnlockOperation(topicName) {
+  getUnlockOperation(lockId, token) {
     return (documentSnapshot, documentReference, transaction) => {
       if (!documentSnapshot.exists) {
-        console.log(`The lock for [${topicName}] doesn't exist. Create now.`);
-        transaction.create(documentReference, this.getUnlockObject());
+        transaction.create(documentReference, this.getNewLockEntity(lockId));
+        this.logger.info(`The Lock[${lockId}] doesn't exist. Create it now.`);
         return true;
       }
-      if (documentSnapshot.get('available') === 1) {
-        console.log(`There is an available lock for [${topicName}].`);
+      this.logger.debug(`Get Lock[${lockId}], try to release token:`, token);
+      const lockEntity =
+        this.releaseTokenForLock(documentSnapshot, lockId, token);
+      if (!lockEntity) {
+        this.logger.warn(`There is no Token[${token}] for Lock[${lockId}].`);
         return false;
       }
-      this.logger.debug(`${topicName} has lock, try to unlock.`);
-      transaction.update(documentReference, this.getUnlockObject(),
-          {updatedAt: documentSnapshot.updatedAt});
-      this.logger.debug(`${topicName} unlock successfully.`);
+      transaction.update(documentReference, lockEntity);
+      this.logger.debug(`Release Token[${token}] for Lock[${lockId}].`);
       return true;
     };
   }
 
   /**
-   * Returns the object to be updated to current lock for taking the lock.
-   * @return {!ApiLockObject} Locked lock data.
-   * @private
+   * Registers the token for the specified Lock and returns the updated Lock
+   * entity to be saved. If there is no available lock, it returns undefined.
+   * @param {!DatastoreDocumentFacade} documentSnapshot
+   * @param {string} lockId
+   * @param {string} token
+   * @return {!ApiLockObject|undefined}
    */
-  getLockObject() {
-    return {
-      available: 0,
-      updatedAt: Date.now(),
-    };
+  registerTokenForLock(documentSnapshot, lockId, token) {
+    let tokens = documentSnapshot.get('tokens') || [];
+    if (tokens.some(({ token: existingToken }) => existingToken === token)) {
+      throw new Error(`Token[${token}] exists!`);
+    }
+    const max = documentSnapshot.get('max')
+      || this.getMaximumInstanceForLock(lockId);
+    const available = max - tokens.length;
+    const sortFn = (a, b) => Math.sign(a.updatedAt - b.updatedAt);
+    if (available <= 0) {
+      const cutoffTime = Date.now() - this.maxTimeForLocks;
+      const timeoutedTokens =
+        tokens.filter(({ updatedAt }) => updatedAt < cutoffTime);
+      if (available + timeoutedTokens.length <= 0) {
+        return;
+      }
+      const sortedTokens = tokens.sort(sortFn);
+      for (let i = 0; i < 1 - available; i++) {
+        const releasedLock = sortedTokens.shift();
+        this.logger.info(`Release lock with token[${releasedLock.token}]`,
+          new Date(releasedLock.updatedAt).toISOString());
+      }
+      tokens = sortedTokens;
+    }
+    return this.getUpdatedLockEntity(max, token, tokens);
   }
 
   /**
-   * Returns the object will be updated to current lock for returning the lock.
-   * @return {!ApiLockObject} Unlocked lock data.
-   * @private
+   * Releases the token for the specified Lock and returns the updated Lock
+   * entity to be saved. If there is no such token for the lock, it returns
+   * undefined.
+   * @param {!DatastoreDocumentFacade} documentSnapshot
+   * @param {string} lockId
+   * @param {string} token
+   * @return {!ApiLockObject|undefined}
    */
-  getUnlockObject() {
-    return {
-      available: 1,
-      updatedAt: Date.now(),
-    };
+  releaseTokenForLock(documentSnapshot, lockId, token) {
+    const tokens = documentSnapshot.get('tokens') || [];
+    if (!tokens.some(({ token: existingToken }) => existingToken === token)) {
+      return;
+    }
+    const max = documentSnapshot.get('max')
+      || this.getMaximumInstanceForLock(lockId);
+    const updatedTokens = tokens.filter(
+      ({ token: existingToken }) => existingToken !== token);
+    return this.getUpdatedLockEntity(max, undefined, updatedTokens);
   }
 
   /**
-   * Returns whether the lock is available. There are two cases for a lock to
-   * be available:
-   * 1. The available number equals one.
-   * 2. The lock has been locked longer than the maximum time, which means
-   * there is something wrong happened and the last lock holder didn't
-   * successfully return the lock. In this case, the lock is also available.
-   *
-   * @param {number} available Current value of property 'available'.
-   * @param {number} lockedTime Locked time value in milliseconds.
-   * @return {boolean} Whether the lock is available.
+   * Returns the new Lock entity to be created for the specified lock Id.
+   * @param {string} lockId
+   * @param {string|undefined} token If token presents, the new Lock will
+   *   regeister the token when it is created.
+   * @return {!ApiLockObject} Api Lock entity.
    * @private
    */
-  isLockAvailable(available, lockedTime) {
-    if (available === 1) return true;
-    const timePassed = Date.now() - lockedTime;
-    return timePassed >= this.maxTimeForLocks;
+  getNewLockEntity(lockId, token) {
+    const max = this.getMaximumInstanceForLock(lockId);
+    return this.getUpdatedLockEntity(max, token);
+  }
+
+  /**
+   * Returns the updated Lock entity. If there is a `token`, it will be
+   * registered; if there is no `tokens`, it would be intialized as an empty
+   * Array which means all instances of the lock are available.
+   * @param {number} max
+   * @param {string|undefined} token
+   * @param {Array<{{token:string, updatedAt: number}}>=} tokens
+   * @return {!ApiLockObject} Api Lock entity to be created or updated.
+   */
+  getUpdatedLockEntity(max, token, tokens = []) {
+    if (token) tokens.push({ token, updatedAt: Date.now() });
+    const lock = {
+      max,
+      available: max - tokens.length,
+      tokens,
+    };
+    return lock;
+  }
+
+  /**
+   * Returns the default value of the maximum instance number for a given Lock.
+   * The 'max' value can be changed in Firestore after this Lock object is
+   * created.
+   * TODO: In a long term, find a way to modify the value based on performance.
+   * @param {string} topicName
+   * @return {number}
+   */
+  getMaximumInstanceForLock(topicName) {
+    const api = topicName.split('-')[1];
+    switch (api) {
+      case 'ACLC':
+      case 'ACA':
+      case 'ACM':
+        return 5;
+      case 'MP':
+      case 'MP_GA4':
+        return 10;
+      default:
+        return 1;
+    }
   }
 }
 

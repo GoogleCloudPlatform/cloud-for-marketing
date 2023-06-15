@@ -32,20 +32,35 @@ class ApiLock {
   /**
    * Gets the lock of a given Pubsub topic name.
    *
-   * @param {string} topicName The name of Pub/sub topic that need to be locked.
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @param {string} token The token of a lock. A token stands for an instance
+   *   of a lock. It is used to support multiple locks.
    * @return {!Promise<boolean>} Whether successfully gets the lock.
    * @abstract
    */
-  getLock(topicName) {}
+  async getLock(lockId, token) { }
 
   /**
    * Returns the lock of a given Pubsub topic name.
    *
-   * @param {string} topicName The name of Pub/sub topic that need to be locked.
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @param {string} token The token of a lock. A token stands for an instance
+   *   of a lock. It is used to support multiple locks.
    * @return {!Promise<boolean>} Whether successfully returns the lock.
    * @abstract
    */
-  unlock(topicName) {}
+  async unlock(lockId, token) { }
+
+  /**
+   * Returns whethere there is available locks. This is a direct check and does
+   * not guarantee the lock will be available when try to get it. It is used
+   * to ramp up sending instance when tasks are just started.
+   *
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @return {!Promise<boolean>} Whether there is an available lock.
+   * @abstract
+   */
+  async hasAvailableLock(lockId) { }
 }
 
 module.exports = {ApiLock};

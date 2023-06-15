@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.7.0 (2023-06-15)
+
+### Update to the v13 of the Google Ads API
+
 ## 1.6.0 (2023-03-08)
 
 ### Update to the v12 of the Google Ads API

@@ -20,85 +20,41 @@
 'use strict';
 
 const {
-  api: { googleads: { GoogleAds, ConversionConfig } },
-  utils: { apiSpeedControl, getLogger, getProperValue, BatchResult },
+  api: { googleads: { GoogleAds } },
+  utils: { BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getGoogleAds } = require('./handler_utilities.js');
 const {
   GoogleAdsConversionConfig,
+  GoogleAdsClickConversionUpload,
 } = require('./google_ads_click_conversions_upload.js');
 
 /**
- * Conversions per request. Google Ads has a limit as 2000.
- * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas#conversion_upload_service
+ * Call conversions upload for Google Ads.
  */
-const RECORDS_PER_REQUEST = 2000;
-/**
- * Queries per second. Google Ads has no limits on queries per second, however
- * it has limits on the gRPC size (4MB), so large requests may fail.
- */
-const QUERIES_PER_SECOND = 10;
+class GoogleAdsCallConversionUpload extends GoogleAdsClickConversionUpload {
+
+  /**
+   * Sends out the data as call conversions to Google Ads API.
+   * This function exposes a googleAds parameter for test
+   * @param {GoogleAds} googleAds Injected Google Ads instance.
+   * @param {string} records Data to send out as call conversions. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!GoogleAdsConversionConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  async sendDataInternal(googleAds, records, messageId, config) {
+    const result = await this.setCustomVariable(googleAds, config);
+    if (result) return result;
+    const managedSend = this.getManagedSendFn(config);
+    const { customerId, loginCustomerId, adsConfig } = config;
+    const configuredUpload = googleAds.getUploadCallConversionFn(customerId,
+      loginCustomerId, adsConfig);
+    return managedSend(configuredUpload, records, messageId);
+  };
+}
 
 /** API name in the incoming file name. */
-exports.name = 'CALL';
+GoogleAdsCallConversionUpload.code = 'CALL';
 
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
-
-/**
- * Sends out the data as call conversions to Google Ads API.
- * This function exposes a googleAds parameter for test
- * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {string} records Data to send out as call conversions. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsConversionConfig} config
- * @return {!Promise<BatchResult>}
- */
-const sendDataInternal = async (googleAds, records, messageId, config) => {
-  const logger = getLogger(`API.${exports.name}`);
-  const recordsPerRequest =
-    getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  const managedSend = apiSpeedControl(recordsPerRequest, 1, qps);
-  const { customerId, loginCustomerId, adsConfig } = config;
-  if (adsConfig.custom_variable_tags) {
-    try {
-      adsConfig.customVariables = await Promise.all(
-        adsConfig.custom_variable_tags.map(async (tag) => {
-          const id = await googleAds.getConversionCustomVariableId(tag,
-            customerId, loginCustomerId);
-          if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);
-          return { [tag]: id };
-        }));
-      logger.debug('Updated adsConfig', adsConfig);
-    } catch (error) {
-      /** @type {BatchResult} */ const batchResult = {
-        result: false,
-        errors: [error.message],
-      };
-      logger.error('Get error', error);
-      return batchResult;
-    }
-  }
-  const configuredUpload = googleAds.getUploadCallConversionFn(customerId,
-    loginCustomerId, adsConfig);
-  return managedSend(configuredUpload, records, messageId);
-};
-
-exports.sendDataInternal = sendDataInternal;
-
-/**
- * Sends out the data as call conversions to Google Ads API.
- * @param {string} records Data to send out as call conversions. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsConversionConfig} config
- * @return {!Promise<BatchResult>}
- */
-const sendData = (records, messageId, config) => {
-  const googleAds = getGoogleAds(config);
-  return sendDataInternal(googleAds, records, messageId, config);
-};
-
-exports.sendData = sendData;
+module.exports = { GoogleAdsCallConversionUpload };

@@ -26,9 +26,9 @@ const {
       MeasurementProtocolGA4Config,
     }
   },
-  utils: {apiSpeedControl, getProperValue, BatchResult},
+  utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getDebug } = require('./handler_utilities.js');
+const { ApiHandler } = require('./api_handler.js');
 
 /**
  * Hits per request. Measurement Protocol(GA4) has a value as 1.
@@ -36,73 +36,81 @@ const { getDebug } = require('./handler_utilities.js');
  * https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide#batch-limitations
  */
 const RECORDS_PER_REQUEST = 1;  // Maximum value defined by this API.
-const QUERIES_PER_SECOND = 20;
+const QUERIES_PER_SECOND = 200;
 const NUMBER_OF_THREADS = 20;
-
-/** API name in the incoming file name. */
-exports.name = 'MP_GA4';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
 
 /**
  * Measurement Protocol configuration.
  *
  * @typedef {{
- *   qps:(number|undefined),
- *   numberOfThreads:(number|undefined),
- *   debug:(boolean|undefined),
- *   mpGa4Config:!MeasurementProtocolGA4Config,
- * }}
- */
+*   qps:(number|undefined),
+*   numberOfThreads:(number|undefined),
+*   debug:(boolean|undefined),
+*   mpGa4Config:!MeasurementProtocolGA4Config,
+* }}
+*/
 let MpGa4IntegrationConfig;
 
-exports.MpGa4IntegrationConfig = MpGa4IntegrationConfig;
-
 /**
- * Sends out the data to Measurement Protocol (GA4).
- * MP pings are posted as strings of JSON objects. To set up an integration:
- * 1. Put those common parameters in the 'mpGa4Config' object, e.g. App Id,
- * events definition, etc.
- * 2. Put other customized parameters, e.g. App install ID or timestamp into
- * 'records'.
- * For reference, see:
- *     https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference#payload_post_body
- * @param {string} records Data to send out to Google Analytics. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
- *     Protocol.
- * @return {!Promise<!BatchResult>}
+ * Measurement Protocol for Google Analytics 4.
  */
-const sendData = (records, messageId, config) => {
-  const debug = getDebug(config.debug);
-  const mpGa4 = new MeasurementProtocolGA4(debug);
-  return sendDataInternal(mpGa4, records, messageId, config);
-};
+class MeasurementProtocolForGoogleAnalytics4 extends ApiHandler {
 
-exports.sendData = sendData;
-
-/**
- * Sends out the data to Measurement Protocol (GA4). This function exposes a
- * MeasurementProtocolGA4 parameter for test.
- * @param {!MeasurementProtocolGA4} mpGa4 Injected MeasurementProtocolGA4
- *     instance.
- * @param {string} records Data to send out to Google Analytics. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
- *     Protocol.
- * @return {!BatchResult}
- */
-const sendDataInternal = (mpGa4, records, messageId, config) => {
-  const recordsPerRequest = RECORDS_PER_REQUEST;
-  const numberOfThreads =
+  /** @override */
+  getSpeedOptions(config) {
+    const recordsPerRequest = RECORDS_PER_REQUEST;
+    const numberOfThreads =
       getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  const managedSend = apiSpeedControl(recordsPerRequest, numberOfThreads, qps);
-  const configedUpload = mpGa4.getSinglePingFn(config.mpGa4Config);
-  return managedSend(configedUpload, records, messageId);
-};
+    const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
+    return { recordsPerRequest, numberOfThreads, qps };
+  }
 
-exports.sendDataInternal = sendDataInternal;
+  /**
+   * Sends out the data to Measurement Protocol (GA4).
+   * MP pings are posted as strings of JSON objects. To set up an integration:
+   * 1. Put those common parameters in the 'mpGa4Config' object, e.g. App Id,
+   * events definition, etc.
+   * 2. Put other customized parameters, e.g. App install ID or timestamp into
+   * 'records'.
+   * For reference, see:
+   *     https://developers.google.com/analytics/devguides/collection/protocol/ga4/reference#payload_post_body
+   * @param {string} records Data to send out to Google Analytics. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
+   *     Protocol.
+   * @return {!Promise<!BatchResult>}
+   * @override
+   */
+  sendData(records, messageId, config) {
+    const debug = this.getDebug(config.debug);
+    const mpGa4 = new MeasurementProtocolGA4(debug);
+    return this.sendDataInternal(mpGa4, records, messageId, config);
+  };
+
+  /**
+   * Sends out the data to Measurement Protocol (GA4). This function exposes a
+   * MeasurementProtocolGA4 parameter for test.
+   * @param {!MeasurementProtocolGA4} mpGa4 Injected MeasurementProtocolGA4
+   *     instance.
+   * @param {string} records Data to send out to Google Analytics. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!MpGa4IntegrationConfig} config Configuration for Measurement
+   *     Protocol.
+   * @return {!BatchResult}
+   */
+  sendDataInternal(mpGa4, records, messageId, config) {
+    const managedSend = this.getManagedSendFn(config);
+    const configedUpload = mpGa4.getSinglePingFn(config.mpGa4Config);
+    return managedSend(configedUpload, records, messageId);
+  };
+}
+
+/** API name in the incoming file name. */
+MeasurementProtocolForGoogleAnalytics4.code = 'MP_GA4';
+
+module.exports = {
+  MpGa4IntegrationConfig,
+  MeasurementProtocolForGoogleAnalytics4,
+};

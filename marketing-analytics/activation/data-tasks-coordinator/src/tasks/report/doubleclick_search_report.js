@@ -41,6 +41,52 @@ class DoubleClickSearchReport extends Report {
   }
 
   /** @override */
+  generateSchema() {
+    /** @type {Array<string>} */ const { columns } = this.config;
+    const fields = columns.map(({ columnName }) => {
+      return {
+        name: columnName,
+        type: this.getBigQueryDataType_(columnName),
+        mode: 'NULLABLE',
+      };
+    });
+    return { fields };
+  }
+
+  /**
+   * Get BigQuery data type based on column name.
+   * @param {string} columnName
+   * @return {string} BigQuery data type. See:
+   *     https://cloud.google.com/bigquery/docs/schemas#standard_sql_data_types
+   */
+  getBigQueryDataType_(columnName) {
+    switch (columnName) {
+      case 'date':
+        return 'DATETIME';
+      case 'clicks':
+      case 'impr':
+      case 'visits':
+        return 'INT64';
+      case 'cost':
+      case 'ctr':
+        return 'FLOAT64';
+      case 'keywordNearMatchEnabled': // in report 'campaign'
+      case 'networkTarget': // in report 'campaign'
+        return 'STRING';
+      default:
+        if (columnName.endsWith('Id')) return 'STRING';
+        if (columnName.endsWith('Date')) return 'DATETIME';
+        if (columnName.endsWith('Enabled')) return 'BOOL';
+        if (columnName.endsWith('Target')) return 'FLOAT64';
+        if (columnName.endsWith('Bid')) return 'FLOAT64';
+        if (columnName.endsWith('Budget')) return 'FLOAT64';
+        if (columnName.endsWith('Adjustment')) return 'FLOAT64';
+        if (columnName.endsWith('Modifier')) return 'FLOAT64';
+        return 'STRING';
+    }
+  };
+
+  /** @override */
   getContent(parameters) {
     const {reportId} = parameters;
     return this.ds.getReportUrls(reportId)

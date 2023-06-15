@@ -21,9 +21,10 @@
 
 const {
   api: {googleads: {GoogleAds, CustomerMatchConfig}},
-  utils: { apiSpeedControl, getProperValue, BatchResult, getLogger },
+  utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getGoogleAds } = require('./handler_utilities.js');
+const { GoogleAdsClickConversionUpload } =
+  require('./google_ads_click_conversions_upload.js');
 
 /**
  * @see https://developers.google.com/google-ads/api/docs/best-practices/quotas
@@ -42,98 +43,90 @@ const RECORDS_PER_REQUEST = 10;
  */
 const QUERIES_PER_SECOND = 10;
 
-/** API name in the incoming file name. */
-exports.name = 'ACM';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
-
 /**
  * Configuration for a Google Ads customer match upload.
  * @typedef {{
- *   developerToken:string,
- *   customerMatchConfig: !CustomerMatchConfig,
- *   recordsPerRequest:(number|undefined),
- *   qps:(number|undefined),
- *   secretName:(string|undefined),
- * }}
- */
+*   developerToken:string,
+*   customerMatchConfig: !CustomerMatchConfig,
+*   recordsPerRequest:(number|undefined),
+*   qps:(number|undefined),
+*   secretName:(string|undefined),
+* }}
+*/
 let GoogleAdsCustomerMatchConfig;
 
-exports.GoogleAdsCustomerMatchConfig = GoogleAdsCustomerMatchConfig;
-
 /**
- *
- * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {{
- *   list_id:(string|undefined),
- *   list_name:(string|undefined),
- *   upload_key_type:('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
- * }} config
- * @return User list Id.
+ * Customer match user data upload for Google Ads.
  */
-const getOrCreateUserList = async (googleAds, config) => {
-  const logger = getLogger(`API.${exports.name}`);
-  if (config.list_id) return config.list_id;
-  if (!config.list_name || !config.upload_key_type) {
-    throw new Error(
-      `Missing user list info in ${JSON.stringify(config)}`);
+class GoogleAdsCustomerMatch extends GoogleAdsClickConversionUpload {
+
+  /** @override */
+  getSpeedOptions(config) {
+    const recordsPerRequest =
+      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
+    const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
+    const numberOfThreads = qps;
+    return { recordsPerRequest, numberOfThreads, qps };
   }
-  const listId = await googleAds.getCustomerMatchUserListId(config);
-  if (listId) {
-    logger.info(`Get UserList id ${listId}.`);
-    return listId;
-  } else {
-    const createdListId = await googleAds.createCustomerMatchUserList(config);
-    logger.info(`Create UserList id ${createdListId}.`);
-    return createdListId;
+
+  /**
+   * Gets the user list Id based on the specified name and type.
+   * Creates the list if it doesn't exist and returns the Id.
+   * @param {GoogleAds} googleAds Injected Google Ads instance.
+   * @param {{
+   *   list_id:(string|undefined),
+   *   list_name:(string|undefined),
+   *   upload_key_type:('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
+   * }} config
+   * @return {string} User list Id.
+   */
+  async getOrCreateUserList(googleAds, config) {
+    if (config.list_id) return config.list_id;
+    if (!config.list_name || !config.upload_key_type) {
+      throw new Error(
+        `Missing user list info in ${JSON.stringify(config)}`);
+    }
+    const listId = await googleAds.getCustomerMatchUserListId(config);
+    if (listId) {
+      this.logger.info(`Get UserList id ${listId}.`);
+      return listId;
+    } else {
+      const createdListId = await googleAds.createCustomerMatchUserList(config);
+      this.logger.info(`Create UserList id ${createdListId}.`);
+      return createdListId;
+    }
+  }
+
+  /**
+   * Sends out the data as user ids to Google Ads API.
+   * This function exposes a googleAds parameter for test
+   * @param {GoogleAds} googleAds Injected Google Ads instance.
+   * @param {string} records Data to send out as user ids. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!GoogleAdsCustomerMatchConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  async sendDataInternal(googleAds, records, messageId, config) {
+    const { customerMatchConfig } = config;
+    try {
+      customerMatchConfig.list_id =
+        await this.getOrCreateUserList(googleAds, customerMatchConfig);
+    } catch (error) {
+      this.logger.error('Error in UserdataService: ', error);
+      return this.getResultFromError(googleAds, error);
+    }
+    const managedSend = this.getManagedSendFn(config);
+    const configedUpload =
+      googleAds.getUploadCustomerMatchFn(customerMatchConfig);
+    return managedSend(configedUpload, records, messageId);
   }
 }
-exports.getOrCreateUserList = getOrCreateUserList;
 
-/**
- * Sends out the data as user ids to Google Ads API.
- * This function exposes a googleAds parameter for test
- * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {string} records Data to send out as user ids. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsCustomerMatchConfig} config
- * @return {!Promise<BatchResult>}
- */
-const sendDataInternal = async (googleAds, records, messageId, config) => {
-  const { customerMatchConfig } = config;
-  try {
-    customerMatchConfig.list_id =
-      await getOrCreateUserList(googleAds, customerMatchConfig);
-  } catch (error) {
-    return {
-      result: false,
-      errors: [error.message || error.toString()],
-    };
-  }
-  const recordsPerRequest =
-      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  const managedSend = apiSpeedControl(recordsPerRequest, qps, qps);
-  const configedUpload =
-    googleAds.getUploadCustomerMatchFn(customerMatchConfig);
-  return managedSend(configedUpload, records, messageId);
+/** API name in the incoming file name. */
+GoogleAdsCustomerMatch.code = 'ACM';
+
+module.exports = {
+  GoogleAdsCustomerMatchConfig,
+  GoogleAdsCustomerMatch,
 };
-
-exports.sendDataInternal = sendDataInternal;
-
-/**
- * Sends out the data as user ids to Google Ads API.
- * @param {string} records Data to send out as user id. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsCustomerMatchConfig} config
- * @return {!Promise<BatchResult>}
- */
-const sendData = (records, messageId, config) => {
-  const googleAds = getGoogleAds(config);
-  return sendDataInternal(googleAds, records, messageId, config);
-};
-
-exports.sendData = sendData;

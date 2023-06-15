@@ -39,12 +39,17 @@ class TentaclesTaskDummy {
   }
 
   /** @override */
+  transport(id) {
+    return this.getPromisedTrueForDummy_(`Transport Task[${id}].`);
+  }
+
+  /** @override */
   start(id) {
     return this.getPromisedTrueForDummy_(`Start Task[${id}].`);
   }
 
   /** @override */
-  finish(id, status) {
+  finish(id, taskDone) {
     return this.getPromisedTrueForDummy_(`Finish Task[${id}].`);
   }
 

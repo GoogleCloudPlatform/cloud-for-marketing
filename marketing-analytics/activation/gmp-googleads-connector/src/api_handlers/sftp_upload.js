@@ -22,17 +22,12 @@ const SftpClient = require('ssh2-sftp-client');
 const path = require('path');
 const {
   storage: { StorageFile },
-  utils: { getLogger, BatchResult },
+  utils: { BatchResult },
 } = require('@google-cloud/nodejs-common');
+const { ApiHandler } = require('./api_handler.js');
 
 /** Placeholder for a timestamp in the name of a uploaded file. */
 const TIMESTAMP_PLACEHOLDER = 'TIMESTAMP';
-
-/** API name in the incoming file name. */
-exports.name = 'SFTP';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = true;
 
 /**
  * A Sftp server connection information.
@@ -68,70 +63,85 @@ let SftpServer;
  */
 let SftpConfig;
 
-exports.SftpConfig = SftpConfig;
 /**
- * Uploads a file to a SFTP server. One use case is to upload business data in
- * Search Ads 360.
- * @param {string} message Message data from Pubsub. It is the information of
- *     the file to be sent out, or a piece of data that need to be send out.
- * @param {string} messageId Pub/sub message ID as log tag.
- * @param {!SftpConfig} config
- * @return {!BatchResult}
+ * Upload files to SFTP server.
  */
-exports.sendData = async (message, messageId, config) => {
-  const logger = getLogger('API.SFTP');
-  logger.debug(`Init SFTP uploader with Debug Mode.`);
-  let data;
-  try {
-    data = JSON.parse(message);
-  } catch (error) {
-    logger.info(`This is not a JSON string, SFTP uploading file not on GCS.`);
-    data = message;
-  }
-  let sftpClient = new SftpClient();
-  let output;
-  let targetFile;
-  if (data.bucket) {
-    const storageFile = new StorageFile(data.bucket, data.file);
-    output = storageFile.getFile().createReadStream();
-    const { fileName } = config;
-    if (fileName) {
-      targetFile = fileName;
-    } else {
-      // Working out a better file name for SFTP servers because:
-      // 1. SFTP servers have stricter rules then Cloud Storage, e.g. no colon.
-      // 2. By removing those tags (API, config, etc.) but keeping the value,
-      // the filenames shown in SA360 can be clearer.
-      targetFile = path.basename(data.file)
-        .replace(/API[\[|{]([\w-]*)[\]|}]/i, '$1')
-        .replace(/config[\[|{](\w*)[\]|}]/i, '$1')
-        .replace(/size\[(\w*)[\]|}]/i, '$1')
-        .replace(/:/g, '-');
+class SftpUpload extends ApiHandler {
+
+/**
+* Uploads a file to a SFTP server. One use case is to upload business data in
+* Search Ads 360.
+* @param {string} message Message data from Pubsub. It is the information of
+*     the file to be sent out, or a piece of data that need to be send out.
+* @param {string} messageId Pub/sub message ID as log tag.
+* @param {!SftpConfig} config
+* @return {!BatchResult}
+*/
+  async sendData(message, messageId, config) {
+    this.logger.debug(`Init SFTP uploader with Debug Mode.`);
+    let data;
+    try {
+      data = JSON.parse(message);
+    } catch (error) {
+      this.logger.info(`This is not a JSON string, SFTP uploading file not on GCS.`);
+      data = message;
     }
-  } else {
-    output = Buffer.from(data);
-    targetFile = config.fileName || 'upload_by_tentacles_TIMESTAMP';
+    let sftpClient = new SftpClient();
+    let output;
+    let targetFile;
+    if (data.bucket) {
+      const storageFile = new StorageFile(data.bucket, data.file);
+      output = storageFile.getFile().createReadStream();
+      const { fileName } = config;
+      if (fileName) {
+        targetFile = fileName;
+      } else {
+        // Working out a better file name for SFTP servers because:
+        // 1. SFTP servers have stricter rules then Cloud Storage, e.g. no colon.
+        // 2. By removing those tags (API, config, etc.) but keeping the value,
+        // the filenames shown in SA360 can be clearer.
+        targetFile = path.basename(data.file)
+          .replace(/API[\[|{]([\w-]*)[\]|}]/i, '$1')
+          .replace(/config[\[|{](\w*)[\]|}]/i, '$1')
+          .replace(/size\[(\w*)[\]|}]/i, '$1')
+          .replace(/:/g, '-');
+      }
+    } else {
+      output = Buffer.from(data);
+      targetFile = config.fileName || 'upload_by_tentacles_TIMESTAMP';
+    }
+    if (targetFile.indexOf(TIMESTAMP_PLACEHOLDER) > -1) {
+      const timestamp = new Date().toISOString().replace(/:/g, '.');
+      targetFile = targetFile.replace(TIMESTAMP_PLACEHOLDER, timestamp);
+    }
+    this.logger.debug(`Get message: ${message}`);
+    this.logger.debug(`SFTP Configuration: `, config);
+    this.logger.debug(`Output filename: ${targetFile}`);
+   /** @type {BatchResult} */ const batchResult = {};
+    try {
+      await sftpClient.connect(config.sftp);
+      this.logger.debug(`Open SFTP server: ${config.sftp.host}`);
+      const result = await sftpClient.put(output, targetFile);
+      this.logger.debug('SFTP operation: ', result);
+      this.logger.debug(`SFTP upload [${messageId}]: ${output}`);
+      await sftpClient.end();
+      batchResult.result = true;
+    } catch (error) {
+      batchResult.result = false;
+      batchResult.errors = [error.message];
+      this.logger.error('catch error', error);
+    }
+    return batchResult;
   }
-  if (targetFile.indexOf(TIMESTAMP_PLACEHOLDER) > -1) {
-    const timestamp = new Date().toISOString().replace(/:/g, '.');
-    targetFile = targetFile.replace(TIMESTAMP_PLACEHOLDER, timestamp);
-  }
-  logger.debug(`Get message: ${message}`);
-  logger.debug(`SFTP Configuration: `, config);
-  logger.debug(`Output filename: ${targetFile}`);
-  /** @type {BatchResult} */ const batchResult = {};
-  try {
-    await sftpClient.connect(config.sftp);
-    logger.debug(`Open SFTP server: ${config.sftp.host}`);
-    const result = await sftpClient.put(output, targetFile);
-    logger.debug('SFTP operation: ', result);
-    logger.debug(`SFTP upload [${messageId}]: ${output}`);
-    await sftpClient.end();
-    batchResult.result = true;
-  } catch (error) {
-    batchResult.result = false;
-    batchResult.errors = [error.message];
-    logger.error('catch error', error);
-  }
-  return batchResult;
+}
+
+/** API name in the incoming file name. */
+SftpUpload.code = 'SFTP';
+
+/** Data for this API will be transferred through GCS by default. */
+SftpUpload.defaultOnGcs = true;
+
+module.exports = {
+  SftpConfig,
+  SftpUpload,
 };

@@ -20,15 +20,9 @@
 
 const {
   pubsub: {EnhancedPubSub},
-  utils: {
-    apiSpeedControl,
-    getProperValue,
-    replaceParameters,
-    getLogger,
-    wait,
-    BatchResult,
-  },
+  utils: { getProperValue, replaceParameters, wait, BatchResult },
 } = require('@google-cloud/nodejs-common');
+const { ApiHandler } = require('./api_handler.js');
 
 /**
  * One message per request.
@@ -42,12 +36,6 @@ const NUMBER_OF_THREADS = 1;
 
 /** Retry times if error happens in sending Pub/Sub messages. */
 const RETRY_TIMES = 3;
-
-/** API name in the incoming file name. */
-exports.name = 'PB';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
 
 /**
  * Configuration for a Pub/Sub message sending integration.
@@ -63,87 +51,102 @@ exports.defaultOnGcs = false;
  */
 let PubSubMessageConfig;
 
-exports.PubSubMessageConfig = PubSubMessageConfig;
-
 /**
- * Sends out the data as messages to Pub/Sub (PB).
- * This function exposes a EnhancedPubSub parameter for test.
- * @param {!EnhancedPubSub} pubsub Injected EnhancedPubSub instance.
- * @param {string} records Attributes of the messages. Expected JSON string in
- *     each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!PubSubMessageConfig} config
- * @return {!BatchResult}
+ * Send messages to Pub/Sub topics.
  */
-const sendDataInternal = async (pubsub, records, messageId, config) => {
-  const logger = getLogger('API.PB');
-  logger.debug(`Init Pub/Sub message sender with Debug Mode.`);
-  const recordsPerRequest =
-      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
-  const numberOfThreads =
+class PubSubMessageSend extends ApiHandler {
+
+  /** @override */
+  getSpeedOptions(config) {
+    const recordsPerRequest = RECORDS_PER_REQUEST;
+    const numberOfThreads =
       getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
-  const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-  const managedSend = apiSpeedControl(recordsPerRequest, numberOfThreads, qps);
-  const topic = await pubsub.getOrCreateTopic(config.topic);
-  /** This function send out one message with the given data. */
-  const getSendSingleMessageFn = async (lines, batchId) => {
-    if (lines.length !== 1) throw Error('Wrong number of Pub/Sub messages.');
+    const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
+    return { recordsPerRequest, numberOfThreads, qps };
+  }
+
+  /**
+   * Sends out the data as messages to Pub/Sub (PB).
+   * @param {string} records Attributes of the messages. Expected JSON string in
+   *     each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!PubSubMessageConfig} config
+   * @return {!BatchResult}
+   */
+  sendData(records, messageId, config) {
+    const pubsub = new EnhancedPubSub();
+    return this.sendDataInternal(pubsub, records, messageId, config);
+  }
+
+  /**
+   * Sends out the data as messages to Pub/Sub (PB).
+   * This function exposes a EnhancedPubSub parameter for test.
+   * @param {!EnhancedPubSub} pubsub Injected EnhancedPubSub instance.
+   * @param {string} records Attributes of the messages. Expected JSON string in
+   *     each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!PubSubMessageConfig} config
+   * @return {!BatchResult}
+   */
+  async sendDataInternal(pubsub, records, messageId, config) {
+    this.logger.debug(`Init Pub/Sub message sender with Debug Mode.`);
+    const managedSend = this.getManagedSendFn(config);
+    const topic = await pubsub.getOrCreateTopic(config.topic);
+    /** This function send out one message with the given data. */
+    const getSendSingleMessageFn = async (lines, batchId) => {
+      if (lines.length !== 1) throw Error('Wrong number of Pub/Sub messages.');
     /** @const {!BatchResult} */ const batchResult = {
-      numberOfLines: 1,
-    };
-    const args = JSON.parse(lines[0]);
-    // JSON string values need to be escaped
-    Object.keys(args).forEach((key) => {
-      try {
-        if (typeof args[key] === 'string') {
-          args[key] = args[key].replace(/\n/g, '\\n').replace(/\"/g, '\\"');
+        numberOfLines: 1,
+      };
+      const args = JSON.parse(lines[0]);
+      // JSON string values need to be escaped
+      Object.keys(args).forEach((key) => {
+        try {
+          if (typeof args[key] === 'string') {
+            args[key] = args[key].replace(/\n/g, '\\n').replace(/\"/g, '\\"');
+          }
+        } catch (error) {
+          this.logger.error(key, typeof args[key]);
+          this.logger.error(error);
         }
-      } catch (error) {
-        logger.error(key, typeof args[key]);
-        logger.error(error);
-      }
-    })
-    const originalMessage = typeof (config.message) === 'object'
+      })
+      const originalMessage = typeof (config.message) === 'object'
         ? JSON.stringify(config.message) : config.message;
-    const message = replaceParameters(originalMessage || '', args, true);
-    const attributes = JSON.parse(
+      const message = replaceParameters(originalMessage || '', args, true);
+      const attributes = JSON.parse(
         replaceParameters(JSON.stringify(config.attributes || {}), args, true)
-    );
-    let retryTimes = 0;
-    let errors = [];
-    do {
-      // Wait sometime (1s, 2s, 3s, ...) before each retry.
-      if (retryTimes > 0) await wait(retryTimes * 1000);
-      try {
-        const messageId = await pubsub.publish(topic, message, attributes);
-        logger.debug(`Send ${lines[0]} to ${config.topic} as ${messageId}.`);
-        batchResult.result = true;
-        return batchResult;
-      } catch (error) {
-        logger.error(`Pub/Sub message[${batchId}] failed: ${lines[0]}`, error);
-        errors.push(error.message);
-        retryTimes++;
-      }
-    } while (retryTimes <= RETRY_TIMES)
-    batchResult.result = false;
-    batchResult.errors = errors;
-    batchResult.failedLines = lines;
-    return batchResult;
-  };
-  return managedSend(getSendSingleMessageFn, records, messageId);
-};
+      );
+      let retryTimes = 0;
+      let errors = [];
+      do {
+        // Wait sometime (1s, 2s, 3s, ...) before each retry.
+        if (retryTimes > 0) await wait(retryTimes * 1000);
+        try {
+          const messageId = await pubsub.publish(topic, message, attributes);
+          this.logger.debug(
+            `Send ${lines[0]} to ${config.topic} as ${messageId}.`);
+          batchResult.result = true;
+          return batchResult;
+        } catch (error) {
+          this.logger.error(
+            `Pub/Sub message[${batchId}] failed: ${lines[0]}`, error);
+          errors.push(error.message);
+          retryTimes++;
+        }
+      } while (retryTimes <= RETRY_TIMES)
+      batchResult.result = false;
+      batchResult.errors = errors;
+      batchResult.failedLines = lines;
+      return batchResult;
+    };
+    return managedSend(getSendSingleMessageFn, records, messageId);
+  }
+}
 
-exports.sendDataInternal = sendDataInternal;
+/** API name in the incoming file name. */
+PubSubMessageSend.code = 'PB';
 
-/**
- * Sends out the data as messages to Pub/Sub (PB).
- * @param {string} records Attributes of the messages. Expected JSON string in
- *     each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!PubSubMessageConfig} config
- * @return {!BatchResult}
- */
-exports.sendData = (records, messageId, config) => {
-  const pubsub = new EnhancedPubSub();
-  return sendDataInternal(pubsub, records, messageId, config);
+module.exports = {
+  PubSubMessageConfig,
+  PubSubMessageSend,
 };

@@ -21,9 +21,9 @@
 
 const {
   api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
-  utils: {apiSpeedControl, getProperValue, BatchResult},
+  utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
-const { getOption } = require('./handler_utilities.js');
+const { ApiHandler } = require('./api_handler.js');
 
 /**
  * Conversions per request. Campaign Manager has a limit as 1000.
@@ -36,12 +36,6 @@ const RECORDS_PER_REQUEST = 1000;
  */
 const QUERIES_PER_SECOND = 1;
 const NUMBER_OF_THREADS = 10;
-
-/** API name in the incoming file name. */
-exports.name = 'CM';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = false;
 
 /**
  * Configuration for a Campaign Manager(CM) conversions upload.
@@ -65,51 +59,64 @@ exports.defaultOnGcs = false;
  */
 let CampaignManagerConfig;
 
-exports.CampaignManagerConfig = CampaignManagerConfig;
-
 /**
- * Sends out the data as conversions to Campaign Manager (CM).
- * Gets the CM user profile based on CM account Id and current user, then uses
- * the profile to send out data as CM conversions with speed control and data
- * volume adjustment.
- * This function exposes a DfaReporting parameter for test
- * @param {DfaReporting} dfaReporting Injected DfaReporting instance.
- * @param {string} records Data to send out as conversions. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!CampaignManagerConfig} config
- * @return {!Promise<BatchResult>}
+ * Conversion upload for Campaign Manager.
  */
-const sendDataInternal = (dfaReporting, records, messageId, config) => {
-  return dfaReporting.getProfileId(config.cmAccountId).then((profileId) => {
-    config.cmConfig.profileId = profileId;
+class CampaingManagerConversionUpload extends ApiHandler {
+
+  /** @override */
+  getSpeedOptions(config) {
     const recordsPerRequest =
-        getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
+      getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
     const numberOfThreads =
-        getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
+      getProperValue(config.numberOfThreads, NUMBER_OF_THREADS, false);
     const qps = getProperValue(config.qps, QUERIES_PER_SECOND);
-    const managedSend =
-        apiSpeedControl(recordsPerRequest, numberOfThreads, qps);
+    return { recordsPerRequest, numberOfThreads, qps };
+  }
+
+  /**
+   * Sends out the data as conversions to Campaign Manager (CM).
+   * Gets the CM user profile based on CM account Id and current user, then uses
+   * the profile to send out data as CM conversions with speed control and data
+   * volume adjustment.
+   * @param {string} records Data to send out as conversions. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!CampaignManagerConfig} config
+   * @return {!Promise<BatchResult>}
+   * @override
+   */
+  sendData(records, messageId, config) {
+    const dfaReporting = new DfaReporting(this.getOption(config));
+    return this.sendDataInternal(dfaReporting, records, messageId, config);
+  };
+
+  /**
+   * Sends out the data as conversions to Campaign Manager (CM).
+   * Gets the CM user profile based on CM account Id and current user, then uses
+   * the profile to send out data as CM conversions with speed control and data
+   * volume adjustment.
+   * This function exposes a DfaReporting parameter for test.
+   * @param {DfaReporting} dfaReporting Injected DfaReporting instance.
+   * @param {string} records Data to send out as conversions. Expected JSON
+   *     string in each line.
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!CampaignManagerConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  async sendDataInternal(dfaReporting, records, messageId, config) {
+    const profileId = await dfaReporting.getProfileId(config.cmAccountId);
+    config.cmConfig.profileId = profileId;
+    const managedSend = this.getManagedSendFn(config);
     const configedUpload = dfaReporting.getUploadConversionFn(config.cmConfig);
     return managedSend(configedUpload, records, messageId);
-  });
+  };
+}
+
+/** API name in the incoming file name. */
+CampaingManagerConversionUpload.code = 'CM';
+
+module.exports = {
+  CampaignManagerConfig,
+  CampaingManagerConversionUpload,
 };
-
-exports.sendDataInternal = sendDataInternal;
-
-/**
- * Sends out the data as conversions to Campaign Manager (CM).
- * Gets the CM user profile based on CM account Id and current user, then uses
- * the profile to send out data as CM conversions with speed control and data
- * volume adjustment.
- * @param {string} records Data to send out as conversions. Expected JSON
- *     string in each line.
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!CampaignManagerConfig} config
- * @return {!Promise<BatchResult>}
- */
-exports.sendData = (records, messageId, config) => {
-  const dfaReporting = new DfaReporting(getOption(config));
-  return sendDataInternal(dfaReporting, records, messageId, config);
-};
-

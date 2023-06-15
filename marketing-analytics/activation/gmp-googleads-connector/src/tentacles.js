@@ -18,6 +18,7 @@
 
 'use strict';
 
+const { nanoid } = require('nanoid');
 const {
   firestore: {DataSource, FirestoreAccessBase,},
   pubsub: {EnhancedPubSub},
@@ -34,14 +35,14 @@ const {
 } = require('@google-cloud/nodejs-common');
 
 const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
-    './api_handlers/index.js');
+  './api_handlers/index.js');
 const {getApiConfig, ApiConfig, ApiConfigJson} = require(
-    './api_config/index.js');
+  './api_config/index.js');
 const {getApiLock, ApiLock} = require('./api_lock/index.js');
 const {getTentaclesFile, TentaclesFile, TentaclesFileEntity} =
-    require('./tentacles_file/index.js');
+  require('./tentacles_file/index.js');
 const {getTentaclesTask, TentaclesTask, TentaclesTaskEntity} =
-    require('./tentacles_task/index.js');
+  require('./tentacles_task/index.js');
 
 /**
  * The maximum length (megabyte) for original (before encoding) message.
@@ -173,7 +174,7 @@ class Tentacles {
         throw new Error(`API[${api}] has unknown config: ${config}.`);
       }
       if (file.size === 0) {
-        console.warn(`Empty file: ${file.name}.`);
+        this.logger.warn(`Empty file: ${file.name}.`);
       }
       /** @type {TentaclesTaskEntity} */
       const taskBaseInfo = Object.assign({fileId}, attributes);
@@ -203,11 +204,42 @@ class Tentacles {
    */
   async saveTaskAndSendData_(taskEntity, data) {
     const taskId = (await this.tentaclesTask.createTask(taskEntity)).toString();
-    const messageAttributes = Object.assign({taskId}, taskEntity);
+    const messageAttributes = Object.assign({ taskId }, taskEntity);
     const messageId = await this.pubsub.publish(
-        taskEntity.topic, data, messageAttributes);
-    return this.tentaclesTask.updateTask(taskId, {dataMessageId: messageId});
+      taskEntity.topic, data, messageAttributes);
+    return this.tentaclesTask.updateTask(taskId, { dataMessageId: messageId });
   };
+
+  /**
+   * Based on the size of bytes in one record/line and the qps of config, gets
+   * the best split size of a task.
+   * @param {StorageFile} storageFile
+   * @param {Object} taskBaseInfo
+   * @return {number}
+   */
+  async getSizeDynamically(storageFile, taskBaseInfo) {
+    const { api, config } = taskBaseInfo;
+    const apiConfig = await this.apiConfig.getConfig(api, config);
+    const apiHandler = this.options.getApiHandler(api);
+    const { recordsPerRequest, qps } = apiHandler.getSpeedOptions(apiConfig);
+    const fileSize = await storageFile.getFileSize();
+
+    const maxDataForMessage =
+      await storageFile.loadContent(0, MESSAGE_MAXIMUM_SIZE * 1000 * 1000);
+    const lines = maxDataForMessage.split('\n');
+    const averageSizePerLine = maxDataForMessage.length / lines.length;
+    const maxLinesToSend = recordsPerRequest * qps * 500 // ~500s running time
+    const batchSize = maxLinesToSend * averageSizePerLine;
+    const safeSize = batchSize / 2; // Take half of a batch size as a safe value.
+    const leastSize = fileSize / 500; // For this CF, about 500 messages could be sent.
+    this.logger.debug('averageSizePerLine', averageSizePerLine);
+    this.logger.debug('maxLinesToSend', maxLinesToSend);
+    this.logger.debug('batchSize', batchSize);
+    const size = (leastSize < safeSize
+      ? safeSize : Math.min(safeSize, batchSize)) / 1000 / 1000;
+    this.logger.info(`Get dynamic size for ${storageFile.fileName}`, size);
+    return size;
+  }
 
   /**
    * Splits the ingested file into messages and sends to Pub/Sub.
@@ -220,18 +252,32 @@ class Tentacles {
     const {bucket, name: fileName, size: fileSize} = file;
     const {size, topic} = taskBaseInfo;
     const storageFile = this.options.getStorage(bucket, fileName);
-    const messageMaxSize = 1000 * 1000 *
-        getProperValue(parseFloat(size), MESSAGE_MAXIMUM_SIZE);
-    this.logger.debug(`Split data size: ${messageMaxSize}`);
+    const sizeAsFloat = parseFloat(size);
+    let dynamicSize;
+    if (sizeAsFloat === 0 || typeof size === 'undefined') {
+      dynamicSize = await this.getSizeDynamically(storageFile, taskBaseInfo);
+    }
+    const messageMaxSize = Math.floor(1000 * 1000 *
+      getProperValue(dynamicSize || sizeAsFloat, MESSAGE_MAXIMUM_SIZE));
+    this.logger.info(`Split data size: ${messageMaxSize}`);
+    if (fileSize / 500 > messageMaxSize) {
+      this.logger.warn(`High risk to get timeout for ${fileName}`,
+        `file [${fileSize}], messageMaxSize[${messageMaxSize}]`);
+    }
     const splitRanges =
-        await storageFile.getSplitRanges(fileSize, messageMaxSize);
+      await storageFile.getSplitRanges(fileSize, messageMaxSize);
     const reducedFn = async (previous, [start, end], index) => {
       const previousResult = await previous;
-      const data = await storageFile.loadContent(start, end);
+      const rawData = await storageFile.loadContent(start, end);
+      // Handle the rare case when there is a BOM at the beginning of the file.
+      // 'Use of a BOM is neither required nor recommended for UTF-8'.
+      // Source: http://www.unicode.org/versions/Unicode5.0.0/ch02.pdf
+      const data = (index === 0 && rawData.charCodeAt(0) === 0xFEFF)
+        ? rawData.slice(1) : rawData;
       const taskEntity = Object.assign(
           {start: start.toString(), end: end.toString()}, taskBaseInfo);
       this.logger.debug(
-          `[${index}] Send ${data.length} bytes to Topic[${topic}].`);
+        `[${index}] Send ${data.length} bytes to Topic[${topic}].`);
       const currentResult = await this.saveTaskAndSendData_(taskEntity, data);
       return currentResult && previousResult;
     };
@@ -252,7 +298,7 @@ class Tentacles {
     const storageFile = this.options.getStorage(bucket, fileName);
     const {size, topic} = taskBaseInfo;
     const gcsSplitSize = 1000 * 1000 *
-        getProperValue(parseFloat(size), STORAGE_FILE_MAXIMUM_SIZE, false);
+      getProperValue(parseFloat(size), STORAGE_FILE_MAXIMUM_SIZE, false);
     this.logger.debug(`Split file into size: ${gcsSplitSize}`);
     const slicedFiles = await storageFile.split(gcsSplitSize);
     const reducedFn = async (previous, slicedFile, index) => {
@@ -286,27 +332,42 @@ class Tentacles {
         return TransportResult.NO_SOURCE_TOPIC;
       }
       const sourceTopic = attributes.topic;
-      const getLocked = await this.apiLock.getLock(sourceTopic);
+      const lockToken = nanoid();
+      const getLocked = await this.apiLock.getLock(sourceTopic, lockToken);
       if (!getLocked) {
-        this.logger.warn(`There are running tasks for ${sourceTopic}. QUIT.`);
+        this.logger.warn(
+          `There is no available lock for ${sourceTopic}. QUIT.`);
         return TransportResult.NO_LOCK;
       }
       const data = Buffer.from(message.data, 'base64').toString();
-      this.logger.debug(`Get nudge message[${messageId}]: ${
-          data}. Will transport for [${sourceTopic}]`);
-      const result =
-          await this.passOneMessage_(sourceTopic, timeout, targetTopic);
       this.logger.debug(
-          `Nudge message[${messageId}] transport results: ${result}`);
-      if (result === TransportResult.DONE) return result;
-      await this.apiLock.unlock(sourceTopic);
+        `Get nudge message[${messageId}]:${data}. Transporting ${sourceTopic}`);
+      const result =
+        await this.passOneMessage_(sourceTopic, lockToken, timeout, targetTopic);
+      this.logger.debug(
+        `Nudge message[${messageId}] transport results: ${result}`);
+      if (result === TransportResult.TIMEOUT) {
+        await this.apiLock.unlock(sourceTopic, lockToken);
+        this.logger.info(`There is no new message in ${sourceTopic}. QUIT`);
+        return TransportResult.TIMEOUT;
+      }
       if (result === TransportResult.DUPLICATED) {
+        await this.apiLock.unlock(sourceTopic, lockToken);
+        this.logger.warn(`Duplicated message[${messageId}] for ${sourceTopic}.`);
         await this.nudge(
-            `Got a duplicated message[${messageId}], ahead next.`, attributes);
+          `Got a duplicated message[${messageId}], ahead next.`, attributes);
         return TransportResult.DUPLICATED;
       }
-      this.logger.info(`There is no new message in ${sourceTopic}.`);
-      return TransportResult.TIMEOUT;
+      if (result === TransportResult.DONE) {
+        if (await this.apiLock.hasAvailableLock(sourceTopic)) {
+          this.logger.info(
+            `Continue as there is available lock ${sourceTopic}.`);
+          await this.nudge(
+            `Continue from message[${messageId}], more locks available.`,
+            attributes);
+        }
+      }
+      return result;
     };
     return adaptNode6(transportMessage);
   }
@@ -316,12 +377,13 @@ class Tentacles {
    * the target topic. If there is no new message coming, this method will wait
    * for the seconds set by the arg 'timeout' before it exits.
    * @param {string} sourceTopic Name of 'source' topic.
+   * @param {string} lockToken Token if current lock. This will be saved
    * @param {number} timeout Idle time in seconds.
    * @param {string} targetTopic Name of target topic.
    * @return {!Promise<!TransportResult>} Result of this execution.
    * @private
    */
-  async passOneMessage_(sourceTopic, timeout, targetTopic) {
+  async passOneMessage_(sourceTopic, lockToken, timeout, targetTopic) {
     const subscriptionName = `${sourceTopic}-holder`;
     /**
      * Gets the message handler function for the pull subscription.
@@ -334,19 +396,20 @@ class Tentacles {
         const messageTag = `[${id}]@[${sourceTopic}]`;  // For log.
         this.logger.debug(`Received ${messageTag} with data length: ${length}`);
         const taskId = attributes.taskId;
-        const startSuccessfully = await this.tentaclesTask.start(taskId);
-        if (startSuccessfully) {
+        attributes.lockToken = lockToken;
+        const transported = await this.tentaclesTask.transport(taskId);
+        if (transported) {
           const messageId = await this.pubsub.publish(targetTopic,
-              Buffer.from(message.data, 'base64').toString(), attributes);
-          this.logger.debug(`Forward ${messageTag} as [${messageId}]@[${
-              targetTopic}]`);
+            Buffer.from(message.data, 'base64').toString(), attributes);
+          this.logger.debug(
+            `Forward ${messageTag} as [${messageId}]@[${targetTopic}]`);
           await this.pubsub.acknowledge(subscriptionName, message.ackId);
           await this.tentaclesTask.updateTask(taskId,
-              {apiMessageId: messageId});
+            { apiMessageId: messageId, lockToken });
           resolver(TransportResult.DONE);
         } else {
-          this.logger.warn(`Wrong status for ${
-              messageTag} (maybe duplicated). Task ID: [${taskId}].`);
+          this.logger.warn(
+            `Wrong status for ${messageTag} (duplicated?) Task [${taskId}].`);
           await this.pubsub.acknowledge(subscriptionName, message.ackId);
           resolver(TransportResult.DUPLICATED);
         }
@@ -381,11 +444,17 @@ class Tentacles {
       const {attributes, data} = message;
       const records = Buffer.from(data, 'base64').toString();
       this.logger.debug(
-          `Receive message[${messageId}] with ${records.length} bytes.`);
-      const {api, config, dryRun, appended, taskId, topic} = attributes || {};
+        `Receive message[${messageId}] with ${records.length} bytes.`);
+      const { api, config, dryRun, appended, taskId, topic, lockToken }
+        = attributes || {};
       /** @type {BatchResult} */ let result;
-      let needContinue;
+      let needContinue = true;
       try {
+        const canStartTask = await this.tentaclesTask.start(taskId);
+        if (!canStartTask) {// Wrong status task for duplicated message?
+          this.logger.warn(`Quit before sending data. Duplicated message?`);
+          return;
+        }
         const apiConfig = await this.apiConfig.getConfig(api, config);
         const apiHandler = this.options.getApiHandler(api);
         if (!apiHandler) throw new Error(`Unknown API: ${api}.`);
@@ -398,47 +467,41 @@ class Tentacles {
         } else {
           const parameters = JSON.parse(appended);
           const finalConfigString =
-              replaceParameters(JSON.stringify(apiConfig), parameters, true);
+            replaceParameters(JSON.stringify(apiConfig), parameters, true);
           finalConfig = JSON.parse(finalConfigString);
         }
         if (dryRun === 'true') {
           this.logger.info(`[DryRun] API[${api}] and config[${config}]: `,
-              finalConfig);
-          result = /** @type {!BatchResult} */ {result: true}; // A dry-run task always succeeds.
+            finalConfig);
+          result = /** @type {!BatchResult} */ { result: true }; // A dry-run task always succeeds.
           if (!getApiOnGcs().includes(attributes.api)) {
             result.numberOfLines = records.split('\n').length;
           }
         } else {
-          result = await apiHandler(records, messageId, finalConfig);
+          result = await apiHandler.sendData(records, messageId, finalConfig);
         }
-        //TODO(lushu) For previous API handler, will be removed after all updated.
-        if (typeof result.result === 'undefined') {
-          await this.tentaclesTask.finish(taskId, result);
-        } else {
-          const {numberOfLines = 0, failedLines, groupedFailed} = result;
-          await this.tentaclesTask.updateTask(taskId, {
-            numberOfLines,
-            numberOfFailed: failedLines ? failedLines.length : 0,
-          });
-          if (groupedFailed) {
-            const errorLogger = getLogger('TentaclesFailedRecord');
-            Object.keys(groupedFailed).forEach((error) => {
-              errorLogger.info(
-                  JSON.stringify(
+        const { numberOfLines = 0, failedLines, groupedFailed } = result;
+        await this.tentaclesTask.updateTask(taskId, {
+          numberOfLines,
+          numberOfFailed: failedLines ? failedLines.length : 0,
+        });
+        if (groupedFailed) {
+          const errorLogger = getLogger('TentaclesFailedRecord');
+          Object.keys(groupedFailed).forEach((error) => {
+            errorLogger.info(
+              JSON.stringify(
                       {taskId, error, records: groupedFailed[error]}));
-            });
-          }
-          if (result.result) {
-            await this.tentaclesTask.finish(taskId, result.result);
-          } else {
-            await this.tentaclesTask.logError(taskId, result.errors);
-          }
+          });
         }
-        needContinue = true;
+        if (result.result) {
+          await this.tentaclesTask.finish(taskId, result.result);
+        } else {
+          await this.tentaclesTask.logError(taskId, result.errors);
+        }
       } catch (error) {
         this.logger.error(`Error in API[${api}], config[${config}]: `, error);
         await this.tentaclesTask.logError(taskId, error);
-        needContinue = !error.message.startsWith('Unsupported API');
+        needContinue = !error.message.startsWith('Unknown API');
       }
       if (!topic) {
         this.logger.info('There is no topic. In local file upload mode.');
@@ -448,14 +511,16 @@ class Tentacles {
         this.logger.info(`Skip unsupported API ${api}.`);
       }
       try {
-        return this.releaseLockAndNotify(topic, messageId, needContinue);
+        return this.releaseLockAndNotify(
+          topic, lockToken, messageId, needContinue);
       } catch (error) {
         // Re-do this when unknown external exceptions happens.
         this.logger.error('Exception happened while try to release the lock: ',
-            error);
+          error);
         await wait(10000); // wait 10 sec
         this.logger.info('Wait 10 second and retry...');
-        return this.releaseLockAndNotify(topic, messageId, needContinue);
+        return this.releaseLockAndNotify(
+          topic, lockToken, messageId, needContinue);
       }
     }
     return adaptNode6(sendApiData);
@@ -464,14 +529,15 @@ class Tentacles {
   /**
    * Releases the lock and sends notification message for next piece of data.
    * @param {string} topic The topic name as well as the lock name.
+   * @param {string} lockToken The token for this lock.
    * @param {string} messageId ID of current message.
    * @param {boolean} needContinue Whether should send notification message.
    * @return {!Promise<string|undefined>} ID of the 'nudge' message.
    */
-  async releaseLockAndNotify(topic, messageId, needContinue) {
-    await this.apiLock.unlock(topic);
+  async releaseLockAndNotify(topic, lockToken, messageId, needContinue) {
+    await this.apiLock.unlock(topic, lockToken);
     if (needContinue) {
-      return this.nudge(`Triggered by message[${messageId}]`, {topic});
+      return this.nudge(`Triggered by message[${messageId}]`, { topic });
     }
   }
 
@@ -568,19 +634,19 @@ const getTentacles = (namespace, datasource = undefined, apiConfig) => {
   const options = {
     namespace,
     apiConfig: /** @type {ApiConfig} */ getApiConfig(apiConfig || datasource,
-        namespace),
+      namespace),
     apiLock: /** @type {ApiLock} */ getApiLock(datasource, namespace),
     tentaclesFile: /** @type {TentaclesFile} */ getTentaclesFile(datasource,
-        namespace),
+      namespace),
     tentaclesTask: /** @type {TentaclesTask} */ getTentaclesTask(datasource,
-        namespace),
+      namespace),
     pubsub: new EnhancedPubSub(),
     getStorage: StorageFile.getInstance,
     validatedStorageTrigger,
     getApiHandler,
   };
   console.log(
-      `Init Tentacles for namespace[${namespace}], Datasource[${datasource}]`);
+    `Init Tentacles for namespace[${namespace}], Datasource[${datasource}]`);
   return new Tentacles(options);
 };
 
@@ -592,7 +658,7 @@ const getTentacles = (namespace, datasource = undefined, apiConfig) => {
 const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE']) => {
   if (!namespace) {
     console.warn(
-        'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`'
+      'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`'
     );
     namespace = 'tentacles';
   }

@@ -438,7 +438,7 @@ class GoogleAds {
       } catch (error) {
         this.logger.error(
           `Error in ${functionName} batch: ${batchId}`, error);
-        this.updateBatchResultWithError_(batchResult, error, lines, 0);
+        this.updateBatchResultWithError(batchResult, error, lines, 0);
         return batchResult;
       }
     }
@@ -493,9 +493,8 @@ class GoogleAds {
    * @param {number} fieldPathIndex The index of 'FieldPathElement' in the array
    *     'field_path_elements'. This is used to get the original line related to
    *     this GoogleAdsError.
-   * @private
    */
-  updateBatchResultWithError_(batchResult, error, lines, fieldPathIndex) {
+  updateBatchResultWithError(batchResult, error, lines, fieldPathIndex) {
     batchResult.result = false;
     if (error.errors) { //GoogleAdsFailure
       this.extraFailedLines_(batchResult, [error], lines, fieldPathIndex);
@@ -773,7 +772,7 @@ class GoogleAds {
       } catch (error) {
         this.logger.error(
             `Error in Customer Match upload batch[${batchId}]`, error);
-        this.updateBatchResultWithError_(batchResult, error, lines, 2);
+        this.updateBatchResultWithError(batchResult, error, lines, 2);
         return batchResult;
       }
     }
@@ -1061,7 +1060,7 @@ class GoogleAds {
       } catch (error) {
         this.logger.error(
           `Error in OfflineUserDataJob add operations batch[${batchId}]`, error);
-        this.updateBatchResultWithError_(batchResult, error, lines, 2);
+        this.updateBatchResultWithError(batchResult, error, lines, 2);
         return batchResult;
       }
     }

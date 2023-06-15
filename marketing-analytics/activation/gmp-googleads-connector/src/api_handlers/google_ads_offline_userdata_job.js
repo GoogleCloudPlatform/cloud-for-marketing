@@ -21,11 +21,10 @@
 
 const {
   api: { googleads: { GoogleAds, OfflineUserDataJobConfig } },
-  utils: { apiSpeedControl, getProperValue, getLogger, BatchResult },
+  utils: { getProperValue, BatchResult },
   storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');
-const { getGoogleAds } = require('./handler_utilities.js');
-const { getOrCreateUserList } = require('./google_ads_customer_match_upload.js');
+const { GoogleAdsCustomerMatch } = require('./google_ads_customer_match_upload.js');
 
 /**
  * @see https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match?hl=en#customer_match_considerations
@@ -45,99 +44,93 @@ const NUMBER_OF_THREADS = 1;
  */
 const QUERIES_PER_SECOND = 1;
 
-/** API name in the incoming file name. */
-exports.name = 'AOUD';
-
-/** Data for this API will be transferred through GCS by default. */
-exports.defaultOnGcs = true;
-
 /**
  * Configuration for a Google Ads offline user data job upload.
  * @typedef {{
- *   developerToken:string,
- *   offlineUserDataJobConfig: !OfflineUserDataJobConfig,
- *   recordsPerRequest:(number|undefined),
- *   qps:(number|undefined),
- *   secretName:(string|undefined),
- * }}
- */
+*   developerToken:string,
+*   offlineUserDataJobConfig: !OfflineUserDataJobConfig,
+*   recordsPerRequest:(number|undefined),
+*   qps:(number|undefined),
+*   secretName:(string|undefined),
+* }}
+*/
 let GoogleAdsOfflineUserDataJobConfig;
 
-exports.GoogleAdsOfflineUserDataJobConfig = GoogleAdsOfflineUserDataJobConfig;
-
 /**
- * Sends out the data as user ids to Google Ads API.
- * This function exposes a googleAds parameter for test
- * @param {GoogleAds} googleAds Injected Google Ads instance.
- * @param {string} message Message data from Pubsub. It could be the
- *     information of the file to be sent out, or a piece of data that need to
- *     be send out (used for test).
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsOfflineUserDataJobConfig} config
- * @return {!Promise<BatchResult>}
+ * Offline user data job for Google Ads.
  */
-const sendDataInternal = async (googleAds, message, messageId, config) => {
-  const logger = getLogger('API.AOUD');
-  let records;
-  try {
-    const { bucket, file } = JSON.parse(message);
-    if (file) {
-      const storageFile = new StorageFile(bucket, file);
-      records = await storageFile.loadContent(0);
-    } else {
-      logger.error('Could find GCS infomation in message', message);
-      return {
-        result: false,
-        errors: [`Could find GCS infomation in message: ${message}`],
-      };
-    }
-  } catch (error) {
-    logger.error('Incoming message: ', message);
-    records = message;
-  }
-  try {
-    const { offlineUserDataJobConfig } = config;
-    if (offlineUserDataJobConfig.type.startsWith('CUSTOMER_MATCH')) {
-      offlineUserDataJobConfig.list_id =
-        await getOrCreateUserList(googleAds, offlineUserDataJobConfig);
-    }
-    const jobResourceName =
-      await googleAds.createOfflineUserDataJob(offlineUserDataJobConfig);
-    logger.info('jobResourceName: ', jobResourceName);
+class GoogleAdsOfflineUserDataJobUpload extends GoogleAdsCustomerMatch {
+
+  /** @override */
+  getSpeedOptions(config) {
     const recordsPerRequest =
       getProperValue(config.recordsPerRequest, RECORDS_PER_REQUEST);
+    const numberOfThreads = NUMBER_OF_THREADS;
     const qps = getProperValue(config.qps, QUERIES_PER_SECOND, false);
-    const managedSend = apiSpeedControl(recordsPerRequest, NUMBER_OF_THREADS, qps);
-    const configedUpload = googleAds.getAddOperationsToOfflineUserDataJobFn(
-      config.offlineUserDataJobConfig, jobResourceName);
-    const result = await managedSend(configedUpload, records, messageId);
-    logger.info('add userdata result: ', result);
-    await googleAds.runOfflineUserDataJob(
-      offlineUserDataJobConfig, jobResourceName);
-    return result;
-  } catch (error) {
-    logger.error('Error in UserdataOfflineDataService: ', error);
-    return {
-      result: false,
-      errors: [error.message || error.toString()],
-    };
+    return { recordsPerRequest, numberOfThreads, qps };
   }
+
+  /**
+   * Sends out the data as user ids to Google Ads API.
+   * This function exposes a googleAds parameter for test
+   * @param {GoogleAds} googleAds Injected Google Ads instance.
+   * @param {string} message Message data from Pubsub. It could be the
+   *     information of the file to be sent out, or a piece of data that need to
+   *     be send out (used for test).
+   * @param {string} messageId Pub/sub message ID for log.
+   * @param {!GoogleAdsOfflineUserDataJobConfig} config
+   * @return {!Promise<BatchResult>}
+   */
+  async sendDataInternal(googleAds, message, messageId, config) {
+    let records;
+    try {
+      const { bucket, file } = JSON.parse(message);
+      if (file) {
+        const storageFile = new StorageFile(bucket, file);
+        records = await storageFile.loadContent(0);
+      } else {
+        this.logger.error('Could find GCS infomation in message', message);
+        return {
+          result: false,
+          errors: [`Could find GCS infomation in message: ${message}`],
+        };
+      }
+    } catch (error) {
+      this.logger.error('Incoming message: ', message);
+      records = message;
+    }
+    try {
+      const { offlineUserDataJobConfig } = config;
+      if (offlineUserDataJobConfig.type.startsWith('CUSTOMER_MATCH')) {
+        offlineUserDataJobConfig.list_id =
+          await this.getOrCreateUserList(googleAds, offlineUserDataJobConfig);
+      }
+      const jobResourceName =
+        await googleAds.createOfflineUserDataJob(offlineUserDataJobConfig);
+      this.logger.info('jobResourceName: ', jobResourceName);
+      const managedSend = this.getManagedSendFn(config);
+      const configedUpload = googleAds.getAddOperationsToOfflineUserDataJobFn(
+        config.offlineUserDataJobConfig, jobResourceName);
+      const result = await managedSend(configedUpload, records, messageId);
+      this.logger.info('add userdata result: ', result);
+      await googleAds.runOfflineUserDataJob(
+        offlineUserDataJobConfig, jobResourceName);
+      return result;
+    } catch (error) {
+      this.logger.error('Error in UserdataOfflineDataService: ', error);
+      return this.getResultFromError(googleAds, error);
+    }
+  }
+
+}
+
+/** API name in the incoming file name. */
+GoogleAdsOfflineUserDataJobUpload.code = 'AOUD';
+
+/** Data for this API will be transferred through GCS by default. */
+GoogleAdsOfflineUserDataJobUpload.defaultOnGcs = true;
+
+module.exports = {
+  GoogleAdsOfflineUserDataJobConfig,
+  GoogleAdsOfflineUserDataJobUpload,
 };
-
-exports.sendDataInternal = sendDataInternal;
-
-/**
- * Sends out the data as user ids to Google Ads API.
- * @param {string} message Message data from Pubsub. It could be the
- *     information of the file to be sent out, or a piece of data that need to
- *     be send out (used for test).
- * @param {string} messageId Pub/sub message ID for log.
- * @param {!GoogleAdsOfflineUserDataJobConfig} config
- * @return {!Promise<BatchResult>}
- */
-const sendData = (message, messageId, config) => {
-  const googleAds = getGoogleAds(config);
-  return sendDataInternal(googleAds, message, messageId, config);
-};
-
-exports.sendData = sendData;
