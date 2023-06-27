@@ -1,5 +1,10 @@
 # Release Notes
 
+## 1.7.1 (2023-06-27)
+
+### Change the Cloud Functions deployment to Artifact Registry
+### Enhance CM360 Conversion API
+
 ## 1.7.0 (2023-06-15)
 
 ### Update to the v13 of the Google Ads API

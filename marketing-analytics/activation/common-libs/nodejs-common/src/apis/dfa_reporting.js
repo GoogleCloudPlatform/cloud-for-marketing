@@ -76,6 +76,17 @@ const PICKED_PROPERTIES = [
 ];
 
 /**
+ * Kinds of UserIdentifier.
+ * @type {Array<string>}
+ */
+const IDENTIFIERS = [
+  'hashedEmail',
+  'hashedPhoneNumber',
+  'addressInfo',
+];
+
+const MAX_IDENTIFIERS_PER_USER = 5;
+/**
  * Google DfaReport API v3.0 stub.
  * see https://developers.google.com/doubleclick-advertisers/service_accounts
  */
@@ -174,6 +185,32 @@ class DfaReporting {
         if (typeof config.customVariables !== 'undefined') {
           conversion.customVariables = config.customVariables.map(
               (variable) => ({'type': variable, 'value': record[variable],}));
+        }
+        // User Identifiers
+        if (record.userIdentifiers) {
+          const userIdentifiers = [];
+          IDENTIFIERS.map((id) => {
+            const idValue = record.userIdentifiers[id];
+            if (idValue) {
+              if (Array.isArray(idValue)) {
+                idValue.forEach(
+                  (user) => void userIdentifiers.push({ [id]: user }));
+              } else {
+                userIdentifiers.push({ [id]: idValue });
+              }
+            }
+          });
+          if (userIdentifiers.length > 0) {
+            if (userIdentifiers.length > MAX_IDENTIFIERS_PER_USER) {
+              this.logger.warn(
+                'There are too many user identifiers:', record.userIdentifiers);
+            }
+            conversion.userIdentifiers =
+              userIdentifiers.slice(0, MAX_IDENTIFIERS_PER_USER);
+          } else {
+            this.logger.warn(
+              'There is no valid user identifier:', record.userIdentifiers);
+          }
         }
         return conversion;
       });

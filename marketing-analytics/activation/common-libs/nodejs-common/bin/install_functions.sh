@@ -1552,6 +1552,7 @@ set_cloud_functions_default_settings() {
   local -n default_cf_flag=$1
   default_cf_flag+=(--region="${REGION}")
   default_cf_flag+=(--no-allow-unauthenticated)
+  default_cf_flag+=(--docker-registry=artifact-registry)
   default_cf_flag+=(--timeout=540 --memory="${CF_MEMORY}" --runtime="${CF_RUNTIME}")
   default_cf_flag+=(--set-env-vars=GCP_PROJECT="${GCP_PROJECT}")
   default_cf_flag+=(--set-env-vars=PROJECT_NAMESPACE="${PROJECT_NAMESPACE}")

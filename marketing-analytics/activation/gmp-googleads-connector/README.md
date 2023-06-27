@@ -544,6 +544,12 @@ Attributed to encrypted user ID (`encryptedUserId`):
 {"encryptedUserId": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example", "U2": "a|b|c"}
 ```
 
+Conversions with [UserIdentifier](https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#useridentifier):
+
+```
+{"gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example", "timestampMicros": "1550407680000000", "userIdentifiers": {"hashedEmail": "9de762fd8f832878b46feb58a6a79d80c013199315a4ee3b86b41a602f8fc3a7"}}
+```
+
 ### 4.4. SFTP: Business Data upload to Search Ads 360
 
 | API Specification      | Value                                                 |

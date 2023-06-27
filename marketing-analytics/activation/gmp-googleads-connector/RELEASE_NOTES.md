@@ -1,5 +1,14 @@
 # Release Notes
 
+## 4.0.1 (2023-06-27)
+
+### Integrated APIs
+
+- Updated CM360 Conversion API with a new field
+[UserIdentifier](https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#useridentifier).
+
+### Change the Cloud Functions deployment to Artifact Registry
+
 ## 4.0.0 (2023-06-15)
 
 ### New Features
