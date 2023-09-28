@@ -18,6 +18,7 @@
 'use strict';
 
 const {request} = require('gaxios');
+const { Transform } = require('stream');
 const {api: {doubleclickbidmanager: {DoubleClickBidManager}}} = require(
     '@google-cloud/nodejs-common');
 const {Report} = require('./base_report.js');
@@ -33,19 +34,6 @@ class DoubleClickBidManagerReport extends Report {
   }
 
   /**
-   * DV360 report(query) doesn't return anything (reportId or fileId, etc.) for
-   * a `runQuery` request, it just returns status of a report(query) through
-   * `getQuery`.
-   * So, to get the status of when a report is complete, using `getQuery` to get
-   * the `latestReportRunTimeMs` before `runQuery`. After `runQuery`, the
-   * `isReady` function will check the value of `latestReportRunTimeMs` for
-   * whether the report is ready.
-   *
-   * Also, there is other way to runQuery, e.g. scheduled reports. At the same
-   * time, all 'getQuery' of the same report will share the same result. That is
-   * why there is chance we hit a 'running' report when tries to get the status.
-   * It's not very clear how to handle that from the business perspective, so
-   * currently, just log a warn message here.
    * @override
    */
   async generate(parameters) {
@@ -65,33 +53,46 @@ class DoubleClickBidManagerReport extends Report {
   async getContent(parameters) {
     const { googleCloudStoragePath: url } =
       await this.dbm.getQueryReport(this.queryId, parameters.reportId);
-    const response = await request({method: 'GET', url,});
+    const response = await request({
+      method: 'GET',
+      url,
+      responseType: 'stream',
+    });
     return this.clean(response.data);
   }
 
   /**
-   * Cleans up the content of report. DV360 reports are unable to customized, so
-   * use this function to get rid of unwanted lines, e.g. summary line.
-   * @param {string} content
+   * Cleans up the content of report. DV360 reports are unable to be customized.
+   * The summary and content are separated by an empty line. So '\n\n' is used
+   * to check whether the content is completed. To prevent the two '\n' being
+   * separated in two different chunks, an extra parameter 'last' is used to
+   * store data from the last chunk.
+   *
+   * @param {stream} content
    * @return {string}
    */
   clean(content) {
-    const lines = content.split('\n');
-    const emptyLine = lines.indexOf('');
-    if (emptyLine === 0) {
-      throw new Error('First line is empty, wrong DV360 Report format?');
-    }
-    if (emptyLine === -1) {
-      throw new Error('No empty line, wrong DV360 Report format?');
-    }
-    if (emptyLine === 1) {
-      throw new Error('Empty report');
-    }
-    const possibleSummaryIndex = emptyLine - 1;
-    const lastLineExcluded = lines[possibleSummaryIndex].startsWith(',')
-        ? possibleSummaryIndex
-        : possibleSummaryIndex + 1;
-    return lines.slice(0, lastLineExcluded).join('\n');
+    let last = '';
+    const streamReportTransform = new Transform({
+      transform(chunk, encoding, callback) {
+        const data = chunk.toString();
+        const toCheck = last + data;
+        if (toCheck.indexOf('\n\n') === -1) {
+          const output = last;
+          last = data;
+          callback(null, output);
+        } else {
+          const lines = toCheck.substring(0, toCheck.indexOf('\n\n')).split('\n');
+          if (lines[lines.length - 1].startsWith(',')) {
+            lines.pop();
+          }
+          callback(null, lines.join('\n'));
+          this.end();
+        }
+      }
+    });
+    content.on('error', (error) => streamReportTransform.emit('error', error));
+    return content.pipe(streamReportTransform);
   }
 }
 

@@ -498,6 +498,26 @@ const extractObject = (paths) => {
 };
 
 /**
+ * Returns the embedded object from the given object and path.
+ * @param {Object} obj
+ * @param {string|undefined} paths
+ * @return {Object}
+ */
+const getObjectByPath = (obj, paths) => {
+  let instance = obj;
+  if (paths) {
+    paths.split('.').filter((key) => !!key).forEach((key) => {
+      instance = instance[key];
+      if (!instance) {
+        console.error('Fail to get function containter', paths);
+        return instance;
+      }
+    });
+  }
+  return instance;
+};
+
+/**
  * For more details, see:
  * https://developers.google.com/google-ads/api/docs/rest/design/json-mappings
  * @param {string} name Identifiers.
@@ -533,6 +553,7 @@ module.exports = {
   replaceParameters,
   getFilterFunction,
   extractObject,
+  getObjectByPath,
   changeNamingFromSnakeToUpperCamel,
   changeNamingFromSnakeToLowerCamel,
 };

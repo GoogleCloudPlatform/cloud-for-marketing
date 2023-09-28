@@ -573,7 +573,10 @@ const getDatePartition = (filename) => {
  *   today_sub_X - sub the X days based on today's date, format 'YYYYMMDD'
  *   today_add_X - add the X days based on today's date, format 'YYYYMMDD'
  *   Y_hyphenated - 'Y' could be any of previous date, format 'YYYY-MM-DD'
- *   Y_timestamp_ms - 'Unix milliseconds timestamp of the start of  date 'Y'
+ *   Y_timestamp_ms - Unix milliseconds timestamp of the start of date 'Y'
+ *   Y_yyyy - the four digits year of date 'Y'
+ *   Y_MM - the two digits month of date 'Y'
+ *   Y_dd - the two digits day of date 'Y'
  *   yesterday - quick access as 'today_sub_1'. It can has follow ups as well,
  *       e.g. yesterday_sub_X, yesterday_hyphenated, etc.
  * Parameters get values ignoring their cases status (lower or upper).
@@ -591,24 +594,30 @@ const getDefaultParameters = (parameters, timezone = 'UTC',
    * @return {string|number}
    */
   const getDefaultValue = (parameter) => {
-    let realParameter = parameter.toLocaleLowerCase();
+    const regex = /(now)|(today)|(add)|(set)|(sub)|(hyphenated)|(timestamp)|(ms)/gi;
+    let realParameter = parameter.replace(/(yesterday)/ig, 'today_sub_1')
+      .replace(regex, (match) => match.toLowerCase());
     const now = DateTime.fromMillis(unixMillis, {zone: timezone});
     if (realParameter === 'now') return now.toISO(); // 'now' is a Date ISO String.
     if (realParameter === 'today') return now.toFormat('yyyyMMdd');
-    realParameter = realParameter.replace(/^yesterday/, 'today_sub_1');
     if (!realParameter.startsWith('today')) {
       throw new Error(`Unknown default parameter: ${parameter}`);
     }
     const suffixes = realParameter.split('_');
     let date = now;
     for (let index = 1; index < suffixes.length; index++) {
-      if (suffixes[index] === 'hyphenated') return date.toISODate();
       if (suffixes[index] === 'timestamp' && suffixes[index + 1] === 'ms') {
         return date.startOf('days').toMillis();
       }
-      const operator = suffixes[index];
+      const operatorOrEnding = suffixes[index];
       let operationOfLib;
-      switch (operator) {
+      switch (operatorOrEnding) {
+        case 'yyyy':
+        case 'MM':
+        case 'dd':
+          return date.toFormat(operatorOrEnding);
+        case 'hyphenated':
+          return date.toISODate();
         case 'add':
           operationOfLib = 'plus';
           break;

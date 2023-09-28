@@ -92,6 +92,7 @@ declare -A GOOGLE_CLOUD_APIS
 GOOGLE_CLOUD_APIS=(
   ["appengine.googleapis.com"]="App Engine Admin API"
   ["cloudbuild.googleapis.com"]="Google Build API"
+  ["artifactregistry.googleapis.com"]="Artifact Registry API"
   ["cloudresourcemanager.googleapis.com"]="Resource Manager API"
   ["iam.googleapis.com"]="Cloud Identity and Access Management API"
 )

@@ -31,6 +31,14 @@ exports.AuthClient = require('./auth_client.js');
 exports.dfareporting = require('./dfa_reporting.js');
 
 /**
+ * APIs integration class for DV3 API.
+ * @const {{
+*   DisplayVideo:!DisplayVideo,
+* }}
+*/
+exports.displayvideo = require('./display_video.js');
+
+/**
  * APIs integration class for Google Analytics Data Import API.
  * @const {{
  *   Analytics:!Analytics,

@@ -122,15 +122,42 @@ class AdsDataHub {
   /**
    * Lists the analysis queries owned by the specified customer.
    * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/list
+   * @param {Object=} parameters The query parameter object.
    * @param {string=} customerId
    * @return {!Promise<{
    *   queries:Array<Object>,
    *   nextPageToken:string,
    * }>}
    */
-  async listQuery(customerId = this.customerId) {
-    const path = `customers/${customerId}/analysisQueries`;
+  async listQuery(parameters = {}, customerId = this.customerId) {
+    const querystring = this.getQueryString_(parameters);
+    const path = `customers/${customerId}/analysisQueries`
+      + (querystring ? `?${querystring}` : '');
     return this.sendRequestAndReturnResponse_(path);
+  }
+
+  /**
+   * Starts execution on a transient analysis query. The results will be written
+   * to the specified BigQuery destination table. The returned operation name
+   * can be used to poll for query completion status.
+   * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/startTransient
+   * @param {string} queryText The content of the query.
+   * @param {Object} spec Defines the query execution parameters.
+   *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/QueryExecutionSpec
+   * @param {string} destTable Destination BigQuery table for query results with
+   *     the format 'project.dataset.table_name'. If specified, the project must
+   *     be explicitly whitelisted for the customer's ADH account. If project is
+   *     not specified, uses default project for the provided customer. If
+   *     neither project nor dataset is specified, uses the default project and
+   *     dataset.
+   * @param {string=} customerId
+   * @return {!Promise<Object>} Promised operation object.
+   *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/operations#Operation
+   */
+  async startTransientQuery(queryText, spec, destTable, customerId = this.customerId) {
+    const path = `customers/${customerId}/analysisQueries:startTransient`;
+    const data = { query: { queryText }, spec, destTable };
+    return this.sendRequestAndReturnResponse_(path, 'POST', data);
   }
 
   /**
@@ -140,12 +167,6 @@ class AdsDataHub {
    * @param {string} title The title of the query.
    * @param {string} queryText The content of the query
    * @return {!Promise<string>} Promised unique name of created query.
-   *
-   * TODO: currently here only take two properties of customers.analysisQueries
-   *   which may be not enough in future requests. If that happened, the
-   *   arguments of this function should be refactored into an object to
-   *   present an AnalysisQuery.
-   *   See https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries#resource:-analysisquery
    */
   async createQuery(title, queryText) {
     const path = `customers/${this.customerId}/analysisQueries`;
@@ -201,6 +222,19 @@ class AdsDataHub {
    */
   async getQueryStatus(operationName) {
     return this.sendRequestAndReturnResponse_(operationName);
+  }
+
+  /**
+   * Gets the query string of a parameter object.
+   * @param {Object} parameters The object of key-value pairs which will be
+   *   converted into query string format.
+   * @return string
+   * @private
+   */
+  getQueryString_(parameters = {}) {
+    return Object.keys(parameters)
+      .map((key) => key + '=' + encodeURIComponent(parameters[key]))
+      .join('&');
   }
 }
 

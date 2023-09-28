@@ -30,6 +30,7 @@ const {
 /**
  * Campaign Manager report configuration.
  * @typedef {{
+ *   secretName: (string|undefined),
  *   accountId: string,
  *   profileId: string,
  *   reportId: string,
@@ -42,6 +43,7 @@ let CmReportConfig;
  * For 'requestBody', see:
  * https://developers.google.com/bid-manager/v1.1/queries/runquery#request-body
  * @typedef {{
+ *   secretName: (string|undefined),
  *   queryId:string,
  *   requestBody: Dv360RequestBody | undefined,
  * }}
@@ -49,8 +51,25 @@ let CmReportConfig;
 let Dv360ReportConfig;
 
 /**
- * GoogleAds report configuration
+ * General API result configuration.
  * @typedef {{
+ *   secretName: (string|undefined),
+ *   packageName: string,
+ *   className: string,
+ *   functionObjectName: (string|undefined),
+ *   functionName: string,
+ *   args: (Object|undefined),
+ *   limit: (number|undefined),
+ *   entityPath: string,
+ *   pageTokenPath: (string|undefined),
+ * }}
+ */
+let ApiResultConfig;
+
+/**
+ * GoogleAds report configuration.
+ * @typedef {{
+ *   secretName: (string|undefined),
  *   developerToken: string,
  *   customerId: string|undefined,
  *   loginCustomerId: string|undefined,
@@ -62,6 +81,7 @@ let AdsReportConfig;
 /**
  * YouTube report configuration
  * @typedef {{
+ *   secretName: (string|undefined),
  *   target: string,
  *   resultLimit: number|undefined,
  *   reportQuery: ListChannelsConfig|ListVideosConfig|ListCommentThreadsConfig
@@ -81,6 +101,9 @@ let YouTubeReportConfig;
  * } | {
  *   target: 'SA360',
  *   config: Sa360ReportConfig,
+ * } | {
+ *   target: 'API',
+ *   config: ApiResultConfig,
  * } | {
  *   target: 'ADS',
  *   config: AdsReportConfig,

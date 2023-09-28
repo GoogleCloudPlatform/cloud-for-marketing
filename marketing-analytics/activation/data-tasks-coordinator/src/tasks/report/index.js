@@ -23,6 +23,7 @@ const {CampaignManagerReport} = require('./campaign_manager_report.js');
 const {DoubleClickSearchReport} = require('./doubleclick_search_report.js');
 const {DoubleClickBidManagerReport} =
     require('./doubleclick_bidmanager_report.js');
+const { GeneralApiResult } = require('./general_api_result.js');
 const {GoogleAdsReport} = require('./googleads_report.js');
 const {YouTubeReport} = require('./youtube_report.js');
 
@@ -34,6 +35,7 @@ const REPORTING_FACTORY = Object.freeze({
   'CM': CampaignManagerReport,
   'SA360': DoubleClickSearchReport,
   'DV360': DoubleClickBidManagerReport,
+  'API': GeneralApiResult,
   'ADS': GoogleAdsReport,
   'YT': YouTubeReport,
 });

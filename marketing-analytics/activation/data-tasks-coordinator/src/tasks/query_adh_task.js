@@ -32,26 +32,34 @@ const {ErrorOptions} = require('../task_config/task_config_dao.js');
 /**
  * @typedef {{
  *   type:TaskType.QUERY_ADH,
- *   adhConfig:{
- *      customerId:string,
- *   },
  *   source:{
+ *     customerId:string,
+ *     title: (string|undefined),
  *     sql:(string|undefined),
  *     file:(!StorageFileConfig|undefined),
- *     endDate:string,
- *     dateRangeInDays:30
+ *     spec: {
+ *       startDate: {
+ *         year: number,
+ *         month: number,
+ *         day: number,
+ *       },
+ *       endDate: {
+ *         year: number,
+ *         month: number,
+ *         day: number,
+ *       },
+ *     },
  *   },
  *   destination:{
  *     table:!BigQueryTableConfig,
  *   },
+ *   errorOptions:(!ErrorOptions|undefined),
  *   appendedParameters:(Object<string,string>|undefined),
  *   next:(string|!Array<string>|undefined),
  * }}
  */
 let QueryAdhTaskConfig;
 
-/** @const {string} The query ADH job identity name. */
-const QUERY_ID_PARAMETER = 'queryName';
 /** @const {string} The query ADH job identity name. */
 const JOB_ID_PARAMETER = 'operationName';
 
@@ -70,89 +78,56 @@ class QueryAdhTask extends BaseTask {
   /** @override */
   async doTask() {
     const source = this.config.source;
-    const destTable = this.config.destination.table;
+    const tableName = this.getDestTable(this.config.destination.table);
+    const { customerId, title } = source;
+    const spec = source.spec
+      || this.getLegacySpec_(source.endDate, source.dateRangeInDays);
     const sql = await this.getSql_();
-    const adh = this.getAdhInstance_(this.config.adhConfig)
+    const adh = this.getAdhInstance_(customerId);
 
-    // If query exist already: will fail with 409 error here
-    const queryName = await adh.createQuery(destTable.tableId, sql);
-    const endDateTime = DateTime.fromISO(source.endDate);
-    const startDateTime = endDateTime.minus({days: source.dateRangeInDays});
-    const spec = {
-      startDate:{
-        year: startDateTime.year,
-        month: startDateTime.month,
-        day: startDateTime.day,
-      },
-      endDate:{
-        year: endDateTime.year,
-        month: endDateTime.month,
-        day: endDateTime.day,
-      },
-    };
-    const tableName = destTable.projectId + '.' + destTable.datasetId + '.'
-        + destTable.tableId;
-
-    // Request the newly created operation too soon will result in 404 error.
-    await new Promise(resolve => setTimeout(resolve, 60000));
-
-    // If BQ source table not found: sometimes will fail with 404 error here, exist with error.
-    const {name: opName} = await adh.startQuery(queryName, spec, tableName);
-
-    return {
-      parameters: this.appendParameter({
-        [QUERY_ID_PARAMETER]: queryName,
-        [JOB_ID_PARAMETER]: opName,
-      })
-    };
+    if (sql) {
+      const { name } = await adh.startTransientQuery(sql, spec, tableName);
+      return {
+        parameters: this.appendParameter({ [JOB_ID_PARAMETER]: name })
+      };
+    }
+    if (title) {
+      const { queries } = await adh.listQuery({ filter: `title=${title}` });
+      if (queries && queries.length > 0) {
+        const queryName = queries[0].name;
+        const { name } = await adh.startQuery(queryName, spec, tableName);
+        return {
+          parameters: this.appendParameter({ [JOB_ID_PARAMETER]: name })
+        };
+      }
+    }
+    throw new Error(
+      `Can not find ADH query for task: ${JSON.stringify(source)}`);
   }
 
   /** @override */
   async isDone() {
-    const adhConfig = this.config.adhConfig;
-    const param = this.parameters[JOB_ID_PARAMETER];
-
-    let response;
-    try {
-        response = await this.getAdhInstance_(this.config.adhConfig).getQueryStatus(param);
-    } catch (e) {
-        // Request the newly created operation too soon will result in 404 error, will retry.
-        console.log('ADH query operation not found yet, will retry: ', e.toString());
-        // TODO(xinxincheng): Use this.logger to replace console.log
-        this.logger.debug('ADH query operation not found yet, will retry: ', e.toString());
-        return false;
-    }
-
-    const {done, error} = response;
-    // If BQ source table not found, will have done = true, error.code = 3
-    // e.g, error.message Table not found: `adh_apps_data.firebase_bi_20211104`
+    const { customerId } = this.config.source;
+    const operationName = this.parameters[JOB_ID_PARAMETER];
+    const adh = this.getAdhInstance_(customerId);
+    const response = await adh.getQueryStatus(operationName);
+    const { done, error } = response;
     if (error) {
-        await this.completeTask();
-        // To make sure task will fail with ERROR instead of retry.
-        console.error('ADH query task failed, will NOT retry: ', error.toString());
-        // TODO(xinxincheng): Use this.logger to replace console.log
-        this.logger.error('ADH query task failed, will NOT retry: ', error.toString());
-        throw new Error(error.message);
+      this.logger.error('ADH query task failed, will NOT retry: ',
+        error.toString());
+      throw new Error(error.message);
     }
-
-    // If no response yet, done = undefined, error = undefined; the function will return false.
-    return !!done;
-  }
-
-  /** @override */
-  completeTask() {
-    const adhConfig = this.config.adhConfig;
-    return this.getAdhInstance_(adhConfig).deleteQuery(
-        this.parameters[QUERY_ID_PARAMETER]);
+    return done === true;
   }
 
   /**
    * Returns ADH connector instance.
+   * @param {string} customerId
    * @return {!AdsDataHub}
    * @private
    */
-  getAdhInstance_(adhConfig) {
-    return new AdsDataHub({}, adhConfig.customerId);
+  getAdhInstance_(customerId) {
+    return new AdsDataHub({}, customerId, this.getOption());
   }
 
   /**
@@ -171,7 +146,62 @@ class QueryAdhTask extends BaseTask {
           .getInstance(bucket, name, {projectId}).loadContent(0);
       return replaceParameters(sql, this.parameters);
     }
-    throw new Error(`Fail to find source sql or file for Query Task `);
+  }
+
+  /**
+   * Returns ADH query destination table.
+   * @return {string}
+   */
+  getDestTable(table) {
+    const { projectId, datasetId, tableId } = table;
+    const result = [tableId];
+    if (datasetId) {
+      result.unshift(datasetId);
+      if (projectId) result.unshift(projectId);
+    }
+    return result.join('.');
+  }
+
+  /**
+   * Gets option object to create a new API object.
+   * By default, the API classes will figure out the authorization from env
+   * variables. The authorization can also be set in the 'config' so each
+   * integration can have its own authorization. This function is used to get the
+   * authorization related information from the 'config' object and form an
+   * 'option' object for the API classes.
+   * TODO: This function is copied from 'base_report.js'. Refactory required.
+   * @return {{SECRET_NAME:(string|undefined)}}
+   */
+  getOption() {
+    const options = {};
+    if (this.config.secretName) options.SECRET_NAME = this.config.secretName;
+    return options;
+  }
+
+  /**
+   * Gets the `spec` object for a ADH query. This is a legacy implementation and
+   * should not be used.
+   * @param {string} endDate The end date.
+   * @param {number} dateRangeInDays The number of day of query period.
+   * @return {object}
+   * @private
+   */
+  getLegacySpec_(endDate, dateRangeInDays) {
+    if (!endDate) return;
+    const endDateTime = DateTime.fromISO(endDate);
+    const startDateTime = endDateTime.minus({ days: dateRangeInDays });
+    return {
+      startDate: {
+        year: startDateTime.year,
+        month: startDateTime.month,
+        day: startDateTime.day,
+      },
+      endDate: {
+        year: endDateTime.year,
+        month: endDateTime.month,
+        day: endDateTime.day,
+      },
+    };
   }
 }
 
