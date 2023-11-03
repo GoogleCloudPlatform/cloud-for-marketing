@@ -70,51 +70,44 @@ class NativeModeAccess {
   }
 
   /** @override */
-  getObject(id) {
-    return this.getDocumentReference(id)
-        .get()
-        .then((documentSnapshot) => {
-          if (documentSnapshot.exists) {
-            this.logger.debug(`Get ${this.path}/${id}:`, documentSnapshot);
-            return documentSnapshot.data();
-          } else {
-            console.log(`Failed to find doc: ${this.path}/${id}`);
-          }
-        })
-        .catch((error) => {
-          console.error(error);
-        });
-  }
-
-  /** @override */
-  saveObject(data, id = undefined) {
-    this.logger.debug(`Start to save doc ${this.path}/${id}`, data);
-    if (id) {
-      return this.getDocumentReference(id).set(data).then((writeResult) => {
-        this.logger.debug(
-            `Result of saving doc ${this.path}/${id}: `, writeResult);
-        return id;
-      });
-    } else {
-      console.log(`Create new doc under ${this.path}`);
-      return this.collection.add(data).then((documentReference) => {
-        this.logger.debug(
-            `Saved ${JSON.stringify(data)} as:`, documentReference);
-        return documentReference.id;
-      });
+  async getObject(id) {
+    try {
+      const documentSnapshot = await this.getDocumentReference(id).get();
+      if (documentSnapshot.exists) {
+        this.logger.debug(`Get ${this.path}/${id}:`, documentSnapshot);
+        return documentSnapshot.data();
+      } else {
+        this.logger.info(`Failed to find doc: ${this.path}/${id}`);
+      }
+    } catch (error) {
+      this.logger.error(error);
     }
   }
 
   /** @override */
-  deleteObject(id) {
+  async saveObject(data, id = undefined) {
+    this.logger.debug(`Start to save doc ${this.path}/${id}`, data);
+    if (id) {
+      const result = await this.getDocumentReference(id).set(data);
+      this.logger.debug(`Result of saving doc ${this.path}/${id}: `, result);
+      return id;
+    } else {
+      this.logger.info(`Create new doc under ${this.path}`);
+      const documentReference = await this.collection.add(data);
+      this.logger.debug(
+        `Saved ${JSON.stringify(data)} as:`, documentReference);
+      return documentReference.id;
+    }
+  }
+
+  /** @override */
+  async deleteObject(id) {
     const documentReference = this.getDocumentReference(id);
-    return documentReference.get().then((documentSnapshot) => {
-      if (!documentSnapshot.exists) return false;
-      return documentReference.delete().then((writeResult) => {
-        this.logger.debug(`Delete ${this.path}/${id}: `, writeResult);
-        return true;
-      });
-    });
+    const documentSnapshot = await documentReference.get();
+    if (!documentSnapshot.exists) return false;
+    const writeResult = await documentReference.delete();
+    this.logger.debug(`Delete ${this.path}/${id}: `, writeResult);
+    return true;
   }
 
   /**
@@ -123,7 +116,7 @@ class NativeModeAccess {
    * It doesn't work when filter and order have different property names.
    * @override
    */
-  queryObjects(filters, order, limit, offset) {
+  async queryObjects(filters, order, limit, offset) {
     let query = this.collection;
     if (filters) {
       filters.forEach((filter) => {
@@ -137,22 +130,21 @@ class NativeModeAccess {
     }
     if (limit) query = query.limit(limit);
     if (offset) query = query.offset(offset);
-    return query.get()
-        .then((snapshot) => {
-          const result = [];
-          if (snapshot.empty) {
-            console.log('No matching documents.');
-            return result;
-          }
-          snapshot.forEach((document) => {
-            result.push({id: document.id, entity: document.data()});
-          });
-          return result;
-        })
-        .catch((error) => {
-          console.log('Error getting documents', error);
-          throw error;
-        });
+    try {
+      const snapshot = await query.get(); //type: QuerySnapshot
+      const result = [];
+      if (snapshot.empty) {
+        this.logger.debug('No matching documents.');
+        return result;
+      }
+      snapshot.forEach((document) => {
+        result.push({ id: document.id, entity: document.data() });
+      });
+      return result;
+    } catch (error) {
+      this.logger.error('Error getting documents', error);
+      throw error;
+    }
   }
 
   /** @override */
@@ -162,12 +154,12 @@ class NativeModeAccess {
 
   /** @override */
   wrapInTransaction(id, transactionOperation) {
-    return (transaction) => {
-      console.log(`Transaction starts for ${this.path}/${id}.`);
+    return async (transaction) => {
+      this.logger.info(`Transaction starts for ${this.path}/${id}.`);
       const documentReference = this.getDocumentReference(id);
-      return transaction.get(documentReference).then((documentSnapshot) =>
-          transactionOperation(documentSnapshot, documentReference,
-              transaction));
+      const documentSnapshot = await transaction.get(documentReference);
+      return transactionOperation(
+        documentSnapshot, documentReference, transaction);
     };
   }
 }

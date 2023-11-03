@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Cloud Functions Runtime Environment.
-CF_RUNTIME="${CF_RUNTIME:=nodejs14}"
+CF_RUNTIME="${CF_RUNTIME:=nodejs18}"
 CF_MEMORY="${CF_MEMORY:=2048MB}"
 
 # Counter for steps.
@@ -1933,7 +1933,7 @@ check_firestore_existence() {
   local firestore mode appRegion
   mode="${1}"
   appRegion="${2}"
-  firestore=$(gcloud app describe --format="csv[no-heading](databaseType)")
+  firestore=$(gcloud firestore databases list --format="csv[no-heading](databases.type)")
   if [[ -z "${firestore}" ]]; then
     printf '%s\n' "Firestore is not ready. Creating a new Firestore database\
 is an irreversible operation, so read carefully before continue:"

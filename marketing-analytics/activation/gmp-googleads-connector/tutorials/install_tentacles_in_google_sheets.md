@@ -4,6 +4,8 @@
 
 Disclaimer: This is not an official Google product.
 
+![Demo](./images/cyborg/Cyborg_start_installation.gif)
+
 Tentacles has a Google Sheets based installation tool (Code name **Cyborg**).
 This tool was designed to replace previous Bash script
 [`deploy.sh`](../README.md#24-run-install-script) with many enhanced
@@ -16,7 +18,9 @@ features, including:
 1. Edit and upload the API configuration in this Google Sheets.
 1. Generate and manage OAuth tokens which will be saved in the GCP
    [`Secret Manager`](https://cloud.google.com/secret-manager).
-1. Test API configuration for accessibility.
+1. Different credentials (OAuth tokens) are supported for different integration
+   configurations.
+1. Test API configuration for accessibility in the Sheets.
 1. Test installed Tentacles by sending a piece of data in this Google Sheets to
    the target Cloud Storage bucket.
 

@@ -33,10 +33,10 @@ and [Data Tasks Coordinator]. This library includes:
 
 1. Utilities wrapper class for Google Cloud Products:
 
-   - **Firestore Access Object**: Firestore has two modes which are excluded to
-     each other and can't be changed once selected in a Cloud Project[[2]].
-     This class, with its two successors offer a unified interface to operate
-     data objects on either Firestore or Datastore.
+   - **Firestore Access Object**: Firestore has two modes[[comparison]] which
+     have different API. This class, with its two successors, offer a unified
+     interface to operate data objects within or not a transaction on either
+     Firestore Native mode or Firestore Datastore mode.
 
    - **AutoMl Tables API**: Offers a unified entry to use this API based on
      Google Cloud client library combined with REST requests to service
@@ -61,15 +61,14 @@ and [Data Tasks Coordinator]. This library includes:
    - **Cloud Scheduler Adapter**: A wrapper to pause and resume Cloud Scheduler
      jobs.
 
-   - **Cloud Functions Adapter**: Cloud Functions have different parameters in
-     different environments, e.g. Node6 vs Node8[[1]]. This utility file offers
+   - ~~**Cloud Functions Adapter**: Cloud Functions have different parameters in
+     different environments, e.g. Node6 vs Node8. This utility file offers
      an adapter to wrap a Node8 Cloud Functions into Node6 and Node8 compatible
-     functions.
+     functions.~~ (This has been removed since v1.9.0)
 
 1. A share library for [Bash] to facilitate installation tasks.
 
 [gmp and google ads connector]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector
 [data tasks coordinator]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/data-tasks-coordinator
-[1]: https://cloud.google.com/functions/docs/writing/background#functions-writing-background-hello-pubsub-node8-10
-[2]: https://cloud.google.com/datastore/docs/concepts/overview#comparison_with_traditional_databases
+[comparison]: https://cloud.google.com/datastore/docs/firestore-or-datastore
 [bash]: https://www.gnu.org/software/bash/

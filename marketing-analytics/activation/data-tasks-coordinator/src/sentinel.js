@@ -18,11 +18,10 @@
 
 const {DateTime} = require('luxon');
 const {
-  firestore: {DataSource, FirestoreAccessBase,},
+  firestore: { DataSource, isNativeMode, },
   cloudfunctions: {
     ValidatedStorageFile,
     CloudFunction,
-    adaptNode6,
     validatedStorageTrigger,
   },
   pubsub: {EnhancedPubSub, getMessage,},
@@ -118,24 +117,23 @@ class Sentinel {
      * @return {!Promise<(!Array<string>|undefined)>} IDs of the 'start load
      *     task' messages.
      */
-    const monitorStorage = (file) => {
-      return this.getTaskIdByFile_(file.name).then((taskIds) => {
+    const monitorStorage = async (file) => {
+      try {
+        const taskIds = await this.getTaskIdByFile_(file.name);
         if (taskIds.length === 0) {
           throw new Error(`Can't find Load Task for file: '${file.name}'`);
         }
         this.logger.debug(`Find ${taskIds.length} Task for [${file.name}]`);
+        const partitionDay = getDatePartition(file.name);
         return Promise.all(taskIds.map((taskId) => {
-          const parameters = JSON.stringify({
-            file,
-            partitionDay: getDatePartition(file.name),
-          });
           this.logger.debug(`Trigger Load task: ${taskId}.`);
-          return this.taskManager.sendTaskMessage(parameters, {taskId});
+          const parameters = JSON.stringify({ file, partitionDay }); å
+          return this.taskManager.sendTaskMessage(parameters, { taskId });
         }));
-      }).catch((error) => {
-        console.error(`Error in handling file: ${file.name}`, error);
+      } catch (error) {
+        this.logger.error(`Error in handling file: ${file.name}`, error);
         throw error;
-      });
+      }
     };
     return this.options.validatedStorageTrigger(monitorStorage, inbound);
   }
@@ -146,23 +144,20 @@ class Sentinel {
    * @return {!Promise<!Array<string>>}
    * @private
    */
-  getTaskIdByFile_(fileName) {
+  async getTaskIdByFile_(fileName) {
     const regex = /task\[([\w-]*)]/i;
     const task = fileName.match(regex);
-    if (task) return Promise.resolve([task[1]]);
-    const hasFileNamePattern = (config) => {
-      const sourceConfig = config.source;
-      return sourceConfig && sourceConfig.fileNamePattern;
-    };
-    const matchesFileNamePattern =
-        (config) => new RegExp(config.source.fileNamePattern).test(fileName);
-    return this.taskConfigDao.list(
-        [{property: 'type', value: TaskType.LOAD}]).then((configs) => {
-      return configs
-          .filter(({entity: config}) => hasFileNamePattern(config))
-          .filter(({entity: config}) => matchesFileNamePattern(config))
-          .map((config) => config.id);
-    });
+    if (task) return [task[1]];
+    const matchesFileNamePattern = ({ source = {} }) => {
+      const { fileNamePattern } = source;
+      if (fileNamePattern) return new RegExp(fileNamePattern).test(fileName);
+      return false;
+    }
+    const configs = await this.taskConfigDao.list(
+      [{ property: 'type', value: TaskType.LOAD }]);
+    return configs
+      .filter(({ entity: config }) => matchesFileNamePattern(config))
+      .map(({ id }) => id);
   }
 
   /**
@@ -210,7 +205,7 @@ class Sentinel {
       }
       throw new Error(`Unknown message: ${getMessage(message)}`);
     };
-    return adaptNode6(coordinateTask);
+    return coordinateTask;
   }
 
   /** Returns whether this is a message to start a new task. */
@@ -340,6 +335,7 @@ class Sentinel {
   async startTaskJob_(taskLogId, taskLog) {
     try {
       const parameters = JSON.parse(taskLog.parameters);
+      parameters.taskLogId = taskLogId;
       const task = await this.prepareTask(taskLog.taskId, parameters);
       const updatesToTaskLog = await task.start();
       this.logger.debug('Task started with:', JSON.stringify(updatesToTaskLog));
@@ -357,7 +353,7 @@ class Sentinel {
       }
       return taskLogId;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       return this.taskLogDao.saveErrorMessage(taskLogId, error);
     }
   }
@@ -664,7 +660,7 @@ const getSentinel = (namespace, datasource) => {
     namespace,
     taskConfigDao: new TaskConfigDao(datasource, namespace),
     taskLogDao: new TaskLogDao(datasource, namespace),
-    pubsub: EnhancedPubSub.getInstance(),
+    pubsub: new EnhancedPubSub(),
     buildReport,
     statusCheckCronJob: {
       pause: pauseStatusCheck,
@@ -683,16 +679,15 @@ const getSentinel = (namespace, datasource) => {
  * @param {(string|undefined)=} namespace
  * @return {!Promise<!Sentinel>}
  */
-const guessSentinel = (namespace = process.env['PROJECT_NAMESPACE']) => {
+const guessSentinel = async (namespace = process.env['PROJECT_NAMESPACE']) => {
   if (!namespace) {
     console.warn(
         'Fail to find ENV variables PROJECT_NAMESPACE, will set as `sentinel`');
     namespace = 'sentinel';
   }
-  return FirestoreAccessBase.isNativeMode().then((isNative) => {
-    const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
-    return getSentinel(namespace, dataSource);
-  });
+  const isNative = await isNativeMode();
+  const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
+  return getSentinel(namespace, dataSource);
 };
 
 module.exports = {

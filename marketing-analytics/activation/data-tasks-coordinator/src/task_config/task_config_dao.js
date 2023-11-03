@@ -46,6 +46,8 @@ const TaskType = {
   // Report tasks
   REPORT: 'report',
   QUERY_ADH: 'query_adh',
+  // Notify task, e.g. send email
+  NOTIFY: 'notify',
   // Tasks dependencies management tasks
   KNOT: 'knot',
   MULTIPLE: 'multiple',
@@ -129,10 +131,14 @@ class TaskConfigDao extends DataAccessObject {
   /**
    * Initializes TaskConfig Dao instance.
    * @param {!DataSource} dataSource The data source type.
-   * @param {string} namespace The namespace of the data.
+   * @param {string} namespace The namespace of the data. The default value is
+   *   'sentinel'.
+   * @param {string=} projectId GCP project Id. The default value is the env
+   *   variable 'GCP_PROJECT'.
    */
-  constructor(dataSource, namespace = 'sentinel') {
-    super('TaskConfig', namespace, dataSource);
+  constructor(dataSource, namespace = 'sentinel',
+    projectId = process.env['GCP_PROJECT']) {
+    super('TaskConfig', namespace, dataSource, projectId);
   }
 
   /**

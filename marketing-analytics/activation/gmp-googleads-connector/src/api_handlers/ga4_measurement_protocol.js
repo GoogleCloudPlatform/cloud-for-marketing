@@ -36,7 +36,7 @@ const { ApiHandler } = require('./api_handler.js');
  * https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide#batch-limitations
  */
 const RECORDS_PER_REQUEST = 1;  // Maximum value defined by this API.
-const QUERIES_PER_SECOND = 200;
+const QUERIES_PER_SECOND = 50;
 const NUMBER_OF_THREADS = 20;
 
 /**

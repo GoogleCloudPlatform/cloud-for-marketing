@@ -98,7 +98,7 @@ during installation.
 
 ---
 >**NOTE:** The new Google Sheets based tool now is available. Users are
-suggested to using that tool to install, upgrade or manage Tentacles. For more
+encouraged to using that tool to install, upgrade or manage Tentacles. For more
 details, see
 [Install Tentacles in a Google Sheets based tool](tutorials/install_tentacles_in_google_sheets.md)
 <br>
@@ -275,6 +275,8 @@ expects the incoming data filenames contain the pattern **API{X}** and
   - **ACLC**: Google Ads Click Conversion Upload via API
   - **ACM**: Google Ads Customer Match upload
   - **MP_GA4**: Measurement Protocol Google Analytics 4
+  - **ACA**: Google Ads Conversion Adjustments upload via API
+  - **AOUD**: Google Ads Offline User Data Upload (OfflineUserDataJobService)
 
 - `Y` stands for the config name, e.g. `foo` or `bar` in the previous case.
 
@@ -289,6 +291,11 @@ Other optional patterns in filename:
   data instead of the Pub/Sub. (The reason is for those 'file uploading' types
   of APIs, using file directly is more efficient.) In that case, this setting
   will make sure the files won't oversize the target systems' capacity.
+
+- If the filename contains `appended{}`, Tentacles will take the string in the
+  braces (included) as a JSON string and parse it into a parameter object. The
+  parameters will be replaced those placeholders `${parameter}` in the
+  configuration.
 
 **Note: Previous square brackets as the file name marker (e.g. API[X]) is also
 supported, though it is not convenient to copy those files through gsutil.**
@@ -1025,7 +1032,9 @@ For a `RESTATEMENT` type conversions adjustment:
 
 - Fields' definition:
   - `developerToken`, Developer token to access the API.
-  - `debug`, optional, default value is `false`. If it's set as `true`,
+  - `debug`, optional, default value is `false`. In the connector, it should NOT
+   be set as `true` because in the `debug` mode the `OfflineUserDataJob` can not
+   be created hence the following steps will fail.
   - `customer_id`, Google Ads Customer account Id
   - `login_customer_id`, Login customer account Id (MCC Account Id)
   - `list_id`, User List id for customer match audience. If `list_id` is
@@ -1042,7 +1051,7 @@ For a `RESTATEMENT` type conversions adjustment:
     [Read more about upload key types][upload_key_type]
   - `store_sales_metadata`, only presents for store sales data uploading. The
     metadata for Store Sales Direct,
-    [see the details of the metadata][store_sales_metadata]
+    [see the details of the metadata][store_sales_metadata].
   - `transaction_attribute`, used in a `STORE_SALES_UPLOAD_FIRST_PARTY` job for
     shared additional attributes of transactions,
    [see transaction attribute][transaction_attribute]
@@ -1065,30 +1074,39 @@ For a `CUSTOMER_MATCH_USER_LIST` job:
 {"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```
 
-For a `STORE_SALES_UPLOAD_FIRST_PARTY` job, a `transaction_attribute` can be put in `config` for those shared attributes:
+For a `STORE_SALES_UPLOAD_FIRST_PARTY` job, the `config`:
 ```json
 {
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
-  "debug": false,
   "offlineUserDataJobConfig": {
     .......
+    "store_sales_metadata": {
+      "transaction_upload_fraction": 1.0,
+      "loyalty_fraction": 1.0
+    },
     "transaction_attribute": {
       "currency_code": "AUD",
-      "conversion_action": "customers/${mcc}/conversionActions/${conversionId}",
+      "conversion_action": "[YOUR-CONVERSIONS-ACTION]",
     }
   }
 }
 ```
-With that, the data can be simple like:
+- `store_sales_metadata`, there are two **required** fields
+need to be offered to create a Store Sales job: `loyalty_fraction` and
+`transaction_upload_fraction`. `1.0` is an example of the value here.
+- `transaction_attribute`, an optional object can be put in `config` for those
+shared attributes.
+
+With this `config`, the data can be:
 ```
 {"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "transaction_attribute": {"transaction_date_time": "2018-03-05 09:15:00", "transaction_amount_micros": 10000, "order_id": "1234567890"}}
 ```
 
-For a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job, a `user_attribute` can be put in `config` and `data`:
+For a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job, a `user_attribute` can be put in
+`config` and `data`. The later one will overwrite the one in `config`:
 ```json
 {
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
-  "debug": false,
   "offlineUserDataJobConfig": {
     .......
     "user_attribute": {

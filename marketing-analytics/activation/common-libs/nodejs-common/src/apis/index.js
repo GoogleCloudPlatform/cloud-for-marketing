@@ -106,7 +106,12 @@ exports.googleads = require('./google_ads.js');
 
 /**
  * APIs integration class for Ads Data Hub.
- * @const {{AdsDataHub:!AdsDataHub}}
+ * @const {{
+ *   AdsDataHub:!AdsDataHub,
+ *   API_SCOPES: !Array<string>,
+ *   API_VERSION: string,
+ *   API_ENDPOINT: string,
+ * }}
  */
 exports.adsdatahub = require('./ads_data_hub.js');
 
@@ -128,3 +133,13 @@ exports.measurementprotocolga4 = require('./measurement_protocol_ga4.js');
  * }}
  */
 exports.youtube = require('./youtube.js');
+
+/**
+ * APIs integration class for SendGrid.
+ * @const {{
+*   SendGrid:!SendGrid,
+*   API_VERSION: string,
+*   API_ENDPOINT: string,
+* }}
+*/
+exports.sendgrid = require('./sendgrid.js');

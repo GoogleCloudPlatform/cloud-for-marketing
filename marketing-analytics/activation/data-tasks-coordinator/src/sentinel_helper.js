@@ -23,7 +23,7 @@ const fs = require('fs');
 const {join} = require('path');
 const {
   api: {googleads: {GoogleAds}},
-  firestore: {DataSource, FirestoreAccessBase},
+  firestore: { DataSource, isNativeMode },
 } = require('@google-cloud/nodejs-common');
 const {getSchemaFields} = require('./tasks/report/googleads_report_helper.js');
 const {TaskConfigDao} = require('./task_config/task_config_dao.js');
@@ -50,7 +50,7 @@ exports.uploadTaskConfig = (taskConfig, parameters = {},
         return previousValue.replace(regExp, parameters[key]);
       },
       JSON.stringify(taskConfig)));
-  return FirestoreAccessBase.isNativeMode().then((isNative) => {
+  return isNativeMode().then((isNative) => {
     const dataSource = (isNative) ? DataSource.FIRESTORE : DataSource.DATASTORE;
     const taskConfigDao = new TaskConfigDao(dataSource, namespace);
     const reduceFn = (previousResults, key) => {

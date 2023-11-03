@@ -78,20 +78,19 @@ class DatastoreModeAccess {
   }
 
   /** @override */
-  getObject(id) {
+  async getObject(id) {
     const key = this.getKey(id);
-    return this.datastore.get(key)
-        .then(([entity, error]) => {
-          if (!error) {
-            this.logger.debug(`Get ${id}@${this.kind}`, entity);
-            return entity;
-          } else {
-            console.log(`Not found ${id}@${this.kind}`, error);
-          }
-        })
-        .catch((error) => {
-          console.error(error);
-        });
+    try {
+      const [entity] = await this.datastore.get(key);
+      if (entity) {
+        this.logger.debug(`Get ${id}@${this.kind}`, entity);
+        return entity;
+      } else {
+        this.logger.info(`Not found ${id}@${this.kind}`);
+      }
+    } catch (error) {
+      this.logger.error(error);
+    };
   }
 
   /**
@@ -99,52 +98,46 @@ class DatastoreModeAccess {
    * @param {string|number} id
    * @return {!Promise<string|number>}
    */
-  waitUntilGetObject(id) {
-    return this.getObject(id).then((entity) => {
-      if (entity) return id;
-      this.logger.debug(`Wait 1 more second until the eneity@${id} is ready`);
-      return wait(1000, this.waitUntilGetObject(id));
-    });
+  async waitUntilGetObject(id) {
+    const entity = await this.getObject(id);
+    if (entity) return id;
+    this.logger.debug(`Wait 1 more second until the eneity@${id} is ready`);
+    return wait(1000, this.waitUntilGetObject(id));
   }
 
   /** @override */
-  saveObject(data, id = undefined) {
+  async saveObject(data, id = undefined) {
     this.logger.debug(`Start to save entity ${id}@${this.kind}`, data);
     const key = this.getKey(id);
-    return this.datastore
-        .save({
-          key: key,
-          data: data,
-          excludeLargeProperties: true,
-        })
-        .then((apiResponse) => {
-          // Default key in Datastore is a number in response like following.
-          // With a given id, the key in response is null.
-          const updatedId = id !== undefined ? id
-              : +apiResponse[0]['mutationResults'][0].key.path[0].id;
-          this.logger.debug(
-              `Result of saving ${updatedId}@${this.kind}: `,
-              JSON.stringify(apiResponse));
-          // Datastore has a delay to write entity. This method only returns id
-          // after it is created. For updating, it always return at once because
-          // the entity exists.
-          return this.waitUntilGetObject(updatedId);
-        });
+    const apiResponse =
+      await this.datastore.save({ key, data, excludeLargeProperties: true });
+    // Default key in Datastore is a number in response like following.
+    // With a given id, the key in response is null.
+    const updatedId = id !== undefined ? id
+      : +apiResponse[0].mutationResults[0].key.path[0].id;
+    this.logger.debug(`Result of saving ${updatedId}@${this.kind}: `,
+      JSON.stringify(apiResponse));
+    // Datastore has a delay to write entity. This method only returns id
+    // after it is created. For updating, it always return at once because
+    // the entity exists.
+    return this.waitUntilGetObject(updatedId);
   }
 
   /** @override */
-  deleteObject(id) {
+  async deleteObject(id) {
     const key = this.getKey(id);
-    return this.datastore.delete(key).then((apiResponse, error) => {
+    try {
+      const apiResponse = await this.datastore.delete(key);
       this.logger.debug(`Delete ${id}@${this.kind}: `,
-          JSON.stringify(apiResponse));
+        JSON.stringify(apiResponse));
       // Returns true even try to delete a deleted entity. The responses of
       // delete operations only differ at the property 'indexUpdates' for a
       // normal entity and a deleted entity.
-      if (!error) return true;
-      console.error(`Error in deleting ${id}@${this.kind}`, error);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error in deleting ${id}@${this.kind}`, error);
       return false;
-    });
+    }
   }
 
   /** @override */
@@ -164,7 +157,7 @@ class DatastoreModeAccess {
       this.datastore.runQueryStream(query)
           .on('error',
               (error) => {
-                console.error(error);
+                this.logger.error(error);
                 reject(error);
               })
           .on('data',
@@ -174,7 +167,7 @@ class DatastoreModeAccess {
               })
           .on('info',
               (info) => {
-                console.log(`Info event: ${JSON.stringify(info)}`);
+                this.logger.info(`Info event: ${JSON.stringify(info)}`);
               })
           .on('end', () => {
             resolve(result);
@@ -190,35 +183,36 @@ class DatastoreModeAccess {
    *
    * @override
    */
-  runTransaction(fn) {
+  async runTransaction(fn) {
     let leftRetries = MAX_RETRY_TIMES;
-    const runFn = () => this.datastore.transaction().run().then(
-        ([transaction]) => fn(transaction));
-    const retryFn = (error) => {
-      console.log(
+    const runFn = async () => {
+      const [transaction] = await this.datastore.transaction().run();
+      return fn(transaction);
+    };
+    const retryFn = async (error) => {
+      this.logger.info(
           `TX ERROR[${error.message}]. Retries left: ${leftRetries} times.`);
       leftRetries--;
-      return wait(500 * (MAX_RETRY_TIMES - leftRetries)).then(() => {
-        if (leftRetries === 0) return runFn();
-        return runFn().catch(retryFn);
-      });
+      await wait(500 * (MAX_RETRY_TIMES - leftRetries));
+      if (leftRetries === 0) return runFn();
+      return runFn().catch(retryFn);
     };
     return runFn().catch(retryFn);
   }
 
   /** @override */
   wrapInTransaction(id, transactionOperation) {
-    return (transaction) => {
-      console.log(`Transaction starts for ${this.kind}@${id}.`);
+    return async (transaction) => {
+      this.logger.info(`Transaction starts for ${this.kind}@${id}.`);
       const key = this.getKey(id);
-      return transaction.get(key).then(([entity]) => {
-        const result = transactionOperation(
-            new DatastoreDocumentFacade(entity),
-            key,
-            new DatastoreTransactionFacade(transaction, entity)
-        );
-        return transaction.commit().then(() => result);
-      });
+      const [entity] = await transaction.get(key);
+      const result = transactionOperation(
+        new DatastoreDocumentFacade(entity),
+        key,
+        new DatastoreTransactionFacade(transaction, entity)
+      );
+      await transaction.commit();
+      return result;
     };
   }
 }

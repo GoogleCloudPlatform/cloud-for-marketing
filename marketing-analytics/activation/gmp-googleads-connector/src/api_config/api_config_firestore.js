@@ -57,9 +57,9 @@ class ApiConfigOnFirestore extends DataAccessObject {
   }
 
   /** @override */
-  saveConfig(apiName, configName, configObject) {
-    return this.update(configObject, this.getId_(apiName, configName)).then(
-        () => true);
+  async saveConfig(apiName, configName, configObject) {
+    await this.update(configObject, this.getId_(apiName, configName));
+    return true;
   }
 
   /** @override */

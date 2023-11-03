@@ -20,7 +20,7 @@
 
 const { nanoid } = require('nanoid');
 const {
-  firestore: {DataSource, FirestoreAccessBase,},
+  firestore: { DataSource, isNativeMode, },
   pubsub: {EnhancedPubSub},
   storage: {StorageFile},
   cloudfunctions: {
@@ -28,7 +28,6 @@ const {
     PubsubMessage,
     CloudFunction,
     MainFunctionOfStorage,
-    adaptNode6,
     validatedStorageTrigger,
   },
   utils: {getProperValue, wait, getLogger, replaceParameters, BatchResult},
@@ -58,6 +57,9 @@ const MESSAGE_MAXIMUM_SIZE = 7;
 
 /** Cloud Storage file maximum size (MB). Different APIs may vary. */
 const STORAGE_FILE_MAXIMUM_SIZE = 999;
+
+/** Default value of how many tasks to be processed in `initiator`. */
+const INIT_TASK_BATCH = 40;
 
 /**
  * Results of a transport execution.
@@ -115,6 +117,8 @@ class Tentacles {
     /** @const {!TentaclesTask} */ this.tentaclesTask = options.tentaclesTask;
     /** @const {!EnhancedPubSub} */ this.pubsub = options.pubsub;
     /** @const {!Logger} */ this.logger = getLogger('T.MAIN');
+    this.initTaskBatch = options.initTaskBatch
+      || process.env['INIT_TASK_BATCH'] || INIT_TASK_BATCH;
   }
 
   /**
@@ -231,14 +235,12 @@ class Tentacles {
     const maxLinesToSend = recordsPerRequest * qps * 500 // ~500s running time
     const batchSize = maxLinesToSend * averageSizePerLine;
     const safeSize = batchSize / 2; // Take half of a batch size as a safe value.
-    const leastSize = fileSize / 500; // For this CF, about 500 messages could be sent.
     this.logger.debug('averageSizePerLine', averageSizePerLine);
     this.logger.debug('maxLinesToSend', maxLinesToSend);
     this.logger.debug('batchSize', batchSize);
-    const size = (leastSize < safeSize
-      ? safeSize : Math.min(safeSize, batchSize)) / 1000 / 1000;
-    this.logger.info(`Get dynamic size for ${storageFile.fileName}`, size);
-    return size;
+    this.logger.debug('safeSize', safeSize);
+    this.logger.info(`Get dynamic size for ${storageFile.fileName}`, safeSize);
+    return safeSize;
   }
 
   /**
@@ -266,22 +268,29 @@ class Tentacles {
     }
     const splitRanges =
       await storageFile.getSplitRanges(fileSize, messageMaxSize);
-    const reducedFn = async (previous, [start, end], index) => {
-      const previousResult = await previous;
-      const rawData = await storageFile.loadContent(start, end);
-      // Handle the rare case when there is a BOM at the beginning of the file.
-      // 'Use of a BOM is neither required nor recommended for UTF-8'.
-      // Source: http://www.unicode.org/versions/Unicode5.0.0/ch02.pdf
-      const data = (index === 0 && rawData.charCodeAt(0) === 0xFEFF)
-        ? rawData.slice(1) : rawData;
-      const taskEntity = Object.assign(
-          {start: start.toString(), end: end.toString()}, taskBaseInfo);
-      this.logger.debug(
-        `[${index}] Send ${data.length} bytes to Topic[${topic}].`);
-      const currentResult = await this.saveTaskAndSendData_(taskEntity, data);
-      return currentResult && previousResult;
-    };
-    return splitRanges.reduce(reducedFn, true);
+
+    let currentResult = true;
+    const batchSize = this.initTaskBatch;
+    for (let i = 0; i < Math.ceil(splitRanges.length / batchSize); i++) {
+      const startIndex = i * batchSize;
+      const batchRanges = splitRanges.slice(startIndex, startIndex + batchSize);
+      const results = await Promise.all(
+        batchRanges.map(async ([start, end], index) => {
+          const rawData = await storageFile.loadContent(start, end);
+    // Handle the rare case when there is a BOM at the beginning of the file.
+    // 'Use of a BOM is neither required nor recommended for UTF-8'.
+    // Source: http://www.unicode.org/versions/Unicode5.0.0/ch02.pdf
+          const data = (start === 0 && rawData.charCodeAt(0) === 0xFEFF)
+            ? rawData.slice(1) : rawData;
+          const taskEntity = Object.assign(
+            { start: start.toString(), end: end.toString() }, taskBaseInfo);
+          this.logger.debug(
+            `[${startIndex + index}] Send ${data.length} bytes to Topic[${topic}].`);
+          return this.saveTaskAndSendData_(taskEntity, data);
+        }));
+      currentResult = currentResult && results.every((result) => result);
+    }
+    return currentResult;
   }
 
   /**
@@ -369,7 +378,7 @@ class Tentacles {
       }
       return result;
     };
-    return adaptNode6(transportMessage);
+    return transportMessage;
   }
 
   /**
@@ -523,7 +532,7 @@ class Tentacles {
           topic, lockToken, messageId, needContinue);
       }
     }
-    return adaptNode6(sendApiData);
+    return sendApiData;
   }
 
   /**
@@ -662,7 +671,7 @@ const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE']) => {
     );
     namespace = 'tentacles';
   }
-  const isNative = await FirestoreAccessBase.isNativeMode();
+  const isNative = await isNativeMode();
   const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
   return getTentacles(namespace, dataSource);
 };

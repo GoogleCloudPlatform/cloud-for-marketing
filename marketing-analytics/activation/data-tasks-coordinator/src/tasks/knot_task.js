@@ -135,13 +135,13 @@ class KnotTask extends BaseTask {
    * @override
    */
   async doTask() {
-    if (!this.config.embedded) return Promise.resolve({});
+    if (!this.config.embedded) return {};
     const embeddedTag = nanoid();
     const messageIds = await this.taskManager.startTasks(
         this.config.embedded.tasks,
         {[FIELD_NAMES.EMBEDDED_TAG]: embeddedTag},
         this.appendParameter(this.config.appendedParameters));
-    console.log(`Start embedded ${messageIds.length} tasks`);
+    this.logger.info(`Start embedded ${messageIds.length} tasks`);
     return {
       parameters: this.appendParameter({
         [FIELD_NAMES.EMBEDDED_TAG]: embeddedTag,

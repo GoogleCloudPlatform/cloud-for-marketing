@@ -18,8 +18,7 @@
 
 'use strict';
 
-const {request, GaxiosOptions} = require('gaxios');
-const AuthClient = require('./auth_client.js');
+const { AuthRestfulApi } = require('./base/auth_restful_api.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/adsdatahub',
@@ -31,7 +30,7 @@ const API_ENDPOINT = 'https://adsdatahub.googleapis.com';
  * Ads Data Hub (ADH) API connector class based on ADH REST API.
  * @see: https://developers.google.com/ads-data-hub/reference/rest
  */
-class AdsDataHub {
+class AdsDataHub extends AuthRestfulApi {
   /**
    * Constructor.
    *
@@ -41,20 +40,19 @@ class AdsDataHub {
    *     variables.
    */
   constructor(options, customerId = undefined, env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
     /** @const{GaxiosOptions} */ this.options = options || {};
     /** @const{string|undefined=} */ this.customerId = customerId;
   }
 
-  /**
-   * Gets the auth object.
-   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
-   */
-  async getAuth_() {
-    if (this.auth) return this.auth;
-    await this.authClient.prepareCredentials();
-    this.auth = this.authClient.getDefaultAuth();
-    return this.auth;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getBaseUrl() {
+    return `${API_ENDPOINT}/${API_VERSION}`;
   }
 
   /**
@@ -75,37 +73,6 @@ class AdsDataHub {
   }
 
   /**
-   * Returns the base Url of API service.
-   * @return {string} Base Url.
-   * @private
-   */
-  getRequestBaseUrl_() {
-    return `${API_ENDPOINT}/${API_VERSION}/`;
-  }
-
-  /**
-   * Sends a request to server and return the response body.
-   * @param {string} path Request relative path.
-   * @param {string=} method HTTP method, default is 'GET'.
-   * @param {Object|undefined=} data HTTP data to send
-   * @return {!Promise<Object>} Response body.
-   * @private
-   */
-  async sendRequestAndReturnResponse_(path, method = 'GET', data = undefined) {
-    const auth = await this.getAuth_();
-    const headers = await auth.getRequestHeaders();
-    const url = this.getRequestBaseUrl_() + path;
-    const response = await request(/** @type {GaxiosOptions} */
-        Object.assign({}, this.options, {
-          url,
-          method,
-          headers,
-          data,
-        }));
-    return response.data;
-  }
-
-  /**
    * Retrieves the requested analysis query. If query doesn't exist, it will
    * throw an error.
    * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/get
@@ -116,24 +83,24 @@ class AdsDataHub {
    */
   async getQuery(queryName, customerId = this.customerId) {
     const uniqueQueryName = this.getUniqueQueryName_(queryName, customerId);
-    return this.sendRequestAndReturnResponse_(uniqueQueryName);
+    const response = await this.request(uniqueQueryName);
+    return response.data;
   }
 
   /**
    * Lists the analysis queries owned by the specified customer.
    * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/list
-   * @param {Object=} parameters The query parameter object.
    * @param {string=} customerId
    * @return {!Promise<{
-   *   queries:Array<Object>,
-   *   nextPageToken:string,
-   * }>}
-   */
+  *   queries:Array<Object>,
+  *   nextPageToken:string,
+  * }>}
+  */
   async listQuery(parameters = {}, customerId = this.customerId) {
-    const querystring = this.getQueryString_(parameters);
-    const path = `customers/${customerId}/analysisQueries`
-      + (querystring ? `?${querystring}` : '');
-    return this.sendRequestAndReturnResponse_(path);
+    const querystring = this.getQueryString(parameters);
+    const path = `customers/${customerId}/analysisQueries${querystring}`;
+    const response = await this.request(path);
+    return response.data;
   }
 
   /**
@@ -157,22 +124,8 @@ class AdsDataHub {
   async startTransientQuery(queryText, spec, destTable, customerId = this.customerId) {
     const path = `customers/${customerId}/analysisQueries:startTransient`;
     const data = { query: { queryText }, spec, destTable };
-    return this.sendRequestAndReturnResponse_(path, 'POST', data);
-  }
-
-  /**
-   * Creates a query and returns the unique query name in the form of
-   * 'customers/[customerId]/analysisQueries/[resource_id]'.
-   * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/create
-   * @param {string} title The title of the query.
-   * @param {string} queryText The content of the query
-   * @return {!Promise<string>} Promised unique name of created query.
-   */
-  async createQuery(title, queryText) {
-    const path = `customers/${this.customerId}/analysisQueries`;
-    const data = {title, queryText,};
-    const query = await this.sendRequestAndReturnResponse_(path, 'POST', data);
-    return query.name;
+    const response = await this.request(path, 'POST', data);
+    return response.data;
   }
 
   /**
@@ -198,7 +151,23 @@ class AdsDataHub {
   async startQuery(uniqueQueryName, spec, destTable, customerId = undefined) {
     const path = `${uniqueQueryName}:start`;
     const data = {spec, destTable, customerId};
-    return this.sendRequestAndReturnResponse_(path, 'POST', data);
+    const response = await this.request(path, 'POST', data);
+    return response.data;
+  }
+
+  /**
+   * Creates a query and returns the unique query name in the form of
+   * 'customers/[customerId]/analysisQueries/[resource_id]'.
+   * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/create
+   * @param {string} title The title of the query.
+   * @param {string} queryText The content of the query
+   * @return {!Promise<string>} Promised unique name of created query.
+   */
+  async createQuery(title, queryText) {
+    const path = `customers/${this.customerId}/analysisQueries`;
+    const data = { title, queryText, };
+    const response = await this.request(path, 'POST', data);
+    return response.data.name;
   }
 
   /**
@@ -210,7 +179,8 @@ class AdsDataHub {
    */
   async deleteQuery(queryName, customerId = this.customerId) {
     const uniqueQueryName = this.getUniqueQueryName_(queryName, customerId);
-    return this.sendRequestAndReturnResponse_(uniqueQueryName, 'DELETE');
+    const response = await this.request(uniqueQueryName, 'DELETE');
+    return response.data;
   }
 
   /**
@@ -221,21 +191,14 @@ class AdsDataHub {
    *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/operations#Operation
    */
   async getQueryStatus(operationName) {
-    return this.sendRequestAndReturnResponse_(operationName);
-  }
-
-  /**
-   * Gets the query string of a parameter object.
-   * @param {Object} parameters The object of key-value pairs which will be
-   *   converted into query string format.
-   * @return string
-   * @private
-   */
-  getQueryString_(parameters = {}) {
-    return Object.keys(parameters)
-      .map((key) => key + '=' + encodeURIComponent(parameters[key]))
-      .join('&');
+    const response = await this.request(operationName);
+    return response.data;
   }
 }
 
-exports.AdsDataHub = AdsDataHub;
+module.exports = {
+  AdsDataHub,
+  API_SCOPES,
+  API_VERSION,
+  API_ENDPOINT,
+};

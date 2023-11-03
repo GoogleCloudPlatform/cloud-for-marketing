@@ -24,6 +24,7 @@ const {
     TransactionOperation,
     DataAccessObject,
   },
+  utils: { getLogger },
 } = require('@google-cloud/nodejs-common');
 const {TaskGroup} = require('../task_config/task_config_dao.js');
 
@@ -95,10 +96,15 @@ class TaskLogDao extends DataAccessObject {
   /**
    * Initializes TaskLog Dao instance.
    * @param {!DataSource} dataSource The data source type.
-   * @param {string} namespace The namespace of the data.
+   * @param {string=} namespace The namespace of the data. The default value is
+   *   'sentinel'.
+   * @param {string=} projectId GCP project Id. The default value is the env
+   *   variable 'GCP_PROJECT'.
    */
-  constructor(dataSource, namespace = 'sentinel') {
-    super('TaskLog', namespace, dataSource);
+  constructor(dataSource, namespace = 'sentinel',
+    projectId = process.env['GCP_PROJECT']) {
+    super('TaskLog', namespace, dataSource, projectId);
+    this.logger = getLogger('S.TaskLog');
   }
 
   /**
@@ -109,19 +115,21 @@ class TaskLogDao extends DataAccessObject {
    * @param {!Entity=} taskLogEntity
    * @return {!Promise<boolean>} Whether successfully starts the task.
    */
-  startTask(taskLogId, taskLogEntity = {}) {
+  async startTask(taskLogId, taskLogEntity = {}) {
     const toCreateEntity = {
       createTime: new Date(),
       status: TaskLogStatus.INITIAL,
       ...taskLogEntity,
     };
-    return this.runTransaction(
-        this.wrapInTransaction(taskLogId,
-            this.getStartTaskOperation(taskLogId, toCreateEntity)))
-        .catch((error) => {
-          console.log(`Error in startTask ${taskLogId}. Reason:`, error);
-          return false;
-        });
+    try {
+      const startFn = this.getStartTaskOperation(taskLogId, toCreateEntity);
+      const result =
+        await this.runTransaction(this.wrapInTransaction(taskLogId, startFn));
+      return result;
+    } catch (error) {
+      this.logger.info(`Error in startTask ${taskLogId}. Reason:`, error);
+      return false;
+    }
   }
 
   /**
@@ -153,20 +161,22 @@ class TaskLogDao extends DataAccessObject {
    * @param {!Entity=} taskLogEntity
    * @return {Promise<boolean>}  Whether successfully finishes the task.
    */
-  finishTask(taskLogId, taskLogEntity = {}) {
+  async finishTask(taskLogId, taskLogEntity = {}) {
     const toFinishEntity = {
       prefinishTime: new Date(),
       status: TaskLogStatus.FINISHING,
       [FIELD_NAMES.REGULAR_CHECK]: false,
       ...taskLogEntity,
     };
-    return this.runTransaction(
-        this.wrapInTransaction(taskLogId,
-            this.getFinishTaskOperation(taskLogId, toFinishEntity)))
-        .catch((error) => {
-          console.log(`Error in finishTask ${taskLogId}. Reason:`, error);
-          return false;
-        });
+    try {
+      const finishFn = this.getFinishTaskOperation(taskLogId, toFinishEntity);
+      const result =
+        await this.runTransaction(this.wrapInTransaction(taskLogId, finishFn));
+      return result;
+    } catch (error) {
+      this.logger.info(`Error in finishTask ${taskLogId}. Reason:`, error);
+      return false;
+    }
   }
 
   /**
@@ -223,11 +233,11 @@ class TaskLogDao extends DataAccessObject {
   getStartTaskOperation(taskLogId, taskLogEntity) {
     return (documentSnapshot, documentReference, transaction) => {
       if (!documentSnapshot.exists) {
-        console.log(`Create the TaskLog for [${taskLogId}].`);
+        this.logger.info(`Create the TaskLog for [${taskLogId}].`);
         transaction.create(documentReference, taskLogEntity);
         return true;
       }
-      console.log(`The TaskLog for [${taskLogId}] exist. Quit.`);
+      this.logger.info(`The TaskLog for [${taskLogId}] exist. Quit.`);
       return false;
     };
   }
@@ -243,15 +253,15 @@ class TaskLogDao extends DataAccessObject {
   getFinishTaskOperation(taskLogId, taskLogEntity) {
     return (documentSnapshot, documentReference, transaction) => {
       if (!documentSnapshot.exists) {
-        console.log(`The TaskLog[${taskLogId}] doesn't exist. Quit.`);
+        this.logger.info(`The TaskLog[${taskLogId}] doesn't exist. Quit.`);
         return false;
       }
       const status = documentSnapshot.get('status');
       if (status !== TaskLogStatus.STARTED) {
-        console.log(`TaskLog[${taskLogId}]'s status is ${status}. Quit.`);
+        this.logger.info(`TaskLog[${taskLogId}]'s status is ${status}. Quit.`);
         return false;
       }
-      console.log(`Finish the TaskLog for [${taskLogId}].`);
+      this.logger.info(`Finish the TaskLog for [${taskLogId}].`);
       transaction.update(documentReference, taskLogEntity);
       return true;
     };

@@ -42,22 +42,13 @@ const DatastoreModeAccess = require('./datastore_mode_access.js');
 class DataAccessObject {
 
   /**
-   * Returns the value of environment variable named 'FIRESTORE_TYPE'.
-   * @return {!DataSource}
-   */
-  static getDataSourceFromEnvironment() {
-    return process.env['FIRESTORE_TYPE'];
-  }
-
-  /**
    * Initializes the instance based on given data source.
    * @param {string} kind The data model name.
    * @param {string} namespace The namespace of the data.
    * @param {!DataSource} dataSource The data source type.
    * @param {string} projectId The Id of Cloud project.
    */
-  constructor(kind, namespace,
-      dataSource = DataAccessObject.getDataSourceFromEnvironment(),
+  constructor(kind, namespace, dataSource = process.env['FIRESTORE_TYPE'],
       projectId = process.env['GCP_PROJECT']) {
     /** @const {string} */ this.namespace = namespace;
     /** @const {!DataSource} */ this.dataSource = dataSource;
@@ -81,7 +72,7 @@ class DataAccessObject {
    * @param {!Entity} entity Data to save or update in the document/entity.
    * @return {!Promise<string|number>} The Id of saved document/entity.
    */
-  create(entity) {
+  async create(entity) {
     return this.accessObject.saveObject(entity);
   }
 
@@ -92,7 +83,7 @@ class DataAccessObject {
    * @param {string|number|undefined=} id Document/Entity Id.
    * @return {!Promise<string|number>} The ID of updated document/entity.
    */
-  update(entity, id) {
+  async update(entity, id) {
     return this.accessObject.saveObject(entity, id);
   }
 
@@ -103,10 +94,9 @@ class DataAccessObject {
    * @param {string|number|undefined=} id Document/Entity Id.
    * @return {!Promise<string|number>} The ID of updated document/entity.
    */
-  merge(options, id) {
-    return this.accessObject.getObject(id).then((entity) => {
-      return this.update(Object.assign(entity, options), id);
-    });
+  async merge(options, id) {
+    const entity = await this.accessObject.getObject(id);
+    return this.update(Object.assign(entity, options), id);
   }
 
   /**
@@ -114,7 +104,7 @@ class DataAccessObject {
    * @param {string|number} id Document/Entity Id.
    * @return {!Promise<(!Entity|undefined)>}
    */
-  load(id) {
+  async load(id) {
     return this.accessObject.getObject(id);
   }
 
@@ -123,7 +113,7 @@ class DataAccessObject {
    * @param {string|number} id Document/Entity Id.
    * @return {!Promise<boolean>} Whether the operation is succeeded.
    */
-  remove(id) {
+  async remove(id) {
     return this.accessObject.deleteObject(id);
   }
 
@@ -137,10 +127,10 @@ class DataAccessObject {
    * https://googleapis.dev/nodejs/datastore/latest/Query.html#order
    * @param {number|undefined} limit A limit on a query.
    * @param {number|undefined} offset An offset on a query.
-   * @return {!Array<{id:(string|number),entity:!Entity}>} The documents or
-   *     entities.
+   * @return {!Promise<Array<{id:(string|number),entity:!Entity}>>} The array of
+   *     documents or entities.
    */
-  list(filters, order, limit, offset) {
+  async list(filters, order, limit, offset) {
     return this.accessObject.queryObjects(filters, order, limit, offset);
   }
 
@@ -151,7 +141,7 @@ class DataAccessObject {
    *     invoked with a transaction. It returns any type.
    * @return {!Promise<*>} The return value of the function which is passed in.
    */
-  runTransaction(fn) {
+  async runTransaction(fn) {
     return this.accessObject.runTransaction(fn);
   }
 

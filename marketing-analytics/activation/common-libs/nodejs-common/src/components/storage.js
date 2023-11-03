@@ -59,10 +59,9 @@ class StorageFile {
    * Gets the file size.
    * @return {!Promise<number>}
    */
-  getFileSize() {
-    return this.file.get().then((fileResponse) => {
-      return parseInt(fileResponse[1].size, 10);
-    });
+  async getFileSize() {
+    const fileResponse = await this.file.get();
+    return parseInt(fileResponse[1].size, 10);
   };
 
   /**
@@ -70,11 +69,10 @@ class StorageFile {
    * @param {string=} prefix The file name prefix.
    * @return {!Promise<!Array<string>>} Array of file names.
    */
-  listFiles(prefix = this.fileName) {
+  async listFiles(prefix = this.fileName) {
     const options = {prefix: prefix, delimiter: '/'};
-    return this.bucket.getFiles(options).then(
-        ([files]) => files.map((file) => file.name)
-    );
+    const [files] = await this.bucket.getFiles(options);
+    return files.map((file) => file.name);
   }
 
   /**
@@ -84,32 +82,25 @@ class StorageFile {
    * @param {?number} end End position, default is the end of the file.
    * @return {!Promise<string>} contents File content between the start and end.
    */
-  loadContent(start = 0, end) {
+  async loadContent(start = 0, end) {
     if (start < 0) {
       console.log(`GCS load 'start' before 0 [${start}], move it to 0.`);
       start = 0;
     }
     if (end < start) {
       console.log(`GCS load for [${start}, ${end}], returns empty string.`);
-      return Promise.resolve('');
+      return '';
     }
-    const option = {
-      start: start,
-      end: end,
-    };
+    const option = { start, end };
     const stream = this.file.createReadStream(option);
     return new Promise((resolve, reject) => {
       const chunks = [];
-      stream.on('data', (chunk) => {
-        chunks.push(chunk);
-      });
+      stream.on('data', (chunk) => void chunks.push(chunk));
       stream.on('end', () => {
         console.log(`Get [${this.fileName}] from ${start} to ${end}`);
         resolve(chunks.join(''));
       });
-      stream.on('error', (error) => {
-        reject(error);
-      });
+      stream.on('error', (error) => void reject(error));
     });
   };
 
@@ -157,20 +148,15 @@ class StorageFile {
    * @param {number=} index The start point of this round split.
    * @return {!Promise<!Array<!Array<number,number>>>}
    */
-  getSplitRanges(fileSize, splitSize, index = 0) {
+  async getSplitRanges(fileSize, splitSize, index = 0) {
     if (index + splitSize >= fileSize) {
-      return Promise.resolve([[index, fileSize - 1]]);
+      return [[index, fileSize - 1]];
     } else {
       const end = index + splitSize - 1;
-      return this
-          .getLastLineBreaker(index, end)
-          .then((realEnd) => {
-            const piece = [[index, realEnd]];
-            return this.getSplitRanges(fileSize, splitSize, realEnd + 1)
-                .then((splits) => {
-                  return Promise.resolve(piece.concat(splits));
-                });
-          });
+      const realEnd = await this.getLastLineBreaker(index, end);
+      const piece = [[index, realEnd]];
+      const splits = await this.getSplitRanges(fileSize, splitSize, realEnd + 1);
+      return piece.concat(splits);
     }
   }
 
@@ -185,13 +171,13 @@ class StorageFile {
   copyRangeToFile(start, end, croppedFileName) {
     const outputFile = this.bucket.file(croppedFileName);
     return new Promise((resolve) => {
-      this.file.createReadStream({start, end,})
-          .pipe(outputFile.createWriteStream())
-          .on('finish', () => {
-            return this.file.getMetadata().then(
-                ([{contentType}]) => outputFile.setMetadata({contentType}))
-                .then(([file]) => resolve(file.name));
-          });
+      this.file.createReadStream({ start, end, })
+        .pipe(outputFile.createWriteStream())
+        .on('finish', async () => {
+          const [{ contentType }] = await this.file.getMetadata();
+          const [file] = await outputFile.setMetadata({ contentType });
+          return file.name;
+        });
     });
   }
 
@@ -209,28 +195,19 @@ class StorageFile {
    * @param {string=} outputName File name for output.
    * @return {!Promise<string>} Output file name.
    */
-  addHeader(
+  async addHeader(
       header, sourceName = this.fileName,
       outputName = sourceName + '_w_header') {
     const headerFile = this.bucket.file('_header_' + (new Date()).getTime());
     if (!header.endsWith(LINE_BREAKER)) header = header + LINE_BREAKER;
+    await headerFile.save(header);
     const sourceFile = this.bucket.file(sourceName);
-    const promises = [
-      sourceFile.getMetadata().then(([{contentType}]) => contentType),
-      headerFile.save(header),
-    ];
-    return Promise.all(promises).then(([contentType]) => {
-      return this.bucket
-          .combine([headerFile, sourceFile], this.bucket.file(outputName))
-          .then(([file]) => {
-            const promises = [
-              file.setMetadata({contentType}),
-              headerFile.delete(),
-            ];
-            return Promise.all(promises);
-          })
-          .then(([[file]]) => file.name);
-    });
+    const [{ contentType }] = await sourceFile.getMetadata();
+    const [outputFile] = await this.bucket.combine(
+      [headerFile, sourceFile], this.bucket.file(outputName));
+    const [file] = await outputFile.setMetadata({ contentType });
+    await headerFile.delete();
+    return file.name;
   }
 
   /**
@@ -242,21 +219,18 @@ class StorageFile {
    *     Default value DEFAULT_SPLIT_SIZE.
    * @return {!Promise<!Array<string>>} The filenames of the output files.
    */
-  split(splitSize = DEFAULT_SPLIT_SIZE) {
-    return this.getFileSize().then((size) => {
-      if (size <= splitSize) {  // No need to split.
-        return Promise.resolve([this.fileName]);
-      } else {  // Trying to split the big file.
-        console.log(`Get file size: ${size}, split size: ${splitSize}.`);
-        return this.getSplitRanges(size, splitSize).then((splitRanges) => {
-          return Promise.all(splitRanges.map((range, index) => {
-            const newFile =
-                `${this.fileName}-${index}-of-${splitRanges.length}`;
-            return this.copyRangeToFile(range[0], range[1], newFile);
-          }));
-        });
-      }
-    });
+  async split(splitSize = DEFAULT_SPLIT_SIZE) {
+    const size = await this.getFileSize();
+    if (size <= splitSize) {  // No need to split.
+      return [this.fileName];
+    }
+    // Trying to split the big file.
+    console.log(`Get file size: ${size}, split size: ${splitSize}.`);
+    const splitRanges = await this.getSplitRanges(size, splitSize);
+    return Promise.all(splitRanges.map(([start, end], index) => {
+      const newFile = `${this.fileName}-${index}-of-${splitRanges.length}`;
+      return this.copyRangeToFile(start, end, newFile);
+    }));
   }
 
   /**

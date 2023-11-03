@@ -1,5 +1,16 @@
 # Release Notes
 
+## 1.9.0 (2023-10-12)
+
+### Update to the v14 of the Google Ads API
+### Support SendGrid API
+### Upgrade the default Cloud Functions runtime to Nodejs18
+### Remove support for Cloud Function runtime Nodejs6
+
+## 1.8.0 (2023-09-26)
+
+### Enhance support for Ads Data Hub API
+
 ## 1.7.1 (2023-06-27)
 
 ### Change the Cloud Functions deployment to Artifact Registry

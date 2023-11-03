@@ -30,20 +30,23 @@ class CampaignManagerReport extends Report {
   }
 
   /** @override */
-  generate(parameters) {
-    return this.dfa.runReport(this.config).then((fileId) => ({fileId}));
+  async generate(parameters) {
+    const fileId = await this.dfa.runReport(this.config);
+    return { fileId };
   }
 
   /** @override */
-  isReady(parameters) {
-    return this.dfa.getReportFileUrl(this.config).then((fileUrl) => !!fileUrl);
+  async isReady(parameters) {
+    const fileUrl = await this.dfa.getReportFileUrl(this.config);
+    if (fileUrl) return true;
+    return false;
   }
 
   /** @override */
-  getContent(parameters) {
-    return this.dfa.getReportFileUrl(this.config)
-        .then((fileUrl) => this.dfa.downloadReportFile(fileUrl))
-        .then(this.clean);
+  async getContent(parameters) {
+    const fileUrl = await this.dfa.getReportFileUrl(this.config);
+    const content = await this.dfa.downloadReportFile(fileUrl);
+    return this.clean(content);
   }
 
   /**

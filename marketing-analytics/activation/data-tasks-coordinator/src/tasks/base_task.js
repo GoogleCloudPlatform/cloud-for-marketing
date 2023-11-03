@@ -105,17 +105,16 @@ class BaseTask {
    *   needCheck:boolean,
    * }>} The properties that need to be saved to TaskLog.
    */
-  finish() {
-    return this.completeTask().then((updatesToTaskLog = {}) => {
-      if (this.config.appendedParameters) {
-        updatesToTaskLog.parameters = this.appendParameter(
-            this.config.appendedParameters);
-      }
-      return {
-        [FIELD_NAMES.REGULAR_CHECK]: false,
-        ...updatesToTaskLog,
-      };
-    });
+  async finish() {
+    const updatesToTaskLog = (await this.completeTask()) || {};
+    if (this.config.appendedParameters) {
+      updatesToTaskLog.parameters = this.appendParameter(
+        this.config.appendedParameters);
+    }
+    return {
+      [FIELD_NAMES.REGULAR_CHECK]: false,
+      ...updatesToTaskLog,
+    };
   }
 
   /**

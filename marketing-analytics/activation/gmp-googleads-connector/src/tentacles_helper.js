@@ -21,7 +21,7 @@
 const {
   pubsub: {EnhancedPubSub},
   storage: {StorageFile},
-  firestore: {DataSource, FirestoreAccessBase},
+  firestore: { DataSource, isNativeMode },
 } = require('@google-cloud/nodejs-common');
 const {ApiConfigOnFirestore, ApiConfigJson, getApiConfig} = require(
     './api_config/index.js');
@@ -96,7 +96,7 @@ const uploadApiConfig = (apiConfigJson,
    * Probes the Google Cloud Project's Firestore mode (Native or Datastore),
    * and uses the result to create an ApiConfig DAO based on Firestore.
    */
-  return FirestoreAccessBase.isNativeMode()
+  return isNativeMode()
       .then(
           (isNative) => (isNative) ? DataSource.FIRESTORE : DataSource.DATASTORE
       )

@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/data-tasks-coordinator",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "A data task coordinator based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",
@@ -8,6 +8,10 @@
     "deploy.sh",
     "src/"
   ],
+  "config": {
+    "runtime": "nodejs18",
+    "availableMemoryMb": "2048"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing.git",
@@ -20,7 +24,7 @@
     "@google-cloud/bigquery": "^7.2.0",
     "@google-cloud/bigquery-data-transfer": "^4.0.0",
     "@google-cloud/firestore": "^6.7.0",
-    "@google-cloud/nodejs-common": "^1.8.0",
+    "@google-cloud/nodejs-common": "1.9.0",
     "@google-cloud/storage": "^7.0.1",
     "google-auth-library": "^9.0.0",
     "jsdom": "^21.1.0",

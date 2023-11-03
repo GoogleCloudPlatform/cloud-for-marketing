@@ -387,16 +387,14 @@ const getProperValue = (value, defaultValue, capped = true) => {
  *     time.
  * @return {!Promise<!Object>}
  */
-const wait = (time, value = '') => {
+const wait = async (time, value = '') => {
   let timeoutId;
-  const promise = new Promise((resolve) => {
+  await new Promise((resolve) => {
     timeoutId = setTimeout(resolve, time);
   });
-  return promise.then(() => {
-    clearTimeout(timeoutId);
-    timeoutId = null;
-    return Promise.resolve(value);
-  });
+  clearTimeout(timeoutId);
+  timeoutId = null;
+  return value;
 };
 
 /**

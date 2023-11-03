@@ -81,6 +81,7 @@ class MeasurementProtocol {
       const path = (this.debugMode) ? '/debug/collect' : '/batch';
       const requestOptions = {
         method: 'POST',
+        responseType: 'json',
         url: `${BASE_URL}${path}`,
         body: payload,
         headers: {'User-Agent': 'Tentacles/MeasurementProtocol-v1'}

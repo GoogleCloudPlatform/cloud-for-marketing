@@ -153,7 +153,7 @@ class FirestoreAccessBase {
    * @param {string|number} id Document/Entity Id.
    * @return {!Promise<(!Entity|undefined)>}
    */
-  getObject(id) {
+  async getObject(id) {
   }
 
   /**
@@ -163,7 +163,7 @@ class FirestoreAccessBase {
    *     create a new one.
    * @return {!Promise<string|number>} The ID of saved document/entity.
    */
-  saveObject(data, id = undefined) {
+  async saveObject(data, id = undefined) {
   }
 
   /**
@@ -171,7 +171,7 @@ class FirestoreAccessBase {
    * @param {string|number} id Document/Entity Id.
    * @return {!Promise<boolean>} Whether the operation is succeeded.
    */
-  deleteObject(id) {
+  async deleteObject(id) {
   }
 
   /**
@@ -187,7 +187,7 @@ class FirestoreAccessBase {
    * @return {!Promise<!Array<{id:(string|number),entity:!Entity}>>} The
    *     documents or entities.
    */
-  queryObjects(filters, order, limit, offset) {
+  async queryObjects(filters, order, limit, offset) {
   }
 
   /**
@@ -197,7 +197,7 @@ class FirestoreAccessBase {
    *     invoked with a transaction. It returns any type.
    * @return {!Promise<*>} The return value of the function which is passed in.
    */
-  runTransaction(fn) {
+  async runTransaction(fn) {
   }
 
   /**
@@ -207,26 +207,29 @@ class FirestoreAccessBase {
    * related to a single entity in racing condition. For more complicated use
    * cases, use `runTransaction` to wrap the function directly.
    * @param {(string|number)} id Document/Entity Id.
-   * @param {!TransactionOperation} transactionOperation
+   * @param {!TransactionOperation} transactionOperation The operation will be
+   *   proceeded in a Transaction.
    * @return {function(!Transaction): Promise<boolean>}
    */
   wrapInTransaction(id, transactionOperation) {
   }
 
-  /**
-   * Returns whether the mode of Firestore is 'Native'.
-   * @return {!Promise<boolean>}
-   */
-  static async isNativeMode(projectId = process.env['GCP_PROJECT']) {
-    try {
-      await new Firestore({projectId}).listCollections();
-      return true;
-    } catch (error) {
-      console.log(`In detecting Firestore mode: `, error.message);
-      return false;
-    }
-  };
 }
+
+/**
+ * Returns whether the mode of Firestore is 'Native'.
+ * @param {string=} projectId GCP project Id.
+ * @return {!Promise<boolean>}
+ */
+async function isNativeMode(projectId = process.env['GCP_PROJECT']) {
+  try {
+    await new Firestore({ projectId }).listCollections();
+    return true;
+  } catch (error) {
+    console.log(`[No Panic] In detecting Firestore mode: `, error.message);
+    return false;
+  }
+};
 
 module.exports = {
   DataSource,
@@ -237,4 +240,5 @@ module.exports = {
   DatastoreDocumentFacade,
   DatastoreTransactionFacade,
   FirestoreAccessBase,
+  isNativeMode,
 };

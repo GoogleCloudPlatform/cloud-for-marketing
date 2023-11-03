@@ -141,7 +141,7 @@ class DoubleClickBidManager {
       const { status } = await doubleclickbidmanager.queries.delete({ queryId });
       return status === 200;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       return false;
     }
   }

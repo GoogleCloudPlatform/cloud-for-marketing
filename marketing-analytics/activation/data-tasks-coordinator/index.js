@@ -23,8 +23,13 @@
 
 'use strict';
 
-const {cloudfunctions: {convertEnvPathToAbsolute}} = require(
-    '@google-cloud/nodejs-common');
+const {
+  cloudfunctions: {
+    StorageEventData,
+    PubsubMessage,
+    EventContext,
+    convertEnvPathToAbsolute,
+  } } = require('@google-cloud/nodejs-common');
 const {guessSentinel} = require('./src/sentinel.js');
 const {
   uploadTaskConfig,
@@ -36,42 +41,40 @@ const {
 /**
  * Monitors events on Storage.
  * Triggered by the new coming files in the Storage Bucket.
- * @param {...!Object} args The parameters from Cloud Functions. The parameters
- *     vary in different runtime, for more details, see the definition in
- *     'CloudFunctionsUtils'.
+ * @param {!StorageEventData} eventData An object representing the event data
+ *   payload. Its format depends on the event type.
+ * @param {!EventContext} context An object containing metadata about the event.
  * @return {!Promise<(!Array<string>|undefined)>} IDs of the 'start load task'
  *     messages.
  */
-const monitorStorage = (...args) => {
+const monitorStorage = async (eventData, context) => {
   if (!process.env['SENTINEL_INBOUND']) {
     console.warn(
         'Fail to find ENV variables SENTINEL_INBOUND, will set as `inbound/`');
   }
   const monitorFolder = process.env['SENTINEL_INBOUND'] || 'inbound/';
-  return guessSentinel().then((sentinel) => {
-    const monitorStorage = sentinel.getStorageMonitor(monitorFolder);
-    return monitorStorage(...args);
-  });
+  const sentinel = await guessSentinel();
+  const monitorStorage = sentinel.getStorageMonitor(monitorFolder);
+  return monitorStorage(eventData, context);
 };
 
 /**
  * Coordinates tasks based on the messages of a Pub/sub topic named 'monitor'.
- * @param {...!Object} args The parameters from Cloud Functions. The parameters
- *     vary in different runtime, for more details, see the definition in
- *     'CloudFunctionsUtils'.
+ * @param {!PubsubMessage} eventData An object representing the event data
+ *   payload. Its format depends on the event type.
+ * @param {!EventContext} context An object containing metadata about the event.
  * @return {!Promise<(!Array<string>|number|undefined)>} The message Id array
  *     of the next tasks and an empty Array if there is no followed task.
  *     Returns taskLogId (number) when an error occurs.
  *     Returns undefined if there is no related task.
  */
-const coordinateTask = (...args) => {
+const coordinateTask = async (eventData, context) => {
   /** Converts the key files value from relative paths to absolute ones. */
   convertEnvPathToAbsolute('OAUTH2_TOKEN_JSON', __dirname);
   convertEnvPathToAbsolute('API_SERVICE_ACCOUNT', __dirname);
-  return guessSentinel().then((sentinel) => {
-    const coordinateTask = sentinel.getTaskCoordinator();
-    return coordinateTask(...args);
-  });
+  const sentinel = await guessSentinel();
+  const coordinateTask = sentinel.getTaskCoordinator();
+  return coordinateTask(eventData, context);
 };
 
 module.exports = {

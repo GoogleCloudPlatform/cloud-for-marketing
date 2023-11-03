@@ -1,5 +1,17 @@
 # Release Notes
 
+## 4.1.0 (2023-11-03)
+
+### Enhancements
+
+- Accelerate the speed to distribute the incoming data as tasks in the
+`tentacles_init` Cloud Functions.
+- Refine the parameters of `MP_GA4` for stability and performance.
+
+### Integrated APIs
+
+- Updated to the v14 of the Google Ads API.
+
 ## 4.0.1 (2023-06-27)
 
 ### Integrated APIs

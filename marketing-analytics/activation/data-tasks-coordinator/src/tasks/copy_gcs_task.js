@@ -76,15 +76,14 @@ class CopyGcsTask extends BaseTask {
   }
 
   /** @override */
-  isDone() {
+  async isDone() {
     if (!this.copyPromises) {
       this.logger.error('No copying process exists. Wrong status.');
       throw new Error('Wrong status of COPY_GCS task.');
     }
-    return Promise.all(this.copyPromises).then(() => {
-      this.logger.debug('All files are copied.');
-      return true;
-    });
+    await Promise.all(this.copyPromises);
+    this.logger.debug('All files are copied.');
+    return true;
   }
 
   /** @override */

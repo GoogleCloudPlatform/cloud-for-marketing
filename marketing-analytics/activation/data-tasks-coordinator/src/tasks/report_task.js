@@ -62,9 +62,9 @@ class ReportTask extends BaseTask {
    * Starts to generate a report from external system.
    * @override
    */
-  doTask() {
-    return this.getReport().generate(this.parameters)
-        .then((jobInfo) => ({parameters: this.appendParameter(jobInfo)}));
+  async doTask() {
+    const jobInfo = await this.getReport().generate(this.parameters);
+    return { parameters: this.appendParameter(jobInfo) };
   }
 
   /** @override */

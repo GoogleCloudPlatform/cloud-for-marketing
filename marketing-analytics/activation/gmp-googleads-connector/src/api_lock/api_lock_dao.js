@@ -267,7 +267,7 @@ class ApiLockDao extends DataAccessObject {
         return 5;
       case 'MP':
       case 'MP_GA4':
-        return 10;
+        return 40;
       default:
         return 1;
     }
