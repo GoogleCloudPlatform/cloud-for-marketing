@@ -43,7 +43,7 @@ let SolutionOption;
  * can be reused or overwritten.
  */
 const CLOUD_FUNCTIONS_DEFAULT_SETTINGS = {
-  runtime: 'nodejs14',
+  runtime: 'nodejs18',
   timeout: '540s',
   availableMemoryMb: 2048,
   dockerRegistry: 'ARTIFACT_REGISTRY',

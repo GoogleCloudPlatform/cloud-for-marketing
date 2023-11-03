@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/sheets-based-installer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Google Sheets based installer",
   "type": "module",
   "author": "Google Inc.",

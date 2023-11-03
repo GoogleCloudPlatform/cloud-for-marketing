@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/gmp-googleads-connector",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "GMP & Google Ads connector based on Cloud Functions",
   "author": "Google Inc.",
   "license": "Apache-2.0",

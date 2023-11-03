@@ -240,7 +240,7 @@ class Tentacles {
     this.logger.debug('batchSize', batchSize);
     this.logger.debug('safeSize', safeSize);
     this.logger.info(`Get dynamic size for ${storageFile.fileName}`, safeSize);
-    return safeSize;
+    return safeSize / 1000 / 1000;
   }
 
   /**
