@@ -1,0 +1,30 @@
+{
+  "name": "@google-cloud/sheets-based-installer",
+  "version": "1.2.0",
+  "description": "Google Sheets based installer",
+  "type": "module",
+  "author": "Google Inc.",
+  "license": "Apache-2.0",
+  "files": [
+    "src/"
+  ],
+  "bin": {
+    "cyborg": "./bin/cyborg.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing.git",
+    "directory": "marketing-analytics/activation/sheets-based-installer"
+  },
+  "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/sheets-based-installer/README.md",
+  "dependencies": {
+    "fs-extra": "^10.1.0",
+    "glob": "^10.3.3",
+    "open": "^9.1.0",
+    "uglify-js": "^3.17.4"
+  },
+  "cloud-repo-tools": {
+    "requiresKeyFile": true,
+    "requiresProjectId": true
+  }
+}

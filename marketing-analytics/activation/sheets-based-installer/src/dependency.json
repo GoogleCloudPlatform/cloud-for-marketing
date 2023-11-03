@@ -1,0 +1,94 @@
+{
+  "_default": [
+    "appsscript.json",
+    "api_base.js",
+    "external_api.js",
+    "utils.js",
+    "trigger_functions.js"
+  ],
+  "api_access_checker.js": [
+    "plain_sheet.js",
+    "gcloud.js",
+    "3_api"
+  ],
+  "file_to_storage.js": [
+    "plain_sheet.js",
+    "storage.js"
+  ],
+  "secret_manager_sheet.js": [
+    "plain_sheet.js",
+    "secret_manager.js"
+  ],
+  "sentinel_cron_job.js": [
+    "plain_sheet.js",
+    "cloud_scheduler.js",
+    "sentinel_mojo_sheet.js"
+  ],
+  "sentinel_mojo_sheet.js": [
+    "mojo_sheet.js",
+    "gcloud.js",
+    "sentinel.js",
+    "cloud_scheduler.js"
+  ],
+  "sentinel_task_config.js": [
+    "plain_sheet.js",
+    "gcloud.js",
+    "sentinel.js",
+    "pub_sub.js"
+  ],
+  "tentacles_mojo_sheet.js": [
+    "mojo_sheet.js",
+    "gcloud.js",
+    "tentacles.js",
+    "pub_sub.js",
+    "bigquery.js",
+    "logging.js"
+  ],
+  "tentacles_api_config.js": [
+    "plain_sheet.js",
+    "gcloud.js",
+    "3_api",
+    "storage.js"
+  ],
+  "plain_sheet.js": [
+    "enhanced_sheet.js"
+  ],
+  "external_table_sheet.js": [
+    "enhanced_sheet.js"
+  ],
+  "oauth.js": [
+    "secret_manager.js",
+    "secret_manager_sheet.js",
+    "oauth.html"
+  ],
+  "mojo_sheet.js": [
+    "mojo.js",
+    "mojo_constant.js"
+  ],
+  "mojo_constant.js": [
+    "timezone.js"
+  ],
+  "tentacles.js": [
+    "prime_solution.js"
+  ],
+  "sentinel.js": [
+    "prime_solution.js"
+  ],
+  "gcloud.js": [
+    "1_gcp"
+  ],
+  "prime_solution.js": [
+    "cloud_functions.js",
+    "service_usage.js"
+  ],
+  "mojo.js": [
+    "enhanced_sheet.js"
+  ],
+  "external_api.js": [
+    "api_base.js",
+    "iam_credentials.js"
+  ],
+  "explicit_auth.js": [
+    "explicit_auth.html"
+  ]
+}

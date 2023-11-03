@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2023 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<html>
+  <head>
+    <link
+      rel="stylesheet"
+      href="https://ssl.gstatic.com/docs/script/css/add-ons1.css"
+    />
+    <script>
+      const OAUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/';
+      const REDIRECT_URI = 'http://127.0.0.1:8887/';
+      let apiScopes;
+
+      /**
+       * Fetches OAuth scopes from server and renders the page.
+       */
+      function onLoad() {
+        const generateCheckboxes = (scopes) => {
+          apiScopes = {};
+          const scopeElement = document.getElementById('scope');
+          scopes.forEach(({name, scope, oauthOnly, checked}) => {
+            apiScopes[name] = scope;
+            const checkBoxElement = document.createElement('input');
+            checkBoxElement.type = 'checkbox';
+            checkBoxElement.className = 'apiScope';
+            checkBoxElement.value = name;
+            checkBoxElement.checked = checked;
+            scopeElement.appendChild(checkBoxElement);
+            const displayName = name + (oauthOnly ? ' *' : '');
+            scopeElement.appendChild(document.createTextNode(displayName));
+            scopeElement.appendChild(document.createElement('br'));
+          });
+        };
+        google.script.run
+          .withSuccessHandler(generateCheckboxes)
+          .getOAuthScopes();
+      }
+
+      /**
+       * Returns a querystring based on a parameter map.
+       * @param {Object<string, string>}
+       * @return {string}
+       */
+      function getQueryString(parameters) {
+        return Object.keys(parameters)
+          .map((key) => `${key}=${encodeURIComponent(parameters[key])}`)
+          .join('&');
+      }
+
+      /**
+       * Opens a window to let the user complete OAuth authorization process.
+       */
+      function startOAuth() {
+        const clientId = document.getElementById('clientId').value;
+        const clientSecret = document.getElementById('clientSecret').value;
+        const apis = document.querySelectorAll('.apiScope:checked');
+        if (!clientId) {
+          window.alert('Please input OAuth Client ID before continue.');
+          return;
+        }
+        if (!clientSecret) {
+          window.alert('Please input OAuth Client Secret before continue.');
+          return;
+        }
+        if (apis.length === 0) {
+          window.alert('Please select API scope before continue.');
+          return;
+        }
+        let scope = [];
+        for (const api of apis.values()) {
+          scope = scope.concat(apiScopes[api.value]);
+        }
+        const parameters = {
+          access_type: 'offline',
+          redirect_uri: REDIRECT_URI,
+          response_type: 'code',
+          client_id: clientId,
+          scope: scope.join(' '),
+        };
+        const queryString = getQueryString(parameters);
+        const url = `${OAUTH_BASE_URL}auth?${queryString}`;
+        window.open(url, '_blank');
+      }
+
+      /**
+       * Redeems authorization code for OAuth refresh token.
+       */
+      async function exchangeCode() {
+        const clientId = document.getElementById('clientId').value;
+        const clientSecret = document.getElementById('clientSecret').value;
+        const urlWithCode = document.getElementById('urlWithCode').value;
+        if (urlWithCode) {
+          const code = urlWithCode.split('code=')[1].split('&')[0];
+          const parameters = {
+            grant_type: 'authorization_code',
+            redirect_uri: REDIRECT_URI,
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+          };
+          const response = await fetch(`${OAUTH_BASE_URL}token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            },
+            body: getQueryString(parameters),
+          });
+          const token = await response.json();
+          const secret = {
+            token,
+            client_id: clientId,
+            client_secret: clientSecret,
+          };
+          const formattedJSON = JSON.stringify(secret, null, 2);
+          document.getElementById('token').value = formattedJSON;
+        }
+      }
+
+      /**
+       * Enables the button.
+       */
+      function enableButton(data, button) {
+        if (button) button.disabled = false;
+        window.alert(
+          'This OAuth token has been saved. You can close this sidebar now.'
+        );
+      }
+
+      /**
+       * Restores (enables) the button when the secret is not saved properly.
+       */
+      function onFailedSave(error, button) {
+        if (button) button.disabled = false;
+        window.alert(error.message);
+      }
+
+      /**
+       * Saves the OAuth token to Secret Manage.
+       */
+      function saveSecret(button) {
+        const token = document.getElementById('token').value;
+        const secret = document.getElementById('secret').value.trim();
+        if (!token) {
+          window.alert('Please generate OAuth token before continue.');
+          return;
+        }
+        const regex = /^[a-zA-Z0-9_-]+$/;
+        if (!secret || !regex.test(secret)) {
+          window.alert('Please input a correct Secret Name before continue.');
+          return;
+        }
+        button.disabled = true;
+        google.script.run
+          .withSuccessHandler(enableButton)
+          .withFailureHandler(onFailedSave)
+          .withUserObject(button)
+          .saveOAuthToken(secret, token);
+      }
+    </script>
+    <base target="_top" />
+  </head>
+  <body class="sidebar" onload="onLoad()">
+    <h3>1. Enter OAuth 2.0 Client:</h3>
+    <div class="block form-group">
+      <label for="clientId">Client ID:</label>
+      <input type="text" id="clientId" style="width: 280px" />
+    </div>
+    <div class="block form-group">
+      <label for="clientSecret">Client secret:</label>
+      <input type="text" id="clientSecret" style="width: 280px" />
+    </div>
+    <hr />
+    <h3>2. Select API Scope:</h3>
+    <div class="block form-group" id="scope"></div>
+    <div class="block form-group">APIs with * are OAuth only.</div>
+    <hr />
+    <h3>3. Start OAuth:</h3>
+    <div class="block form-group">
+      <label>
+        Click the button
+        <input type="button" value="Start" onclick="startOAuth()" />
+        then complete the OAuth process in the opened new tab.<br />
+      </label>
+      <label>
+        The succeeded OAuth flow will land the browser on an error page -
+        <span style="color: red">This site can't be reached</span>. This is an
+        <span style="font-weight: bold">expected</span> behavior. Copy the whole
+        URL and paste it in the following input box:
+      </label>
+      <input
+        type="text"
+        id="urlWithCode"
+        style="width: 280px"
+        onchange="exchangeCode()"
+      /><br />
+      <label> Generated OAuth token: </label>
+      <textarea
+        id="token"
+        rows="5"
+        cols="35"
+        readonly="true"
+        style="background-color: aliceblue"
+      ></textarea>
+    </div>
+    <hr />
+    <h3>4. Save to Secret Manager:</h3>
+    <div class="block form-group">
+      <label> Secret Name: </label>
+      <input type="text" id="secret" style="width: 280px" />
+      A string with a maximum length of 255 characters and can contain uppercase
+      and lowercase letters, numerals, and the hyphen (-) and underscore (_)
+      characters.
+      <br />
+    </div>
+    <hr />
+    <input type="button" value="Save" onclick="saveSecret(this)" />
+  </body>
+</html>

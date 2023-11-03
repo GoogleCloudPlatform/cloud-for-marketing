@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2023 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<html>
+  <head>
+    <link
+      rel="stylesheet"
+      href="https://ssl.gstatic.com/docs/script/css/add-ons1.css"
+    />
+    <script>
+      const OAUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/';
+      const REDIRECT_URI = 'http://127.0.0.1:8887/';
+
+      /**
+       * Updates current explicit auth information.
+       */
+      function updateCurrentAuth(auth) {
+        const {explicitAuthStatus, clientId, clientSecret, refreshToken} = auth;
+        document.getElementById('explicitAuthStatus').value =
+          explicitAuthStatus || 'NONE';
+        document.getElementById('currentClientId').value = clientId;
+        document.getElementById('currentClientSecret').value = clientSecret;
+        document.getElementById('currentRefreshToken').value = refreshToken;
+      }
+
+      /**
+       * Fetches current explicit auth information.
+       */
+      function getExplicitAuth() {
+        google.script.run
+          .withSuccessHandler(updateCurrentAuth)
+          .getExplicitAuth();
+      }
+
+      /**
+       * Deletes current explicit auth information.
+       */
+      function deleteExplicitAuth(button) {
+        button.disabled = true;
+        google.script.run
+          .withSuccessHandler(refreshAuth)
+          .withFailureHandler(onFailedSave)
+          .withUserObject(button)
+          .deleteExplicitAuth();
+      }
+
+      /**
+       * Saves the explicit OAuth token.
+       */
+      function saveExplicitAuth(button) {
+        const token = JSON.parse(
+          document.getElementById('token').value || '{}'
+        );
+        if (!token || !token.token.refresh_token) {
+          window.alert('Please generate OAuth token before continue.');
+          return;
+        }
+        button.disabled = true;
+        google.script.run
+          .withSuccessHandler(refreshAuth)
+          .withFailureHandler(onFailedSave)
+          .withUserObject(button)
+          .saveExplicitAuth(token);
+      }
+
+      /**
+       * Returns a querystring based on a parameter map.
+       * @param {Object<string, string>}
+       * @return {string}
+       */
+      function getQueryString(parameters) {
+        return Object.keys(parameters)
+          .map((key) => `${key}=${encodeURIComponent(parameters[key])}`)
+          .join('&');
+      }
+
+      /**
+       * Opens a window to let the user complete OAuth authorization process.
+       */
+      function startOAuth() {
+        const clientId = document.getElementById('clientId').value;
+        const clientSecret = document.getElementById('clientSecret').value;
+        const apis = document.querySelectorAll('.apiScope:checked');
+        if (!clientId) {
+          window.alert('Please input OAuth Client ID before continue.');
+          return;
+        }
+        if (!clientSecret) {
+          window.alert('Please input OAuth Client Secret before continue.');
+          return;
+        }
+        google.script.run
+          .withSuccessHandler((scope) => {
+            const parameters = {
+              access_type: 'offline',
+              redirect_uri: REDIRECT_URI,
+              response_type: 'code',
+              client_id: clientId,
+              scope,
+            };
+            const queryString = getQueryString(parameters);
+            const url = `${OAUTH_BASE_URL}auth?${getQueryString(parameters)}`;
+            window.open(url, '_blank');
+          })
+          .getExplicitAuthScope();
+      }
+
+      /**
+       * Redeems authorization code for OAuth refresh token.
+       */
+      async function exchangeCode() {
+        const clientId = document.getElementById('clientId').value;
+        const clientSecret = document.getElementById('clientSecret').value;
+        const urlWithCode = document.getElementById('urlWithCode').value;
+        if (urlWithCode) {
+          const code = urlWithCode.split('code=')[1].split('&')[0];
+          const parameters = {
+            grant_type: 'authorization_code',
+            redirect_uri: REDIRECT_URI,
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+          };
+          const response = await fetch(`${OAUTH_BASE_URL}token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            },
+            body: getQueryString(parameters),
+          });
+          const token = await response.json();
+          const secret = {
+            token,
+            client_id: clientId,
+            client_secret: clientSecret,
+          };
+          const formattedJSON = JSON.stringify(secret, null, 2);
+          document.getElementById('token').value = formattedJSON;
+        }
+      }
+
+      /**
+       * Enables the button.
+       */
+      function refreshAuth(auth, button) {
+        updateCurrentAuth(auth);
+        if (button) button.disabled = false;
+      }
+
+      /**
+       * Restores (enables) the button when the secret is not saved properly.
+       */
+      function onFailedSave(error, button) {
+        if (button) button.disabled = false;
+        window.alert(error.message);
+      }
+    </script>
+    <base target="_top" />
+  </head>
+  <body class="sidebar" onload="getExplicitAuth()">
+    <div class="block form-group">
+      <label>
+        If the Google Cloud Project number can not be updated for the current
+        AppsScript, you can set an explicit authorization token in this sidebar
+        to grant Cyborg the access to complete the tasks. <br />
+        <span style="font-weight: bold">
+          The authorization information will only be used by you in this
+          Spreadsheet and will not be deployed anywhere or used by others.
+        </span>
+        <br />
+      </label>
+    </div>
+    <hr />
+    <h3>Current explicit authorization</h3>
+    <div class="block form-group">
+      <label for="explicitAuthStatus">Status:</label>
+      <input
+        type="text"
+        id="explicitAuthStatus"
+        style="width: 80px; background-color: yellow"
+        readonly="true"
+      />
+      <label for="currentClientId">Client ID:</label>
+      <input
+        type="text"
+        id="currentClientId"
+        style="width: 280px; background-color: lightyellow"
+        readonly="true"
+      />
+      <label for="currentClientSecret">Client secret:</label>
+      <input
+        type="text"
+        id="currentClientSecret"
+        style="width: 280px; background-color: lightyellow"
+        readonly="true"
+      />
+      <label for="currentRefreshToken">Refresh token:</label>
+      <input
+        type="text"
+        id="currentRefreshToken"
+        style="width: 280px; background-color: lightyellow"
+        readonly="true"
+      /><br />
+      <input
+        type="button"
+        value="Delete current explicit authorization"
+        onclick="deleteExplicitAuth(this)"
+      />
+    </div>
+    <hr />
+    <h3>Create new explicit authorization:</h3>
+    <div class="block form-group">
+      <label for="clientId">Client ID:</label>
+      <input type="text" id="clientId" style="width: 280px" />
+    </div>
+    <div class="block form-group">
+      <label for="clientSecret">Client secret:</label>
+      <input type="text" id="clientSecret" style="width: 280px" />
+    </div>
+    <div class="block form-group">
+      <label>
+        Click the button
+        <input type="button" value="Start" onclick="startOAuth()" />
+        then complete the OAuth process in the opened new tab.<br />
+      </label>
+      <label>
+        The succeeded OAuth flow will land the browser on an error page -
+        <span style="color: red">This site can't be reached</span>. This is an
+        <span style="font-weight: bold">expected</span> behavior. Copy the whole
+        URL and paste it in the following input box:
+      </label>
+      <input
+        type="text"
+        id="urlWithCode"
+        style="width: 280px"
+        onchange="exchangeCode()"
+      /><br />
+      <label> Generated OAuth token: </label>
+      <textarea
+        id="token"
+        rows="8"
+        cols="80"
+        readonly="true"
+        style="background-color: aliceblue"
+      ></textarea
+      ><br />
+      <input
+        type="button"
+        value="Save as explicit authorization"
+        onclick="saveExplicitAuth(this)"
+      />
+    </div>
+  </body>
+</html>
