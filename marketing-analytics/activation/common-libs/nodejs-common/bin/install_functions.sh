@@ -1933,7 +1933,8 @@ check_firestore_existence() {
   local firestore mode appRegion
   mode="${1}"
   appRegion="${2}"
-  firestore=$(gcloud firestore databases list --format="csv[no-heading](databases.type)")
+  firestore=$(gcloud firestore databases list \
+--filter="name:(default)" --format="csv[no-heading](type)")
   if [[ -z "${firestore}" ]]; then
     printf '%s\n' "Firestore is not ready. Creating a new Firestore database\
 is an irreversible operation, so read carefully before continue:"

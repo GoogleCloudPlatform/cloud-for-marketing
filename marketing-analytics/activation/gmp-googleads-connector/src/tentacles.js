@@ -216,7 +216,7 @@ class Tentacles {
 
   /**
    * Based on the size of bytes in one record/line and the qps of config, gets
-   * the best split size of a task.
+   * the best split size (MB) of a task.
    * @param {StorageFile} storageFile
    * @param {Object} taskBaseInfo
    * @return {number}
