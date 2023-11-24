@@ -125,6 +125,7 @@ const MOJO_SHEET_CONFIG = {
     'Resource': 120,
     'Enable': 50,
     'Value': 400,
+    'Attribute Name': 150,
     'Attribute Value': 250,
     'Note': 400,
     'Property Name': 150,
@@ -137,6 +138,14 @@ const MOJO_SHEET_CONFIG = {
     'Attribute Name': { fn: 'setFontColor', format: '#5F6368' },
     'Status': COLUMN_STYLES.ALIGN_MIDDLE_AND_CENTER,
     default_: { fn: 'setFontFamily', format: 'Google Sans' },
+  },
+  columnsToBeMerged: [
+    'Category',
+    'Resource',
+    'Value',
+  ],
+  columnsToBeMergedMap: {
+    'Value': ['Enable', 'Status', 'Note', 'Property Name'],
   }
 };
 
@@ -163,15 +172,6 @@ let MojoSheetRow;
  * @const {!Array<string>}
  */
 const MOJO_FIELDS = MOJO_SHEET_CONFIG.columnName.map(camelize);
-
-/**
- * The columns will be merged vertically.
- * @const {!Array<string>}
- */
-const MOJO_COLUMN_TO_BE_MERGED = Object.freeze([
-  'Category',
-  'Resource',
-]);
 
 /**
  * Conditioanl format for status cells.
@@ -201,12 +201,31 @@ class Mojo {
     // Restore mojo resource settings from all templates.
     this.solutionConfig = solution.config.map((row) => {
       const configChain = [row];
+      const attributesChain = [row.attributes];
       let latest = row;
       while (latest.template) {
         latest = MOJO_CONFIG_TEMPLATE[latest.template];
         configChain.push(latest);
+        attributesChain.push(latest.attributes);
       }
-      return Object.assign({}, ...configChain.reverse());
+      // To merge attributes which are arrays
+      const attributesMap = {};
+      attributesChain.reverse().forEach((attributes = []) => {
+        attributes.forEach((attribute) => {
+          if (!attributesMap[attribute.attributeName]) {
+            attributesMap[attribute.attributeName] = attribute;
+          } else {
+            attributesMap[attribute.attributeName] =
+              Object.assign(attributesMap[attribute.attributeName], attribute);
+          }
+        })
+      });
+      const attributes = Object.values(attributesMap);
+      const config = Object.assign({}, ...configChain.reverse());
+      if (attributes.length > 0) {
+        config.attributes = attributes;
+      }
+      return config;
     });
     this.enhancedSheet = new EnhancedSheet(solution.sheetName);
     this.headlineStyle = solution.headlineStyle;
@@ -315,12 +334,7 @@ class Mojo {
       .setBorder(true, true, true, true, true, true, '#9AA0A6'
         , SpreadsheetApp.BorderStyle.SOLID);
 
-    // Merge 'Category' and 'Resource' vertically.
-    this.enhancedSheet.mergeVertically(
-      MOJO_COLUMN_TO_BE_MERGED.map(
-        (column) => MOJO_SHEET_CONFIG.columnName.indexOf(column)
-      )
-    );
+    this.enhancedSheet.mergeVertically();
 
     // Status column conditional format
     const statusIndex = MOJO_FIELDS.indexOf('status') + 1;
@@ -346,8 +360,7 @@ class Mojo {
     if (forcedCheck) this.clearStatus_(ROW_INDEX_SHIFT);
     allMojoSheetRows.forEach((mojoSheetRows) => {
       const { rowIndex: resourceStartRow } = mojoSheetRows[0];
-      const succeeded = this.checkResources_(mojoSheetRows,
-        forceCheck || this.forceCheck);
+      const succeeded = this.checkResources_(mojoSheetRows, forcedCheck);
       console.log('Result of checking:', succeeded);
       SpreadsheetApp.flush();
       if (!succeeded) {
@@ -414,7 +427,28 @@ class Mojo {
           ));
       }
     });
-    return flatConfig;
+    return this.flattenAttributes_(flatConfig);
+  }
+
+  /**
+   * Converts arrays of attributes into multiple rows of data to be fill in
+   * the sheet.
+   * @param {!Array<!MojoResource>} flatConfig
+   * @private
+   */
+  flattenAttributes_(flatConfig) {
+    const results = [];
+    flatConfig.forEach((row) => {
+      if (!Array.isArray(row.attributes)) {
+        results.push(row);
+      } else {
+        results.push(
+          ...row.attributes.map(
+            (attribute) => Object.assign({}, row, attribute)
+          ));
+      }
+    })
+    return results;
   }
 
   /**
@@ -540,11 +574,33 @@ class Mojo {
       const values = [];
       result.push(values);
       do {
-        values.push(
-          Object.assign({ rowIndex: index + ROW_INDEX_SHIFT }, mojoSheetRows[index])
-        );
+        const mojoSheetRow = Object.assign(
+          { rowIndex: index + ROW_INDEX_SHIFT }, mojoSheetRows[index]);
         this.loadProperty_(mojoSheetRows[index]);
         index++;
+        // Push mulitple attributes of the same 'value' into an array
+        while (index < mojoSheetRows.length
+          && mojoSheetRows[index].resource === ''
+          && mojoSheetRows[index].value === '') {
+          if (!mojoSheetRow.attributes) {
+            mojoSheetRow.attributes = [{
+              attributeName: mojoSheetRow.attributeName,
+              attributeValue: mojoSheetRow.attributeValue,
+            }];
+          }
+          mojoSheetRow.attributes.push({
+            attributeName: mojoSheetRows[index].attributeName,
+            attributeValue: mojoSheetRows[index].attributeValue,
+          });
+          index++;
+        }
+        if (mojoSheetRow.attributes) {
+          mojoSheetRow.attributesMap = {};
+          mojoSheetRow.attributes.forEach((attribute) => {
+            mojoSheetRow.attributesMap[attribute.attributeName] = attribute;
+          })
+        }
+        values.push(mojoSheetRow);
       } while (index < mojoSheetRows.length && mojoSheetRows[index].resource === '')
     } while (index < mojoSheetRows.length)
     console.log('Properties in Sheet',
@@ -677,6 +733,19 @@ class Mojo {
    * @private
    */
   updateStatus_(rowStatus, rowIndex) {
+    if (rowStatus.attributes) {
+      rowStatus = Object.assign(rowStatus, rowStatus.attributes[0]);
+      if (rowStatus.attributes.length > 1) {
+        rowStatus.attributes.slice(1).forEach((attribute, index) => {
+          if (attribute.attributeValue_datarange) {
+            this.setDropList_('attributeValue', rowIndex + index + 1,
+              attribute.attributeValue_datarange);
+          }
+          this.updateCells_({ attributeValue: attribute.attributeValue },
+            rowIndex + index + 1);
+        });
+      }
+    }
     const { status, message = '', value, attributeValue, refreshFn } = rowStatus;
     const cellValues = { status, note: message, value, attributeValue };
     this.updateCells_(cellValues, rowIndex);

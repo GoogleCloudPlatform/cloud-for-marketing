@@ -18,7 +18,7 @@
 
 const {DateTime} = require('luxon');
 const {
-  firestore: { DataSource, isNativeMode, },
+  firestore: { DataSource, Database, DEFAULT_DATABASE, getFirestoreDatabase },
   cloudfunctions: {
     ValidatedStorageFile,
     CloudFunction,
@@ -651,15 +651,16 @@ const getDefaultParameters = (parameters, timezone = 'UTC',
  *
  * @param {string} namespace The `namespace` of this instance, e.g. prefix of
  *     the topics, Firestore root collection name, Datastore namespace, etc.
- * @param {!DataSource} datasource The underlying datasource type.
+ * @param {!Database} database The database.
  * @return {!Sentinel} The Sentinel instance.
  */
-const getSentinel = (namespace, datasource) => {
+const getSentinel = async (namespace, database) => {
+
   /** @type {TaskManagerOptions} */
   const options = {
     namespace,
-    taskConfigDao: new TaskConfigDao(datasource, namespace),
-    taskLogDao: new TaskLogDao(datasource, namespace),
+    taskConfigDao: new TaskConfigDao(database, namespace),
+    taskLogDao: new TaskLogDao(database, namespace),
     pubsub: new EnhancedPubSub(),
     buildReport,
     statusCheckCronJob: {
@@ -669,25 +670,28 @@ const getSentinel = (namespace, datasource) => {
     validatedStorageTrigger,
   };
   console.log(
-      `Init Sentinel for namespace[${namespace}], Datasource[${datasource}]`);
+    `Init Sentinel for namespace[${namespace}], Datasource[${database}]`);
   return new Sentinel(options);
 };
 
 /**
- * Probes the Google Cloud Project's Firestore mode (Native or Datastore), then
- * uses it to create an instance of Sentinel.
+ * Probes the mode (Native or Datastore) of the Firestore that this solution
+ * will use, then uses it to create an instance of Sentinel.
  * @param {(string|undefined)=} namespace
+ * @param {(string|undefined)=} projectId
+ * @param {(string|undefined)=} databaseId
  * @return {!Promise<!Sentinel>}
  */
-const guessSentinel = async (namespace = process.env['PROJECT_NAMESPACE']) => {
+const guessSentinel = async (namespace = process.env['PROJECT_NAMESPACE'],
+  projectId = process.env['GCP_PROJECT'],
+  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) => {
   if (!namespace) {
     console.warn(
         'Fail to find ENV variables PROJECT_NAMESPACE, will set as `sentinel`');
     namespace = 'sentinel';
   }
-  const isNative = await isNativeMode();
-  const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
-  return getSentinel(namespace, dataSource);
+  const database = await getFirestoreDatabase(projectId, databaseId);
+  return getSentinel(namespace, database);
 };
 
 module.exports = {

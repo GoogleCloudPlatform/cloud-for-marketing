@@ -22,6 +22,8 @@ const {
   GaxiosOptions,
 } = require('gaxios');
 
+const { getLogger } = require('../../components/utils.js');
+
 /**
  * A type for an Api response which is independent to the 'request' library.
  * @typedef {{
@@ -35,10 +37,11 @@ let Response;
  * Base class for RESTful API based on gaxios.
  * @see https://github.com/googleapis/gaxios
  */
-class RestfuleApiBase {
+class RestfulApiBase {
 
   constructor(env = process.env) {
     this.env = env;
+    this.logger = getLogger(this.constructor.name);
   }
 
   /**
@@ -46,7 +49,7 @@ class RestfuleApiBase {
    * @return {string}
    * @abstract
    */
-  getBaseUrl() { }
+  async getBaseUrl() { }
 
   /**
    * Returns default HTTP headers.
@@ -93,7 +96,7 @@ class RestfuleApiBase {
     const options = Object.assign(
       this.getRequesterOptions(),
       {
-        url: this.getRequestUrl(uri),
+        url: await this.getRequestUrl(uri),
         method,
         headers: headers || await this.getDefaultHeaders(),
         data,
@@ -111,8 +114,8 @@ class RestfuleApiBase {
    * @param {string} requestUri The URI of the specific resource to request.
    * @return {string} representing the fully-qualified API URL.
    */
-  getRequestUrl(requestUri) {
-    const baseUrl = this.getBaseUrl();
+  async getRequestUrl(requestUri) {
+    const baseUrl = await this.getBaseUrl();
     if (requestUri) {
       if (requestUri.toLocaleLowerCase().startsWith('http')) return requestUri;
       return `${baseUrl}/${requestUri}`;
@@ -139,5 +142,5 @@ class RestfuleApiBase {
 
 module.exports = {
   Response,
-  RestfuleApiBase,
+  RestfulApiBase,
 };

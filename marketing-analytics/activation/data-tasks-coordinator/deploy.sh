@@ -34,7 +34,14 @@ PROJECT_NAMESPACE="${SOLUTION_NAME}"
 CONFIG_FILE="./config.json"
 
 # Parameter name used by functions to load and save config.
-CONFIG_ITEMS=("PROJECT_NAMESPACE" "REGION" "GCS_BUCKET" "INBOUND")
+CONFIG_ITEMS=(
+  "PROJECT_NAMESPACE"
+  "REGION"
+  "GCS_BUCKET"
+  "DATABASE_ID"
+  "SECRET_NAME"
+  "INBOUND"
+)
 
 # The Google Cloud APIs that will be used in Sentinel.
 GOOGLE_CLOUD_APIS["firestore.googleapis.com"]="Cloud Firestore API"

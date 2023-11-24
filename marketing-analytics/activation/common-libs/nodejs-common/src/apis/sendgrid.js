@@ -18,7 +18,7 @@
 
 'use strict';
 
-const { RestfuleApiBase } = require('./base/restful_api_base.js');
+const { RestfulApiBase } = require('./base/restful_api_base.js');
 const { getLogger } = require('../components/utils.js');
 
 const API_VERSION = 'v3';
@@ -28,7 +28,7 @@ const API_ENDPOINT = 'https://api.sendgrid.com';
  * SendGrid API access class.
  * @see https://docs.sendgrid.com/api-reference/how-to-use-the-sendgrid-v3-api/authentication
  */
-class SendGrid extends RestfuleApiBase {
+class SendGrid extends RestfulApiBase {
 
   constructor(apiKey, env = process.env) {
     super(env);

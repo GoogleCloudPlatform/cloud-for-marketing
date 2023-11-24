@@ -20,7 +20,12 @@
 'use strict';
 
 const {
-  firestore: { TransactionOperation, DatastoreDocumentFacade, DataAccessObject },
+  firestore: {
+    Database,
+    TransactionOperation,
+    DatastoreDocumentFacade,
+    DataAccessObject,
+  },
   utils: {getLogger},
 } = require('@google-cloud/nodejs-common');
 const {ApiLock} = require('./api_lock.js');
@@ -53,15 +58,20 @@ let ApiLockObject;
  */
 class ApiLockDao extends DataAccessObject {
 
-  constructor(dataSource, namespace = 'tentacles') {
-    super('Lock', namespace, dataSource);
+  /**
+   * Initializes ApiLockDao Dao instance.
+   * @param {!Database} database The database.
+   * @param {string} namespace The namespace of the data.
+   */
+  constructor(database, namespace = 'tentacles') {
+    super('Lock', namespace, database);
     /**
      * Maximum time (milliseconds) for a process to hold an ApiLock.
      * By default, it is 10 mintues.
      * @type {number}
      */
     this.maxTimeForLocks = 10 * 60 * 1000;
-    this.logger = getLogger(`LOCK.${dataSource}`);
+    this.logger = getLogger(`LOCK.${database}`);
   }
 
   /** @override */

@@ -14,6 +14,17 @@
 
 /** @fileoverview MojoResource check functions (non GCP part) and templates. */
 
+const ATTRIBUTE_NAMES = {
+  firestore: {
+    mode: 'Mode',
+    location: 'Location',
+  },
+  bigquery: {
+    location: 'Location',
+    partitionExpiration: 'Partition Expiration (days)',
+  },
+}
+
 /** Checks the namespace. */
 const checkNamespace = (namespace) => {
   const regex = /^[a-z][a-z0-9_]{2,15}$/;
@@ -163,8 +174,18 @@ const MOJO_CONFIG_TEMPLATE = {
   firestore: {
     category: 'Google Cloud',
     resource: 'Firestore',
-    value_datarange: Object.values(FIRESTORE_MODE),
-    attributeName: 'Location',
+    editType: RESOURCE_EDIT_TYPE.READONLY,
+    value: DEFAULT_DATABASE,
+    attributes: [
+      {
+        attributeName: ATTRIBUTE_NAMES.firestore.mode,
+        attributeValue_datarange: Object.values(FIRESTORE_MODE),
+      },
+      {
+        attributeName: ATTRIBUTE_NAMES.firestore.location,
+      }
+    ],
+    propertyName: 'databaseId',
     checkFn: gcloud.checkFirestore,
     enableFn: gcloud.createFirestore,
   },
@@ -195,8 +216,18 @@ const MOJO_CONFIG_TEMPLATE = {
   bigQueryDataset: {
     category: 'Google Cloud',
     resource: 'BigQuery Dataset',
-    attributeName: 'Location',
-    attributeValue_datarange: BIGQUERY_LOCATIONS.map(getLocationListName),
+    value: '${namespace}',
+    attributes: [
+      {
+        attributeName: ATTRIBUTE_NAMES.bigquery.location,
+        attributeValue_datarange: BIGQUERY_LOCATIONS.map(getLocationListName),
+      },
+      {
+        attributeName: ATTRIBUTE_NAMES.bigquery.partitionExpiration,
+        attributeValue: '720'
+      }
+    ],
+    propertyName: 'datasetId',
     checkFn: gcloud.checkDataset,
     enableFn: gcloud.createOrUpdateDataset,
   },

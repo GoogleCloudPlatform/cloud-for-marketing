@@ -29,6 +29,7 @@ const {
   DatastoreDocumentFacade,
   DatastoreTransactionFacade,
   FirestoreAccessBase,
+  DEFAULT_DATABASE,
 } = require('./access_base.js');
 const {getLogger, wait} = require('../utils.js');
 
@@ -46,11 +47,15 @@ class DatastoreModeAccess {
    * Initializes DatastoreModeAccess instance.
    * @param {string} namespace The namespace for data.
    * @param {string} kind The kind of this entity.
-   * @param {string} projectId The Id of Cloud project.
+   * @param {string=} projectId The Id of Cloud project.
+   * @param {string=} databaseId The Id of Firestore database.
    */
-  constructor(namespace, kind, projectId = process.env['GCP_PROJECT']) {
+  constructor(namespace, kind, projectId = process.env['GCP_PROJECT'],
+    databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) {
+    // '(default)' is not allowed, use empty string '' to refer the default database.
+    const idForDatastore = databaseId === DEFAULT_DATABASE ? '' : databaseId;
     /** @type{Datastore} */
-    this.datastore = new Datastore({projectId});
+    this.datastore = new Datastore({ projectId, databaseId: idForDatastore });
     this.kind = kind;
     this.namespace = namespace;
     this.logger = getLogger('DS.ACC');

@@ -17,6 +17,7 @@
 
 'use strict';
 
+const { Transform } = require('stream');
 const {api: {dfareporting: {DfaReporting}}} = require(
     '@google-cloud/nodejs-common');
 const {Report} = require('./base_report.js');
@@ -36,42 +37,66 @@ class CampaignManagerReport extends Report {
   }
 
   /** @override */
-  async isReady(parameters) {
-    const fileUrl = await this.dfa.getReportFileUrl(this.config);
+  async isReady({ fileId }) {
+    const config = Object.assign({}, this.config, { fileId });
+    const fileUrl = await this.dfa.getReportFileUrl(config);
     if (fileUrl) return true;
     return false;
   }
 
   /** @override */
-  async getContent(parameters) {
-    const fileUrl = await this.dfa.getReportFileUrl(this.config);
-    const content = await this.dfa.downloadReportFile(fileUrl);
-    return this.clean(content);
+  async getContent({ fileId }) {
+    const config = Object.assign({}, this.config, { fileId });
+    const fileUrl = await this.dfa.getReportFileUrl(config);
+    const stream = await this.dfa.getReportFileStream(fileUrl);
+    return this.clean(stream);
   }
 
   /**
-   * Cleans up the content of report. CM reports are unable to customized, so
+   * Cleans up the content of report. CM reports are unable to be customized, so
    * use this function to get rid of unwanted lines, e.g. summary line.
-   * @param {string} content
+   * @param {stream} stream
    * @return {string}
    */
-  clean(content) {
-    const lines = content.split('\n');
-    let index = 0;
-    while (lines[index] !== 'Report Fields') {
-      index++;
-      if (index >= lines.length) {
-        throw Error(`Can't find 'Report Fields' line. Wrong report format?`);
+  clean(stream) {
+    let last = '';
+    let started = false;
+    const streamReportTransform = new Transform({
+      transform(chunk, encoding, callback) {
+        const data = chunk.toString();
+        let toCheck = last + data;
+        if (!started) {
+          const startIndex = toCheck.indexOf('Report Fields');
+          if (startIndex === -1) {
+            last = toCheck;
+            callback(null, '');
+          } else {
+            last = '';
+            toCheck = toCheck.substring(startIndex + 'Report Fields'.length + 1);
+            started = true;
+          }
+        }
+        if (started) {
+          const endIndex = toCheck.indexOf('Grand Total:');
+          if (endIndex === -1) {
+            const output = last;
+            last = last === '' ? toCheck : data;
+            callback(null, output);
+          } else {
+            callback(null, toCheck.substring(0, endIndex));
+            this.end();
+          }
+        }
       }
-    }
-    let endIndex = lines.length - 1;
-    while (!lines[endIndex].startsWith('Grand Total')) {
-      endIndex--;
-      if (endIndex < 0) {
-        throw Error(`Can't find 'Grand Total' line. Wrong report format?`);
+    });
+    stream.on('error', (error) => streamReportTransform.emit('error', error));
+    streamReportTransform.on('end', () => {
+      if (!started) {
+        streamReportTransform.emit('error',
+          new Error(`Can't find 'Report Fields' line. Wrong report format?`));
       }
-    }
-    return lines.slice(index + 1, endIndex).join('\n');
+    });
+    return stream.pipe(streamReportTransform);
   }
 }
 

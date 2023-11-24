@@ -19,7 +19,13 @@
 
 'use strict';
 const {
-  firestore: { DataSource, Entity, DataAccessObject, DatastoreDocumentFacade },
+  firestore: {
+    Database,
+    DataSource,
+    Entity,
+    DataAccessObject,
+    DatastoreDocumentFacade,
+  },
   utils: { getLogger }
 } = require('@google-cloud/nodejs-common');
 const {TaskStatus, TentaclesTask} = require('./tentacles_task.js');
@@ -42,11 +48,11 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
 
   /**
    * Initializes TentaclesTask Dao instance.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database} database The database.
    * @param {string} namespace The namespace of the data.
    */
-  constructor(dataSource, namespace = 'tentacles') {
-    super('Task', namespace, dataSource);
+  constructor(database, namespace = 'tentacles') {
+    super('Task', namespace, database);
     // This logger is used to send data to BigQuery for the dashboard.
     this.loggerForDashboard = getLogger('TentaclesTask');
     // This logger is for regular logging.

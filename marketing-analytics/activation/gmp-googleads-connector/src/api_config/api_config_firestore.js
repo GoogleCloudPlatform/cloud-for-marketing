@@ -19,8 +19,8 @@
 
 'use strict';
 
-const {firestore: {DataSource, DataAccessObject}} = require(
-    '@google-cloud/nodejs-common');
+const { firestore: { Database, DataAccessObject } }
+  = require('@google-cloud/nodejs-common');
 const {ApiConfig} = require('./api_config.js');
 
 /**
@@ -32,11 +32,11 @@ class ApiConfigOnFirestore extends DataAccessObject {
 
   /**
    * Initializes ApiConfig Dao instance.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database} database The database.
    * @param {string} namespace The namespace of the data.
    */
-  constructor(dataSource, namespace = 'tentacles') {
-    super('ApiConfig', namespace, dataSource);
+  constructor(database, namespace = 'tentacles') {
+    super('ApiConfig', namespace, database);
   }
 
   /**

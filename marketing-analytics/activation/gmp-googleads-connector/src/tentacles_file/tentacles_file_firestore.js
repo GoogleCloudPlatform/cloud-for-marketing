@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  firestore: {DataSource, DataAccessObject},
+  firestore: { Database, DataAccessObject },
   utils: {getLogger,}
 } = require('@google-cloud/nodejs-common');
 const {TentaclesFile} = require('./tentacles_file.js');
@@ -32,11 +32,11 @@ const {TentaclesFile} = require('./tentacles_file.js');
 class TentaclesFileOnFirestore extends DataAccessObject {
   /**
    * Initializes TentaclesFile Dao instance.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database} database The database.
    * @param {string} namespace The namespace of the data.
    */
-  constructor(dataSource, namespace = 'tentacles') {
-    super('File', namespace, dataSource);
+  constructor(database, namespace = 'tentacles') {
+    super('File', namespace, database);
     this.logger = getLogger('TentaclesFile');
   }
 

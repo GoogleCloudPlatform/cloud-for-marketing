@@ -20,7 +20,7 @@
 'use strict';
 
 const lodash = require('lodash');
-const {firestore: {DataSource, DataAccessObject}} = require(
+const { firestore: { Database, DataAccessObject } } = require(
     '@google-cloud/nodejs-common');
 
 /**
@@ -130,15 +130,15 @@ class TaskConfigDao extends DataAccessObject {
 
   /**
    * Initializes TaskConfig Dao instance.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database} database The database.
    * @param {string} namespace The namespace of the data. The default value is
    *   'sentinel'.
    * @param {string=} projectId GCP project Id. The default value is the env
    *   variable 'GCP_PROJECT'.
    */
-  constructor(dataSource, namespace = 'sentinel',
+  constructor(database, namespace = 'sentinel',
     projectId = process.env['GCP_PROJECT']) {
-    super('TaskConfig', namespace, dataSource, projectId);
+    super('TaskConfig', namespace, database, projectId);
   }
 
   /**

@@ -20,7 +20,7 @@
 
 const { nanoid } = require('nanoid');
 const {
-  firestore: { DataSource, isNativeMode, },
+  firestore: { DataSource, Database, DEFAULT_DATABASE, getFirestoreDatabase },
   pubsub: {EnhancedPubSub},
   storage: {StorageFile},
   cloudfunctions: {
@@ -35,12 +35,11 @@ const {
 
 const {getApiHandler, getApiOnGcs, ApiHandlerFunction} = require(
   './api_handlers/index.js');
-const {getApiConfig, ApiConfig, ApiConfigJson} = require(
-  './api_config/index.js');
-const {getApiLock, ApiLock} = require('./api_lock/index.js');
-const {getTentaclesFile, TentaclesFile, TentaclesFileEntity} =
+const { ApiConfig, ApiConfigOnFirestore } = require('./api_config/index.js');
+const { ApiLock, ApiLockDao } = require('./api_lock/index.js');
+const { TentaclesFile, TentaclesFileEntity, TentaclesFileOnFirestore } =
   require('./tentacles_file/index.js');
-const {getTentaclesTask, TentaclesTask, TentaclesTaskEntity} =
+const { TentaclesTask, TentaclesTaskEntity, TentaclesTaskOnFirestore } =
   require('./tentacles_task/index.js');
 
 /**
@@ -625,37 +624,24 @@ const getAttributes = (fileName) => {
  *
  * @param {string} namespace The `namespace` of this instance, e.g. prefix of
  *     the topics, Firestore root collection name, Datastore namespace, etc.
- * @param {!DataSource|undefined=} datasource The underlying datasource type.
- *     Tentacles use the database to manage 'API Configuration', 'ApiLock',
- *     'TentaclesTask' and 'TentaclesFile'. If this is omitted, Tentacles can
- *     still work without following features:
- *     1. anti-duplicated Pub/Sub messages.
- *     2. speed control for multiple simultaneously incoming files of a same
- *     API.
- *     3. logs for files and tasks for reports or further analysis.
- * @param {!ApiConfigJson|undefined=} apiConfig Source of the ApiConfig.
- *     In case there is no available Firestore/Datastore, Tentacles can still
- *     work on a JSON file based API configuration.
+ * @param {!Database} database The database.
  * @return {!Tentacles} The Tentacles instance.
  */
-const getTentacles = (namespace, datasource = undefined, apiConfig) => {
+const getTentacles = (namespace, database) => {
   /** @type {TentaclesOptions} */
   const options = {
     namespace,
-    apiConfig: /** @type {ApiConfig} */ getApiConfig(apiConfig || datasource,
-      namespace),
-    apiLock: /** @type {ApiLock} */ getApiLock(datasource, namespace),
-    tentaclesFile: /** @type {TentaclesFile} */ getTentaclesFile(datasource,
-      namespace),
-    tentaclesTask: /** @type {TentaclesTask} */ getTentaclesTask(datasource,
-      namespace),
+    apiConfig: new ApiConfigOnFirestore(database, namespace),
+    apiLock: new ApiLockDao(database, namespace),
+    tentaclesFile: new TentaclesFileOnFirestore(database, namespace),
+    tentaclesTask: new TentaclesTaskOnFirestore(database, namespace),
     pubsub: new EnhancedPubSub(),
     getStorage: StorageFile.getInstance,
     validatedStorageTrigger,
     getApiHandler,
   };
   console.log(
-    `Init Tentacles for namespace[${namespace}], Datasource[${datasource}]`);
+    `Init Tentacles for namespace[${namespace}], Datasource[${database}]`);
   return new Tentacles(options);
 };
 
@@ -664,16 +650,17 @@ const getTentacles = (namespace, datasource = undefined, apiConfig) => {
  * uses it to create an instance of Tentacles.
  * @return {!Promise<!Tentacles>}
  */
-const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE']) => {
+const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE'],
+  projectId = process.env['GCP_PROJECT'],
+  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) => {
   if (!namespace) {
     console.warn(
       'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`'
     );
     namespace = 'tentacles';
   }
-  const isNative = await isNativeMode();
-  const dataSource = isNative ? DataSource.FIRESTORE : DataSource.DATASTORE;
-  return getTentacles(namespace, dataSource);
+  const database = await getFirestoreDatabase(projectId, databaseId);
+  return getTentacles(namespace, database);
 };
 
 module.exports = {

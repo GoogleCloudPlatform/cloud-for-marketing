@@ -1559,6 +1559,7 @@ set_cloud_functions_default_settings() {
   default_cf_flag+=(--set-env-vars=PROJECT_NAMESPACE="${PROJECT_NAMESPACE}")
   default_cf_flag+=(--set-env-vars=DEBUG="${DEBUG}")
   default_cf_flag+=(--set-env-vars=IN_GCP="${IN_GCP}")
+  default_cf_flag+=(--set-env-vars=DATABASE_ID="${DATABASE_ID}")
 }
 
 #######################################
@@ -1571,6 +1572,9 @@ set_cloud_functions_default_settings() {
 #######################################
 set_authentication_env_for_cloud_functions() {
   local -n default_cf_flag=$1
+  if [[ ! -z "${SECRET_NAME}" ]]; then
+    cf_flag+=(--set-env-vars=SECRET_NAME="${SECRET_NAME}")
+  fi
   if [[ -f "${SA_KEY_FILE}" ]]; then
     cf_flag+=(--set-env-vars=API_SERVICE_ACCOUNT="${SA_KEY_FILE}")
   fi

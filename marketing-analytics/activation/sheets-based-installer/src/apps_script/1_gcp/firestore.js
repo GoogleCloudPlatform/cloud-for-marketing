@@ -45,11 +45,12 @@ const APP_ENGINE_INTEGRATION_MODE = Object.freeze({
 
 class Firestore extends ApiBase {
 
-  constructor(projectId, path, kind) {
+  constructor(projectId, databaseId = DEFAULT_DATABASE, path, kind) {
     super();
     this.apiUrl = 'https://firestore.googleapis.com';
     this.version = 'v1';
     this.projectId = projectId;
+    this.databaseId = databaseId;
     this.path = path; // ${namespace}/database
     this.kind = kind;
   }
@@ -57,6 +58,14 @@ class Firestore extends ApiBase {
   /** @override */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
+  }
+
+  /** @override */
+  getDefaultHeader() {
+    const headers = super.getDefaultHeader();
+    headers['x-goog-request-params'] =
+      `project_id=${this.projectId}&database_id=${this.databaseId}`;
+    return headers;
   }
 
   /**
@@ -70,11 +79,12 @@ class Firestore extends ApiBase {
    *   }
    * }
    * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases/get
+   * @param {string=} databaseId
    * @return {Database}
    * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases#Database
    */
-  getDefaultDatabase() {
-    return super.get(`databases/${DEFAULT_DATABASE}`)
+  getDatabase(databaseId = this.databaseId) {
+    return super.get(`databases/${databaseId}`);
   }
 
   /**
@@ -109,18 +119,19 @@ class Firestore extends ApiBase {
    * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases/create
    * @param {string} locationId
    * @param {!DatabaseType} type
+   * @param {string=} databaseId
    * @param {!AppEngineIntegrationMode=} appEngineIntegrationMode
    * @return {!Operation}
    * @see https://cloud.google.com/firestore/docs/reference/rest/Shared.Types/Operation
    */
-  createDefaultDatabase(locationId, type,
+  createDatabase(locationId, type, databaseId = this.databaseId,
     appEngineIntegrationMode = APP_ENGINE_INTEGRATION_MODE.DISABLED) {
     const payload = {
       locationId,
       type,
       appEngineIntegrationMode,
     };
-    return this.mutate(`databases?databaseId=${DEFAULT_DATABASE}`, payload);
+    return this.mutate(`databases?databaseId=${databaseId}`, payload);
   }
 
   /**
@@ -130,11 +141,12 @@ class Firestore extends ApiBase {
    * @param {Object<string,object>} entities
    * @param {string} kind
    * @param {string} namespace
+   * @param {string=} databaseId
    * @return {!Firestore.Commit}
    * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/commit#google.firestore.v1.Firestore.Commit
    */
   txSave(entities, kind = this.kind, path = this.path) {
-    const urlPath = `databases/${DEFAULT_DATABASE}/documents`;
+    const urlPath = `databases/${this.databaseId}/documents`;
     const { transaction } = super.mutate(`${urlPath}:beginTransaction`,
       { options: { readWrite: {} } });
     const writes = Object.keys(entities).map((key) => {
@@ -149,7 +161,11 @@ class Firestore extends ApiBase {
       writes,
       transaction,
     };
-    return super.mutate(`${urlPath}:commit`, payload);
+    const response = super.mutate(`${urlPath}:commit`, payload);
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+    return response;
   }
 
   /**

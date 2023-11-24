@@ -16,11 +16,12 @@
 
 class Datastore extends ApiBase {
 
-  constructor(projectId, namespace, kind) {
+  constructor(projectId, databaseId = DEFAULT_DATABASE, namespace, kind) {
     super();
     this.apiUrl = 'https://datastore.googleapis.com';
     this.version = 'v1';
     this.projectId = projectId;
+    this.databaseId = databaseId === DEFAULT_DATABASE ? '' : databaseId;
     this.namespace = namespace;
     this.kind = kind;
   }
@@ -28,6 +29,14 @@ class Datastore extends ApiBase {
   /** @override */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
+  }
+
+  /** @override */
+  getDefaultHeader() {
+    const headers = super.getDefaultHeader();
+    headers['x-goog-request-params'] =
+      `project_id=${this.projectId}&database_id=${this.databaseId}`;
+    return headers;
   }
 
   /**
@@ -42,7 +51,7 @@ class Datastore extends ApiBase {
    */
   txSave(entities, kind = this.kind, namespace = this.namespace) {
     const { transaction } = super.mutate(':beginTransaction',
-      { transactionOptions: { readWrite: {} } });
+      { databaseId: this.databaseId, transactionOptions: { readWrite: {} } });
     /**
      * Create an array of entities.
      * @const {!Array<!Entity>}
@@ -53,7 +62,11 @@ class Datastore extends ApiBase {
         upsert: {
           //https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value#Key
           key: {
-            partitionId: { projectId: this.projectId, namespaceId: namespace, },
+            partitionId: {
+              projectId: this.projectId,
+              databaseId: this.databaseId,
+              namespaceId: namespace,
+            },
             path: [{ kind: kind, name: key, }]
           },
           properties: this.convertObject_(entities[key]),
@@ -62,10 +75,15 @@ class Datastore extends ApiBase {
     });
     const payload = {
       mode: 'TRANSACTIONAL',
+      databaseId: this.databaseId,
       mutations,
       transaction,
     };
-    return super.mutate(':commit', payload);
+    const response = super.mutate(':commit', payload);
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+    return response;
   }
 
   /**

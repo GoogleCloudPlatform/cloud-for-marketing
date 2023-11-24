@@ -25,6 +25,8 @@ const {
   Filter,
   TemplatedTxFunction,
   FirestoreAccessBase,
+  Database,
+  DEFAULT_DATABASE,
 } = require('./access_base.js');
 const NativeModeAccess = require('./native_mode_access.js');
 const DatastoreModeAccess = require('./datastore_mode_access.js');
@@ -33,8 +35,7 @@ const DatastoreModeAccess = require('./datastore_mode_access.js');
  * This is data access object base class on Firestore. It seals the details of
  * different underlying databases, Firestore and Datastore.
  * This class relies on an initial parameter in construtor to indicate the
- * Firestore type. If omitted, this parameter will take the value of the
- * environment variable named 'FIRESTORE_TYPE'.
+ * Firestore type.
  *
  * Firestore and Datastore have different transaction APIs. In that case,
  * separate DAOs are required to offer different functions in each mode.
@@ -45,22 +46,24 @@ class DataAccessObject {
    * Initializes the instance based on given data source.
    * @param {string} kind The data model name.
    * @param {string} namespace The namespace of the data.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database|!DataSource} database The database or data base type.
    * @param {string} projectId The Id of Cloud project.
    */
-  constructor(kind, namespace, dataSource = process.env['FIRESTORE_TYPE'],
-      projectId = process.env['GCP_PROJECT']) {
+  constructor(kind, namespace, database,
+    projectId = process.env['GCP_PROJECT']) {
     /** @const {string} */ this.namespace = namespace;
-    /** @const {!DataSource} */ this.dataSource = dataSource;
+    /** @const {!DataSource} */ this.dataSource =
+      typeof database === 'string' ? database : database.source;
+    const databaseId = database.id || DEFAULT_DATABASE;
     /** @type {!FirestoreAccessBase} */ this.accessObject = undefined;
     switch (this.dataSource) {
       case DataSource.FIRESTORE:
         this.accessObject = new NativeModeAccess(
-            `${this.namespace}/database/${kind}`, projectId);
+          `${this.namespace}/database/${kind}`, projectId, databaseId);
         break;
       case DataSource.DATASTORE:
         this.accessObject = new DatastoreModeAccess(this.namespace, kind,
-            projectId);
+          projectId, databaseId);
         break;
       default:
         throw new Error(`Unknown DataSource item: ${this.dataSource}.`);

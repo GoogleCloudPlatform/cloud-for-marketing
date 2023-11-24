@@ -28,6 +28,7 @@ const {TentaclesFileOnFirestore} = require('./tentacles_file_firestore.js');
  * @param {!DataSource|undefined=} dataSource The name of data source.
  * @param {string|undefined=} namespace
  * @return {!TentaclesFile} The object to manage Tentacles File.
+ * @deprecated
  */
 const getTentaclesFile = (dataSource = undefined, namespace = undefined) => {
   switch (dataSource) {
@@ -45,4 +46,5 @@ module.exports = {
   TentaclesFileEntity,
   TentaclesFile,
   getTentaclesFile,
+  TentaclesFileOnFirestore,
 };

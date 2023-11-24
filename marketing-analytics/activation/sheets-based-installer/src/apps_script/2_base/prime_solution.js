@@ -74,6 +74,7 @@ class PrimeSolution {
     this.locationId = options.locationId || 'us-central1';
     this.version = options.version;
     this.bucket = options.bucket;
+    this.databaseId = options.databaseId || DEFAULT_DATABASE;
     this.cloudFunctions = new CloudFunctions(this.projectId, this.locationId);
     this.secretName = options.secretName;
   }
@@ -244,6 +245,7 @@ Object.assign(module.exports, require('${this.getPackageName()}'));
       GCP_PROJECT: this.projectId,
       PROJECT_NAMESPACE: this.namespace,
       VERSION: this.getDeployVersion(),
+      DATABASE_ID: this.databaseId,
     }, variables);
   }
 

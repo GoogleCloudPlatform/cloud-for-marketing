@@ -23,7 +23,7 @@ const fs = require('fs');
 const {join} = require('path');
 const {
   api: {googleads: {GoogleAds}},
-  firestore: { DataSource, isNativeMode },
+  firestore: { getFirestoreDatabase },
 } = require('@google-cloud/nodejs-common');
 const {getSchemaFields} = require('./tasks/report/googleads_report_helper.js');
 const {TaskConfigDao} = require('./task_config/task_config_dao.js');
@@ -42,7 +42,7 @@ const {guessSentinel} = require('./sentinel.js');
  * @param {string} namespace Namespace for the Firestore.
  * @return {!Promise<!Array<{string:boolean}>>} Results records.
  */
-exports.uploadTaskConfig = (taskConfig, parameters = {},
+exports.uploadTaskConfig = async (taskConfig, parameters = {},
     namespace = process.env['PROJECT_NAMESPACE']) => {
   const tasks = JSON.parse(Object.keys(parameters).reduce(
       (previousValue, key) => {
@@ -50,25 +50,23 @@ exports.uploadTaskConfig = (taskConfig, parameters = {},
         return previousValue.replace(regExp, parameters[key]);
       },
       JSON.stringify(taskConfig)));
-  return isNativeMode().then((isNative) => {
-    const dataSource = (isNative) ? DataSource.FIRESTORE : DataSource.DATASTORE;
-    const taskConfigDao = new TaskConfigDao(dataSource, namespace);
-    const reduceFn = (previousResults, key) => {
-      return previousResults.then((results) => {
-        const task = tasks[key];
-        return taskConfigDao.update(task, key)
-            .then((id) => {
-              const taskInfo = `${task.type}[${id}]->[${task.next || ''}]`;
-              console.log(`Update Task Config ${taskInfo} successfully.`);
-              return true;
-            }).catch((error) => {
-              console.error(`Failed to update ${task.type}[${id}]`, error);
-              return false;
-            }).then((thisResult) => results.concat({[key]: thisResult}));
-      });
-    };
-    return Object.keys(tasks).reduce(reduceFn, Promise.resolve([]));
-  });
+  const database = await getFirestoreDatabase();
+  const taskConfigDao = new TaskConfigDao(database, namespace);
+  const reduceFn = (previousResults, key) => {
+    return previousResults.then((results) => {
+      const task = tasks[key];
+      return taskConfigDao.update(task, key)
+        .then((id) => {
+          const taskInfo = `${task.type}[${id}]->[${task.next || ''}]`;
+          console.log(`Update Task Config ${taskInfo} successfully.`);
+          return true;
+        }).catch((error) => {
+          console.error(`Failed to update ${task.type}[${id}]`, error);
+          return false;
+        }).then((thisResult) => results.concat({ [key]: thisResult }));
+    });
+  };
+  return Object.keys(tasks).reduce(reduceFn, Promise.resolve([]));
 };
 /**
  * Checks whether Sentinel can generate BigQuery schema for the report data

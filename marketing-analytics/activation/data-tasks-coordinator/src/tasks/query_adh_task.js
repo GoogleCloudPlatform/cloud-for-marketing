@@ -37,6 +37,7 @@ const {ErrorOptions} = require('../task_config/task_config_dao.js');
  *     title: (string|undefined),
  *     sql:(string|undefined),
  *     file:(!StorageFileConfig|undefined),
+ *     parameterTypes:({string:ParameterType}|undefined),
  *     spec: {
  *       startDate: {
  *         year: number,
@@ -48,6 +49,7 @@ const {ErrorOptions} = require('../task_config/task_config_dao.js');
  *         month: number,
  *         day: number,
  *       },
+ *       parameterValues:({string:ParameterValue}|undefined),
  *     },
  *   },
  *   destination:{
@@ -86,7 +88,13 @@ class QueryAdhTask extends BaseTask {
     const adh = this.getAdhInstance_(customerId);
 
     if (sql) {
-      const { name } = await adh.startTransientQuery(sql, spec, tableName);
+      const query = {
+        queryText: sql,
+      };
+      if (source.parameterTypes) {
+        query.parameterTypes = source.parameterTypes;
+      }
+      const { name } = await adh.startTransientQuery(query, spec, tableName);
       return {
         parameters: this.appendParameter({ [JOB_ID_PARAMETER]: name })
       };

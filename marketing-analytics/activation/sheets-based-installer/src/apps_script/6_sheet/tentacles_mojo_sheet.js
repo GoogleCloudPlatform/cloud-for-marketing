@@ -121,6 +121,7 @@ tentacles.installCloudFunctions = (functionName) => {
     locationId,
     namespace: getDocumentProperty('namespace'),
     version: getDocumentProperty('tentaclesVersion'),
+    databaseId: getDocumentProperty('databaseId', false),
     bucket: getDocumentProperty('tentaclesBucket'),
     outbound: getDocumentProperty('tentaclesOutbound'),
     secretName: getDocumentProperty('defaultSecretName', false),

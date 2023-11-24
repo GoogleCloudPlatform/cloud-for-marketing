@@ -391,18 +391,18 @@ class DfaReporting {
     throw new Error(`Unsupported report status: ${data.status}`);
   }
 
-  //TODO(lushu) check the response for very big file.
   /**
-   * Downloads the report file.
+   * Gets the stream of the report file.
    * @param {string} url
-   * @return {!Promise<string>}
+   * @return {!Promise<stream>}
    */
-  async downloadReportFile(url) {
+  async getReportFileStream(url) {
     const auth = await this.getAuth_();
     const headers = await auth.getRequestHeaders();
     const response = await request({
       method: 'GET',
       headers,
+      responseType: 'stream',
       url,
     });
     return response.data;

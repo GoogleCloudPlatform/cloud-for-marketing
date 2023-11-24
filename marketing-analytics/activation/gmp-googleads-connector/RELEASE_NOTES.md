@@ -1,5 +1,14 @@
 # Release Notes
 
+## 4.2.0 (2023-11-24)
+
+### Enhancements
+
+- Users now can create more than one Firestore databases in one Google Cloud
+Project with different modes. Tentacles has been upgraded to use any designated
+database regardless the mode. The feature is only available in the [new Google
+Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
+
 ## 4.1.0 (2023-11-03)
 
 ### Enhancements

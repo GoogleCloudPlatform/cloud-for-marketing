@@ -16,13 +16,25 @@
  * @fileoverview A base class for RESTful API with authorization client.
  */
 
-const { RestfuleApiBase } = require('./restful_api_base');
+const { RestfulApiBase } = require('./restful_api_base');
 const AuthClient = require('../auth_client.js');
 
 /**
  * A RESTful API class with authorization client.
  */
-class AuthRestfulApi extends RestfuleApiBase {
+class AuthRestfulApi extends RestfulApiBase {
+
+  constructor(env = process.env, options = {}) {
+    super(env);
+    /**
+     * `authClient` can be consumed by cloud client library as the auth
+     * client. By passing this in, we can offer more flexible auth clients in
+     * test cases for API client library and cloud client library in future.
+     */
+    if (options.authClient) {
+      this.auth = options.authClient;
+    }
+  }
 
   /**
    * Returns the Api scope for authorization.

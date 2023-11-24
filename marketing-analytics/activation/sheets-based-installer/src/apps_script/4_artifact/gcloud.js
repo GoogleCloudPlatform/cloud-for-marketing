@@ -71,7 +71,11 @@ gcloud.checkProject = (projectId) => {
       status = RESOURCE_STATUS.OK;
     }
   }
-  return { status, message };
+  return {
+    status,
+    message,
+    value_link: `https://console.cloud.google.com/welcome?project=${projectId}`,
+  };
 }
 
 /**
@@ -208,72 +212,87 @@ gcloud.getFirestoreDefaultLocationObject_ = (locationId, locations) => {
  * create the Firestore at the 'selected location' (from the `attributeValue` of
  * the `resource`) or the default location (from the document property).
  * Used property: projectId, locationId.
- * @param {string} mode
+ * @param {string} name
  * @param {Object} resource
  * @return {!CheckResult}
  */
-gcloud.checkFirestore = (mode, resource) => {
+gcloud.checkFirestore = (name, resource) => {
   const projectId = getDocumentProperty('projectId');
-  const modeDesc = mode ? mode : FIRESTORE_MODE.FIRESTORE_NATIVE;
-  const selectedLocation = resource.attributeValue;
-  const firestore = new Firestore(projectId);
+  const databaseId = name;
+
+  const { attributes, attributesMap } = resource;
+  const attrrbuteNames = ATTRIBUTE_NAMES.firestore;
+  const modeAttr = attributesMap[attrrbuteNames.mode];
+  const locationAttr = attributesMap[attrrbuteNames.location];
+
+  const selectedMode = modeAttr.attributeValue;
+  const selectedLocation = locationAttr.attributeValue;
+
+  const firestore = new Firestore(projectId, databaseId);
+
   const { locations = [], error: listLocationError } = firestore.listLocations();
+  locationAttr.attributeValue_datarange = locations.map(getLocationListName);
   if (listLocationError) {
     return {
       status: RESOURCE_STATUS.ERROR,
       message: listLocationError.message,
-      attributeValue_datarange: locations.map(getLocationListName),
+      attributes,
     };
   }
-  const { error, type, locationId } = firestore.getDefaultDatabase();
+  const { error, type, locationId } = firestore.getDatabase();
   if (error) {
     if (error.status === 'NOT_FOUND') {
       const locationId = getDocumentProperty('locationId');
+      const targetMode = selectedMode || FIRESTORE_MODE.FIRESTORE_NATIVE;
       const targetLocation = selectedLocation ||
         getLocationListName(
           gcloud.getFirestoreDefaultLocationObject_(locationId, locations));
+      modeAttr.attributeValue = targetMode;
+      locationAttr.attributeValue = targetLocation;
       return {
         status: RESOURCE_STATUS.READY_TO_INSTALL,
-        value: modeDesc,
-        attributeValue: targetLocation,
-        message: `Will create a ${modeDesc} Firestore in ${targetLocation}`,
-        attributeValue_datarange: locations.map(getLocationListName),
+        message: `Will create a ${targetMode} Firestore[${databaseId}] in ${targetLocation}`,
+        attributes,
       };
     }
     return {
       status: RESOURCE_STATUS.ERROR,
       message: error.message,
-      attributeValue_datarange: locations.map(getLocationListName),
+      attributes,
     };
   }
   const currentLocation =
     getLocationListName(getLocationObject(locations, locationId));
+  modeAttr.attributeValue = FIRESTORE_MODE[type];
+  locationAttr.attributeValue = currentLocation;
   return {
     status: RESOURCE_STATUS.OK,
     message:
-      mode === FIRESTORE_MODE[type] && selectedLocation === currentLocation
+      selectedMode === FIRESTORE_MODE[type] && selectedLocation === currentLocation
         ? '' : 'Updated mode and location to the existing Firestore in this GCP',
-    value: FIRESTORE_MODE[type],
-    attributeValue: currentLocation,
-    attributeValue_datarange: locations.map(getLocationListName),
+    attributes,
   };
 };
 
 /**
  * Creates a Firestore instance.
  * Used property: projectId.
- * @param {string} modeDesc
+ * @param {string} databaseId
  * @param {object} resource
  * @return {!CheckResult}
  */
-gcloud.createFirestore = (modeDesc, resource) => {
+gcloud.createFirestore = (databaseId, resource) => {
   const projectId = getDocumentProperty('projectId');
-  const selectedLocation = resource.attributeValue;
+
+  const { attributesMap } = resource;
+  const modeDesc = attributesMap['Mode'].attributeValue;
+  const selectedLocation = attributesMap['Location'].attributeValue;
+
   const locationId = getLocationId(selectedLocation);
   const mode = Object.keys(FIRESTORE_MODE).filter(
     (key) => FIRESTORE_MODE[key] === modeDesc)[0];
-  const firestore = new Firestore(projectId);
-  const response = firestore.createDefaultDatabase(locationId, mode);
+  const firestore = new Firestore(projectId, databaseId);
+  const response = firestore.createDatabase(locationId, mode, databaseId);
   const { done, error } = response;
   if (error) return { status: RESOURCE_STATUS.ERROR, message: error.message };
   if (!done) console.warn('Uncomplete create Firestore response', response);
@@ -288,18 +307,20 @@ gcloud.createFirestore = (modeDesc, resource) => {
  */
 gcloud.saveEntitiesToFirestore = (kind, entities) => {
   const projectId = getDocumentProperty('projectId');
-  const firestore = new Firestore(projectId);
-  const { error, type } = firestore.getDefaultDatabase();
+  const databaseId = getDocumentProperty('databaseId');
+  const firestore = new Firestore(projectId, databaseId);
+  const { error, type } = firestore.getDatabase();
   if (error) {
     throw new Error(error.message);
   }
   const namespace = getDocumentProperty('namespace');
   if (type === 'DATASTORE_MODE') {
-    const datastore = new Datastore(projectId, namespace, kind);
+    const datastore = new Datastore(projectId, databaseId, namespace, kind);
     const response = datastore.txSave(entities);
     return response.mutationResults;
   } else {
-    const firestore = new Firestore(projectId, `${namespace}/database`, kind);
+    const firestore =
+      new Firestore(projectId, databaseId, `${namespace}/database`, kind);
     const response = firestore.txSave(entities);
     return response.writeResults;
   }
@@ -490,19 +511,18 @@ gcloud.getBigQueryDefaultLocationObject_ = (locationId) => {
  * The list of properties are:
  * 1) partitionExpiration -> defaultPartitionExpirationMs
  * 2) tableExpiration -> defaultTableExpirationMs
+ *
+ * O
  * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets#Dataset
  * @return {object}
  * @private
+ * @deprecated
  */
-gcloud.getBigQueryOptions_ = () => {
+gcloud.getBigQueryOptions_ = (value = 0) => {
+  const valueMs = ((value - 0) * 24 * 3600 * 1000)//.toString();
   const options = {};
-  ['partitionExpiration', 'tableExpiration'].forEach((key) => {
-    const value = getDocumentProperty(key, false);
-    if (value) {
-      const propertyName = `default${key[0].toUpperCase() + key.slice(1)}Ms`;
-      options[propertyName] = ((value - 0) * 24 * 3600 * 1000).toString();
-    }
-  });
+  ['defaultPartitionExpirationMs']//, 'defaultTableExpirationMs'
+    .forEach((key) => { options[key] = valueMs; });
   return options;
 };
 
@@ -513,13 +533,27 @@ gcloud.getBigQueryOptions_ = () => {
  * Used property: projectId, locationId.
  *
  * @param {string} datasetId Dataset name.
- * @param {{attributeValue:(string|undefined)}} resource The `attributeValue`
- *   is the location of dataset.
+ * @param {Object} resource
  * @return {!CheckResult}
  */
 gcloud.checkDataset = (datasetId, resource) => {
   const projectId = getDocumentProperty('projectId');
-  const selectedLocation = resource.attributeValue;
+
+  const { attributes, attributesMap } = resource;
+  const attrrbuteNames = ATTRIBUTE_NAMES.bigquery;
+  const { attributeValue: partitionExpirationDay }
+    = attributesMap[attrrbuteNames.partitionExpiration];
+  const locationAttr = attributesMap[attrrbuteNames.location];
+
+  const partitionExpirationMs =
+    ((partitionExpirationDay - 0) * 24 * 3600 * 1000).toString();
+  const selectedLocation = locationAttr.attributeValue;
+
+  if (partitionExpirationMs <= 0) {
+    const message = 'Parition Expiration should be a positive number.';
+    return { status: RESOURCE_STATUS.ERROR, message };
+  }
+
   const bigquery = new BigQuery(projectId, datasetId);
   const dataset = bigquery.getDataset();
   const { error, location } = dataset;
@@ -534,9 +568,10 @@ gcloud.checkDataset = (datasetId, resource) => {
       }
       const targetLocation = selectedLocation ||
         getLocationListName(gcloud.getBigQueryDefaultLocationObject_(locationId));
+      locationAttr.attributeValue = targetLocation;
       return {
         status: RESOURCE_STATUS.READY_TO_INSTALL,
-        attributeValue: targetLocation,
+        attributes,
         message: `Will create a dataset[${datasetId}] at ${targetLocation}`,
       };
     } else {
@@ -549,22 +584,23 @@ gcloud.checkDataset = (datasetId, resource) => {
   updateDcoumentPropertyValue(`${resource.propertyName}Location`, location);
   const currentLocation =
     getLocationListName(getLocationObject(BIGQUERY_LOCATIONS, location));
+  locationAttr.attributeValue = currentLocation;
   const result = {
     status: RESOURCE_STATUS.OK,
-    attributeValue: currentLocation,
+    attributes,
     message: currentLocation !== selectedLocation ?
       'Updated location to the existing dataset.\n' : '',
   };
-  const bigQueryOptions = gcloud.getBigQueryOptions_();
-  const properties = Object.keys(bigQueryOptions);
-  if (properties.length > 0) {
-    const needsUpdate = properties.filter((property) => {
-      return (bigQueryOptions[property] === 0 && dataset[property] > 0) ||
-        (bigQueryOptions[property] > 0 && bigQueryOptions[property] !== dataset[property]);
-    })
-    if (needsUpdate.length > 0) {
-      result.status = RESOURCE_STATUS.READY_TO_INSTALL;
-      result.message += `Apply to update ${needsUpdate.join(', ')}`;
+  if (partitionExpirationMs !== dataset['defaultPartitionExpirationMs']) {
+    result.status = RESOURCE_STATUS.READY_TO_INSTALL;
+    result.message +=
+      `Apply to update partition expiration time (only affects for new time-partitioned tables).`;
+    const currentMs = dataset['defaultPartitionExpirationMs'];
+    if (!currentMs) {
+      result.message += ' There is not partition expiration setting now.';
+    } else {
+      result.message +=
+        ` Currently it is ${(currentMs - 0) / 1000 / 3600 / 24} days.`;
     }
   }
   return result;
@@ -581,7 +617,17 @@ gcloud.checkDataset = (datasetId, resource) => {
  */
 gcloud.createOrUpdateDataset = (datasetId, resource) => {
   const projectId = getDocumentProperty('projectId');
-  const selectedLocation = resource.attributeValue;
+
+  const { attributesMap } = resource;
+  const attrrbuteNames = ATTRIBUTE_NAMES.bigquery;
+  const partitionExpirationDayAttr
+    = attributesMap[attrrbuteNames.partitionExpiration];
+  const locationAttr = attributesMap[attrrbuteNames.location];
+
+  const partitionExpirationMs =
+    (partitionExpirationDayAttr.attributeValue - 0) * 24 * 3600 * 1000;
+  const selectedLocation = locationAttr.attributeValue;
+
   const locationId = getLocationId(selectedLocation);
   if (!locationId) {
     return {
@@ -590,9 +636,10 @@ gcloud.createOrUpdateDataset = (datasetId, resource) => {
     };
   }
   const bigquery = new BigQuery(projectId, datasetId);
-  const bigQueryOptions = gcloud.getBigQueryOptions_();
-  const response = bigquery.createOrUpdateDataset(
-    Object.assign({ location: locationId }, bigQueryOptions));
+  const response = bigquery.createOrUpdateDataset({
+    location: locationId,
+    defaultPartitionExpirationMs: partitionExpirationMs,
+  });
   const { error, id } = response;
   if (error) {
     return {

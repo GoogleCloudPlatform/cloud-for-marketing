@@ -29,6 +29,7 @@ const {TentaclesTaskOnFirestore} = require('./tentacles_task_firestore.js');
  * @param {!DataSource|undefined=} dataSource The name of data source.
  * @param {string|undefined=} namespace
  * @return {!TentaclesTask} The object to manage Tentacles Task.
+ * @deprecated
  */
 const getTentaclesTask = (dataSource = undefined, namespace = undefined) => {
   switch (dataSource) {
@@ -47,4 +48,5 @@ module.exports = {
   TentaclesTaskEntity,
   TentaclesTask,
   getTentaclesTask,
+  TentaclesTaskOnFirestore,
 };

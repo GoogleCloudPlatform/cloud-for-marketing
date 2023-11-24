@@ -29,6 +29,11 @@ let SheetLoadOptions;
 
 /**
  * The options to initialize the sheet for data and/or styles.
+ *   `columnsToBeMerged` is the columns will be merged vertically.
+ *   `columnesToBeMergedMap`, the columns will be merged vertically by the other
+ *     given column. By default, a column will be merged vertically if the
+ *     values are the same. This object defines other columns will be merged
+ *     veritically when the given column has the same value.
  * @typedef {{
  *   columnName: !Array<string>,
  *   columnFormat: !Object<string, (!RangeStyle|!Array<!RangeStyle>)>|undefined,
@@ -37,6 +42,8 @@ let SheetLoadOptions;
  *   columnConditionalFormat: !Object<string, string>|undefined,
  *   headlineStyle: !Object<string, string>|undefined,
  *   initialData: Array<Array<string|number>>,
+ *   columnsToBeMerged: !Array<string>|undefined,
+ *   columnsToBeMergedMap: !Object<string, !Array<string>>|undefined,
  * }}
  */
 let SheetConfig;
@@ -191,6 +198,7 @@ class EnhancedSheet {
       this.save([columns]);
     }
     this.setSheetStyle(sheetConfig, headlineStyle);
+    this.initMergeSettings(sheetConfig);
     const appendedData =
       typeof initialData === 'function' ? initialData() : initialData;
     if (appendedData.length > 0) {
@@ -227,6 +235,28 @@ class EnhancedSheet {
     const style = Object.assign({}, DEFAULT_HEADLINE_STYLE,
       headlineStyle || sheetConfig.headlineStyle);
     this.setHeadlineStyle_(columns, style);
+  }
+
+  /**
+   * Maps column-name-based definition of how to merge cells vertically into
+   * number-based (index of the columns) array or object to simplify the
+   * merge operation later.
+   * @param {!SheetConfig} sheetConfig
+   */
+  initMergeSettings(sheetConfig) {
+    const {
+      columnName,
+      columnsToBeMerged = [],
+      columnsToBeMergedMap = {}
+    } = sheetConfig;
+    this.mergedColumnIndexes = columnsToBeMerged.map(
+      (column) => columnName.indexOf(column)
+    );
+    this.mergedColumnIndexMap = {};
+    Object.keys(columnsToBeMergedMap).forEach((key) => {
+      this.mergedColumnIndexMap[columnName.indexOf(key)] =
+        columnsToBeMergedMap[key].map((value) => columnName.indexOf(value));
+    })
   }
 
   /**
@@ -419,48 +449,60 @@ class EnhancedSheet {
 
   /**
    * Merge the empty cells up to the non-empty one vertically.
-   * @param {Array<number>} mergedColumnIndexes Indexes of column need to be
-   *   merged into one cell when the display values are the same vertically.
-   *   This is 0-based.
-   * @param {number=} skipHeadLines Numbers of headline to be skipped. Default
-   *   value is 1.
+
+   * @param {number=} index Index of columns to be merged in the array
+   *   `this.mergedColumnIndexes`.
+   * @param {number=} startRowIndex Index of the begin row number. Because there
+   *   is a headline headline to be skipped, the default value is 1.
+   * @param {number=} endRowIndex Index of end row of the merge range. The rows
+   *   are grouped by order. The rows belong to a later column will not be
+   *   merged even if they belong to a different previous group. This parameter
+   *   limits how far a merge operation will go.
    */
-  mergeVertically(mergedColumnIndexes, skipHeadLines = 1) {
+  mergeVertically(index = 0, startRowIndex = 1,
+    endRowIndex = this.sheet.getLastRow() - 1) {
+    if (index >= this.mergedColumnIndexes.length) return;
     const cellValues = this.sheet
-      .getRange(1, 1, this.sheet.getLastRow(), this.sheet.getLastColumn())
+      .getRange(1, this.mergedColumnIndexes[index] + 1, endRowIndex + 1, 1)
       .getDisplayValues();
-    mergedColumnIndexes.forEach((index) => {
-      let startRow = skipHeadLines;
-      let previousValue = cellValues[startRow][index];
-      for (let i = skipHeadLines + 1; i < cellValues.length; i++) {
-        const value = cellValues[i][index];
-        if (value !== previousValue) {
-          if (startRow + 1 < i) { // Merge when there are multiple lines.
-            this.mergeVertical_(index, startRow, i - 1);
-          }
-          previousValue = value;
-          startRow = i;
+    let startRow = startRowIndex;
+    let previousValue = cellValues[startRow][0];
+    for (let i = startRow + 1; i < cellValues.length; i++) {
+      const value = cellValues[i][0];
+      if (value !== previousValue) {
+        if (startRow + 1 < i) { // Merge when there are multiple lines.
+          this.mergeVertical_(index, startRow, i - 1);
         }
+        previousValue = value;
+        startRow = i;
       }
-      if (startRow + 1 < cellValues.length) {
-        this.mergeVertical_(index, startRow, cellValues.length - 1);
-      }
-    });
+    }
+    if (startRow + 1 < cellValues.length) {
+      this.mergeVertical_(index, startRow, cellValues.length - 1);
+    }
   }
 
   /**
-   * Merges cells at column `columnIndex` from row `startRow` to `endRow`.
-   * All the indexes are 0-based.
-   *
-   * @param {number} columnIndex
-   * @param {number} startRowIndex
-   * @param {number} endRowIndex
+   * Merges cells at column based on the given `index` from row `startRowIndex`
+   * to `endRowIndex`. All the indexes are 0-based.
+   * @param {number} index Index of columns to be merged in the array
+   *   `this.mergedColumnIndexes`.
+   * @param {number} startRowIndex Index of start row of the merge range.
+   * @param {number} endRowIndex Index of end row of the merge range.
    * @private
    */
-  mergeVertical_(columnIndex, startRowIndex, endRowIndex) {
-    this.sheet.getRange(
-      startRowIndex + 1, columnIndex + 1, endRowIndex - startRowIndex + 1, 1)
-      .merge();
+  mergeVertical_(index, startRowIndex, endRowIndex) {
+    const mainColumnIndex = this.mergedColumnIndexes[index];
+    const columnsToBeMerged = [mainColumnIndex];
+    if (this.mergedColumnIndexMap[mainColumnIndex]) {
+      columnsToBeMerged.push(...this.mergedColumnIndexMap[mainColumnIndex]);
+    }
+    columnsToBeMerged.forEach((columnIndex) => {
+      this.sheet.getRange(
+        startRowIndex + 1, columnIndex + 1, endRowIndex - startRowIndex + 1, 1)
+        .merge();
+    });
+    this.mergeVertically(index + 1, startRowIndex, endRowIndex);
   }
 
   /**

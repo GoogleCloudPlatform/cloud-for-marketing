@@ -95,6 +95,7 @@ sentinel.installCloudFunctions = (functionName) => {
     locationId,
     namespace: getDocumentProperty('namespace'),
     version: getDocumentProperty('sentinelVersion'),
+    databaseId: getDocumentProperty('databaseId', false),
     bucket: getDocumentProperty('sentinelBucket', false),
     inbound: getDocumentProperty('sentinelInbound', false),
     secretName: getDocumentProperty('defaultSecretName', false),

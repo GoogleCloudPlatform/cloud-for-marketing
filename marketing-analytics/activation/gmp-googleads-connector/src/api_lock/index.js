@@ -28,6 +28,7 @@ const {ApiLockDao} = require('./api_lock_dao.js');
  * @param {!DataSource|undefined=} dataSource
  * @param {string|undefined=} namespace
  * @return {!ApiLock}
+ * @deprecated
  */
 const getApiLock = (dataSource = undefined, namespace = undefined) => {
   switch (dataSource) {
@@ -43,4 +44,5 @@ const getApiLock = (dataSource = undefined, namespace = undefined) => {
 module.exports = {
   ApiLock,
   getApiLock,
+  ApiLockDao,
 };

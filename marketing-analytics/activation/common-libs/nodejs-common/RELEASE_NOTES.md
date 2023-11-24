@@ -1,5 +1,11 @@
 # Release Notes
 
+## 2.0.0 (2023-11-24)
+
+### Firestore's non-default database is supported
+### Ads Data Hub supports parameter definition
+### Download Campaign Manager reports as streams
+
 ## 1.9.0 (2023-10-12)
 
 ### Update to the v14 of the Google Ads API

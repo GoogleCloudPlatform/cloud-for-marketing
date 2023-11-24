@@ -108,7 +108,9 @@ class AdsDataHub extends AuthRestfulApi {
    * to the specified BigQuery destination table. The returned operation name
    * can be used to poll for query completion status.
    * @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries/startTransient
-   * @param {string} queryText The content of the query.
+   * @param {!AnalysisQuery} query An analysis query that can be executed within
+   *     Ads Data Hub. Its properties include 'queryText', 'parameterTypes', etc.
+   *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/customers.analysisQueries#AnalysisQuery
    * @param {Object} spec Defines the query execution parameters.
    *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/QueryExecutionSpec
    * @param {string} destTable Destination BigQuery table for query results with
@@ -121,9 +123,9 @@ class AdsDataHub extends AuthRestfulApi {
    * @return {!Promise<Object>} Promised operation object.
    *     @see https://developers.google.com/ads-data-hub/reference/rest/v1/operations#Operation
    */
-  async startTransientQuery(queryText, spec, destTable, customerId = this.customerId) {
+  async startTransientQuery(query, spec, destTable, customerId = this.customerId) {
     const path = `customers/${customerId}/analysisQueries:startTransient`;
-    const data = { query: { queryText }, spec, destTable };
+    const data = { query, spec, destTable };
     const response = await this.request(path, 'POST', data);
     return response.data;
   }

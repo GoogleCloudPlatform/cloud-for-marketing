@@ -23,6 +23,7 @@ const {
   firestore: {
     TransactionOperation,
     DataAccessObject,
+    Database,
   },
   utils: { getLogger },
 } = require('@google-cloud/nodejs-common');
@@ -95,15 +96,15 @@ class TaskLogDao extends DataAccessObject {
 
   /**
    * Initializes TaskLog Dao instance.
-   * @param {!DataSource} dataSource The data source type.
+   * @param {!Database} database The database.
    * @param {string=} namespace The namespace of the data. The default value is
    *   'sentinel'.
    * @param {string=} projectId GCP project Id. The default value is the env
    *   variable 'GCP_PROJECT'.
    */
-  constructor(dataSource, namespace = 'sentinel',
+  constructor(database, namespace = 'sentinel',
     projectId = process.env['GCP_PROJECT']) {
-    super('TaskLog', namespace, dataSource, projectId);
+    super('TaskLog', namespace, database, projectId);
     this.logger = getLogger('S.TaskLog');
   }
 

@@ -29,6 +29,7 @@ const {ApiConfigOnFirestore} = require('./api_config_firestore.js');
  * @param {!ApiConfigJson|!DataSource} apiConfigSource Source of the ApiConfig.
  * @param {string|undefined=} namespace
  * @return {!ApiConfig} Api configuration host object.
+ * @deprecated
  */
 const getApiConfig = (apiConfigSource, namespace = undefined) => {
   switch (apiConfigSource) {

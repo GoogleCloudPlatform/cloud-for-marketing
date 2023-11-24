@@ -27,6 +27,10 @@ const {
   DocumentData,
   Transaction: NativeModeTransaction,
 } = require('@google-cloud/firestore');
+const {
+  FirestoreApi,
+  DEFAULT_DATABASE,
+} = require('./firestore_api.js');
 
 /**
  * Document in Native mode or Entity in Datastore mode.
@@ -121,6 +125,17 @@ const DataSource = Object.freeze({
   FIRESTORE: 'firestore',
   DATASTORE: 'datastore',
 });
+
+/**
+ * Definition of a database. Currently, it supports:
+ * 1. Firestore Native mode
+ * 2. Firestore Datastore mode
+ * @typedef {(
+ *   source: !DataSource,
+ *   id: string,
+ * )}
+ */
+let Database;
 
 /**
  * Firestore has two modes: 'Native' and 'Datastore'. Only one of them can be
@@ -218,8 +233,31 @@ class FirestoreAccessBase {
 
 /**
  * Returns whether the mode of Firestore is 'Native'.
+ * @param {string} projectId GCP project Id.
+ * @param {string=} databaseId GCP project Id.
+ * @return {!Promise<!Database>}
+ */
+async function getFirestoreDatabase(projectId, databaseId = DEFAULT_DATABASE) {
+  try {
+    const firestore = new FirestoreApi(process.env, { projectId, databaseId });
+    const type = await firestore.getFirestoreMode();
+    console.log(`Get Firestore ${databaseId}@${projectId}, mode: ${type}`);
+    return {
+      source: DataSource[type],
+      id: firestore.databaseId,
+    };
+  } catch (error) {
+    console.error(`Failed to get Firestore ${databaseId}@${projectId}: `,
+      error.message);
+    throw error;
+  }
+};
+
+/**
+ * Returns whether the mode of Firestore is 'Native'.
  * @param {string=} projectId GCP project Id.
  * @return {!Promise<boolean>}
+ * @deprecated
  */
 async function isNativeMode(projectId = process.env['GCP_PROJECT']) {
   try {
@@ -237,8 +275,12 @@ module.exports = {
   Transaction,
   Filter,
   TransactionOperation,
+  Database,
   DatastoreDocumentFacade,
   DatastoreTransactionFacade,
   FirestoreAccessBase,
+  getFirestoreDatabase,
+  DEFAULT_DATABASE,
+  FirestoreApi,
   isNativeMode,
 };

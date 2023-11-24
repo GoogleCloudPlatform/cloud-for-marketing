@@ -24,7 +24,7 @@ const {
   CollectionReference,
   OrderByDirection,
 } = require('@google-cloud/firestore');
-const {FirestoreAccessBase} = require('./access_base.js');
+const { FirestoreAccessBase, DEFAULT_DATABASE } = require('./access_base.js');
 const {getLogger} = require('../utils.js');
 
 /**
@@ -41,11 +41,13 @@ class NativeModeAccess {
    * way. This constructor will check the path to make sure it presents a
    * 'collection', otherwise an Error will be thrown.
    * @param {string} path Path for the 'collection'.
-   * @param {string} projectId The Id of Cloud project.
+   * @param {string=} projectId The Id of Cloud project.
+   * @param {string=} databaseId The Id of Firestore database.
    */
-  constructor(path, projectId = process.env['GCP_PROJECT']) {
+  constructor(path, projectId = process.env['GCP_PROJECT'],
+    databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) {
     /** @type {!Firestore} */
-    this.firestore = new Firestore({projectId});
+    this.firestore = new Firestore({ projectId, databaseId });
     if (path.split('/').length % 2 === 0) {
       throw new Error(`Invalid path for Collection: ${path}`);
     }
