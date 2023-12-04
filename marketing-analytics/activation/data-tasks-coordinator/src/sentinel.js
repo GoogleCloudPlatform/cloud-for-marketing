@@ -127,7 +127,7 @@ class Sentinel {
         const partitionDay = getDatePartition(file.name);
         return Promise.all(taskIds.map((taskId) => {
           this.logger.debug(`Trigger Load task: ${taskId}.`);
-          const parameters = JSON.stringify({ file, partitionDay }); å
+          const parameters = JSON.stringify({ file, partitionDay });
           return this.taskManager.sendTaskMessage(parameters, { taskId });
         }));
       } catch (error) {
@@ -145,7 +145,7 @@ class Sentinel {
    * @private
    */
   async getTaskIdByFile_(fileName) {
-    const regex = /task\[([\w-]*)]/i;
+    const regex = /task[\[|{}]([\w-]*)[\]|}]/i;
     const task = fileName.match(regex);
     if (task) return [task[1]];
     const matchesFileNamePattern = ({ source = {} }) => {
@@ -670,7 +670,7 @@ const getSentinel = async (namespace, database) => {
     validatedStorageTrigger,
   };
   console.log(
-    `Init Sentinel for namespace[${namespace}], Datasource[${database}]`);
+    `Init Sentinel for namespace[${namespace}], Datasource[${database.id}]`);
   return new Sentinel(options);
 };
 
