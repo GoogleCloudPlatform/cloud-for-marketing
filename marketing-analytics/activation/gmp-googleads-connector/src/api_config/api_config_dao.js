@@ -21,14 +21,13 @@
 
 const { firestore: { Database, DataAccessObject } }
   = require('@google-cloud/nodejs-common');
-const {ApiConfig} = require('./api_config.js');
+const { ApiConfigItem } = require('../api_handlers/index.js');
 
 /**
- * ApiConfig based on Firestore Native mode.
+ * ApiConfig data access object.
  *
- * @implements {ApiConfig}
  */
-class ApiConfigOnFirestore extends DataAccessObject {
+class ApiConfigDao extends DataAccessObject {
 
   /**
    * Initializes ApiConfig Dao instance.
@@ -51,21 +50,38 @@ class ApiConfigOnFirestore extends DataAccessObject {
     return `${apiName}.${configName}`;
   }
 
-  /** @override */
+  /**
+   * Gets a configuration for a given API and configuration name.
+   * @param {string} apiName API name.
+   * @param {string} configName Configuration name.
+   * @return {!Promise<!ApiConfigItem>} Configuration for the given API name and
+   *     configuration name.
+   */
   getConfig(apiName, configName) {
     return this.load(this.getId_(apiName, configName));
   }
 
-  /** @override */
+  /**
+   * Saves a configuration based on a given API and configuration name.
+   * @param {string} apiName API name.
+   * @param {string} configName Configuration name.
+   * @param {!ApiConfigItem} configObject Configuration content in JSON format.
+   * @return {!Promise<boolean>} Whether this operation succeeded or not.
+   */
   async saveConfig(apiName, configName, configObject) {
     await this.update(configObject, this.getId_(apiName, configName));
     return true;
   }
 
-  /** @override */
+  /**
+   * Deletes a configuration based on a given API and configuration name.
+   * @param {string} apiName API name.
+   * @param {string} configName Configuration name.
+   * @return {!Promise<boolean>} Whether this operation succeeded or not.
+   */
   deleteConfig(apiName, configName) {
     return this.remove(this.getId_(apiName, configName));
   }
 }
 
-exports.ApiConfigOnFirestore = ApiConfigOnFirestore;
+module.exports = { ApiConfigDao };

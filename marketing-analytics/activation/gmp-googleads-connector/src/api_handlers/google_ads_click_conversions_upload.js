@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: {googleads: {GoogleAds, ConversionConfig}},
+  api: { googleadsapi: { GoogleAdsApi: GoogleAds, ConversionConfig } },
   utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
 const { ApiHandler } = require('./api_handler.js');
@@ -117,7 +117,7 @@ class GoogleAdsClickConversionUpload extends ApiHandler {
       result: true,
       numberOfLines: lines.length,
   };
-    googleAds.updateBatchResultWithError(batchResult, error, lines, 2);
+    googleAds.updateBatchResultWithError(batchResult, error, lines, 0);
     return batchResult;
   }
 

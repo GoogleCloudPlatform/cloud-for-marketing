@@ -19,6 +19,7 @@
 'use strict';
 
 const {join} = require('path');
+const { request } = require('gaxios');
 const {StorageFile} = require('./storage.js');
 /** Type definition of 'Cloud Storage Object' for Cloud Functions. */
 const {storage_v1: {Schema$Object: StorageEventData}} = require('googleapis');
@@ -75,11 +76,58 @@ let EventContext;
 let CloudFunction;
 
 /**
+ * Tries to move the original file to another specific fold before run the
+ * main function. Sometimes there are duplicated GCS trigger events for Cloud
+ * Functions, in order to solve that, the function will move the file to the
+ * target folder before invoke the function.
+ * After the file is successfully moved, invoke the main function with the
+ * moved file.
+ *
+ * @param {!MainFunctionOfStorage} fn The main function to run on the file.
+ * @param {string} folder The folder that the main function should check.
+ * @param {string} messageTag The tag that is used to mark logs.
+ * @param {string=} processed The folder that the file will be moved to.
+ * @return {!Promise<string>} The result of the main function.
+ */
+const moveAndProcessFile = async (fn, file, messageTag,
+  processed = 'processed/') => {
+  const fileName = file.name;
+  try {
+    const fileObj = new StorageFile(file.bucket, fileName);
+    const [newFile] = await fileObj.getFile().move(join(processed, fileName));
+    console.log(`${messageTag} move '${fileName}' to '${newFile.name}'`);
+    const result = await fn({
+      name: newFile.name,
+      oldName: fileName,
+      bucket: file.bucket,
+      size: file.size,
+      updated: file.updated,
+    });
+    const message =
+      `${messageTag} completed. ${newFile.name} triggered the Cloud Functions.`;
+    console.log(message);
+    return result;
+  } catch (error) {
+    let message;
+    if (error.message.startsWith('file#delete failed with an error')) {
+      message =
+        `${messageTag} quit. Fail to move ${fileName}. Maybe duplicated.`;
+    } else {
+      message =
+        `${messageTag} failed. ${fileName} got an error: ${error.message}`;
+    }
+    console.warn(message);
+    throw new Error(message);
+  }
+}
+
+/**
  * Triggers the main function with the correct new coming file for once.
  * Detailed steps:
  * 1. Checks the coming file is in the proper folder. In case there are
  * different Cloud Functions with different purposes monitoring on the same
  * Storage Bucket, Cloud Functions can be distinguished with its own 'folder';
+ * It invokes function `moveAndProcessFile` to achieve following two things:
  * 2. Tries to move the original file to another specific fold before run the
  * main function. Sometimes there are duplicated GCS trigger events for Cloud
  * Functions, in order to solve that, the function will move the file to the
@@ -89,10 +137,10 @@ let CloudFunction;
  *
  * @param {!MainFunctionOfStorage} fn The main function to run on the file.
  * @param {string} folder The folder that the main function should check.
- * @param {string=} processed The folder that the file will be moved to.
+ * @param {string|undefined} processed The folder that the file will be moved to.
  * @return {!CloudFunction} The Cloud Functions that will be exported.
  */
-const validatedStorageTrigger = (fn, folder, processed = 'processed/') => {
+const validatedStorageTrigger = (fn, folder, processed) => {
   /**
    * Returns the Cloud Function that can handle duplicated Storage triggers.
    * @type {!CloudFunction}
@@ -107,34 +155,32 @@ const validatedStorageTrigger = (fn, folder, processed = 'processed/') => {
       console.log(message);
       return message;
     }
-    try {
-      const fileObj = new StorageFile(file.bucket, fileName);
-      const [newFile] = await fileObj.getFile().move(join(processed, fileName));
-      console.log(`Event[${eventId}] move: '${fileName}' to '${newFile.name}'`);
-      await fn({
-        name: newFile.name,
-        oldName: fileName,
-        bucket: file.bucket,
-        size: file.size,
-        updated: file.updated,
-      });
-      const message =
-        `Event[${eventId}] completed: ${newFile.name} triggered the Cloud Functions.`;
-      console.log(message);
-      return message;
-    } catch (error) {
-      let message;
-      if (error.message.startsWith('file#delete failed with an error')) {
-        message = `Quit event[${eventId}]: Fail to move ${fileName}. Maybe duplicated.`;
-      } else {
-        message = `Event[${eventId}] triggered: ${fileName} Cloud Functions got an error: ${error.message}`;
-      }
-      console.warn(message);
-      return message;
-    }
+    return moveAndProcessFile(fn, file, `Event[${eventId}]`, processed);
   };
   return handleFile;
 };
+
+/**
+ * Returns an Id token by using the Metadata Server for the given Cloud
+ * Functions Url.
+ * @see https://cloud.google.com/functions/docs/securing/function-identity#identity_tokens
+ * @param {string} functionUrl
+ * @return {string}
+ */
+const getIdTokenForFunction = async (functionUrl) => {
+  const METADATA_SERVER_URL =
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=';
+  const tokenUrl = METADATA_SERVER_URL + functionUrl;
+  const tokenResponse = await request({
+    url: tokenUrl,
+    headers: { 'Metadata-Flavor': 'Google' },
+    method: 'POST',
+    responseType: 'text',
+  });
+  const token = tokenResponse.data;
+  if (!token) throw new Error('Fail to get ID token for ' + functionUrl);
+  return token;
+}
 
 /**
  * Cloud Functions has a specific folder to host deployed source code. The
@@ -178,6 +224,8 @@ module.exports = {
   MainFunctionOfStorage,
   EventContext,
   CloudFunction,
+  moveAndProcessFile,
   validatedStorageTrigger,
+  getIdTokenForFunction,
   convertEnvPathToAbsolute,
 };

@@ -31,11 +31,11 @@ const {
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/display-video',
 ]);
-const API_VERSION = 'v2';
+const API_VERSION = 'v3';
 
 /**
- * Display and Video 360 API v2 stub.
- * @see https://developers.google.com/display-video/api/reference/rest/v2
+ * Display and Video 360 API v3 stub.
+ * @see https://developers.google.com/display-video/api/reference/rest/v3
  * This is not the same to Reports Display & Video 360 API which is from Google
  * Bid Manager API.
  * @see https://developers.google.com/bid-manager/reference/rest

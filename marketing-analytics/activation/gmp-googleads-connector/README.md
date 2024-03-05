@@ -29,7 +29,7 @@ way.
 - [4. API Details](#4-api-details)
   - [4.1. MP: Google Analytics Measurement Protocol](#41-mp-google-analytics-measurement-protocol)
   - [4.2. GA: Google Analytics Data Import](#42-ga-google-analytics-data-import)
-  - [4.3. CM: DCM/DFA Reporting and Trafficking API to upload offline conversions](#43-cm-dcmdfa-reporting-and-trafficking-api-to-upload-offline-conversions)
+  - [4.3. CM: Campaign Manager 360 insert/update offline conversions](#43-cm-campaign-manager-360-insertupdate-offline-conversions)
   - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
   - [4.5. GS: Google Ads conversions/store-sales scheduled uploads based on Google Sheets](#45-gs-google-ads-conversionsstore-sales-scheduled-uploads-based-on-google-sheets)
   - [4.6. SA: Search Ads 360 conversions insert](#46-sa-search-ads-360-conversions-insert)
@@ -466,7 +466,7 @@ Follow these steps to get the dashboard ready:
 1471305204.1541378885,NO
 ```
 
-### 4.3. CM: DCM/DFA Reporting and Trafficking API to upload offline conversions
+### 4.3. CM: Campaign Manager 360 insert/update offline conversions
 
 | API Specification      | Value                                                                                                                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -480,7 +480,7 @@ Follow these steps to get the dashboard ready:
 | Request Type           | HTTP Request to RESTful endpoint                                                                                                                                                              |
 | \# Records per request | 1,000                                                                                                                                                                                         |
 | QPS                    | 1                                                                                                                                                                                             |
-| Reference              | [Overview: DCM/DFA Reporting and Trafficking API's Conversions service][conversions_overview]                                                                                                 |
+| Reference              | [Overview: Campaign Manager 360 API's Conversions service][conversions_overview]                                                                                                 |
 
 [create_user_profile]: https://support.google.com/dcm/answer/6098287?hl=en
 [conversions_overview]: https://developers.google.com/doubleclick-advertisers/guides/conversions_overview
@@ -492,6 +492,7 @@ Follow these steps to get the dashboard ready:
   "cmAccountId": "[YOUR-DCM-ACCOUNT-ID]",
   "cmConfig": {
     "idType": "encryptedUserId",
+    "operation": "insert|update|undefined",
     "conversion": {
       "floodlightConfigurationId": "[YOUR-FL-CONFIG-ID]",
       "floodlightActivityId": "[YOUR-FL-ACTIVITY-ID]",
@@ -519,6 +520,9 @@ Follow these steps to get the dashboard ready:
     Manager 360 via a Floodlight tag.
     - `mobileDeviceId`, an unencrypted mobile ID in the IDFA or AdID
     format.
+  - `operation`, optional, values can be `insert` or `update`. This setting
+    determines the conversions to be inserted or updated. If this is not
+    specified, it will be taken as `insert`.
   - `conversion`, common properties for a conversion, e.g. floodlight info.
     - `quantity`, the quantity of the conversion. This is a required field.
   - `customVariables`, an array of user variable names. It can be omitted if
@@ -733,7 +737,7 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API Code               | ACLC                                                                                                                                                             |
 | Data Format            | JSONL                                                                                                                                                            |
-| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_api]. |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Google Ads API endpoint. |
 | **Usage Scenarios**    | Uploading offline sales and other valuable actions to target and optimize your campaigns for increased profit based on better data.                              |
 | Transfer Data on       | Pub/Sub                                                                                                                                                          |
 | Authorization Method   | OAuth                                                                                                                                                            |
@@ -743,7 +747,6 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
 | QPS                    | -                                                                                                                                                                |
 | Reference              | [Overview: Offline Conversion Imports][offline_conversions_overview]                                                                                             |
 
-[google_ads_api]: https://opteo.com/dev/google-ads-api#upload-conversionclick
 [offline_conversions_overview]: https://developers.google.com/google-ads/api/docs/conversions/overview#offline_conversions
 
 - _Sample configuration piece:_
@@ -755,11 +758,15 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "debug": false,
   "adsConfig": {
-    "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
-    "conversion_value": "[YOUR-CONVERSION-VALUE]",
-    "currency_code": "[YOUR-CURRENCY-CODE]",
-    "user_identifier_source": "[USER_IDENTIFIER_SOURCE]",
-    "custom_variable_tags": "[YOUR-CUSTOM-VARIABLE-TAGS]"
+    "conversionAction": "[YOUR-CONVERSION-ACTION-NAME]",
+    "conversionValue": "[YOUR-CONVERSION-VALUE]",
+    "currencyCode": "[YOUR-CURRENCY-CODE]",
+    "userIdentifierSource": "[USER_IDENTIFIER_SOURCE]",
+    "customVariableTags": "[YOUR-CUSTOM-VARIABLE-TAGS]",
+    "consent": {
+      "adUserData": "GRANTED|DENIED|undefined",
+      "adPersonalization": "GRANTED|DENIED|undefined"
+    }
   }
 }
 ```
@@ -771,15 +778,17 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
   - `debug`, optional, default value is `false`. If it's set as `true`,
     the request is validated but not executed. Only errors are returned.
   - `adsConfig`, configuration items for [click conversions][click_conversion]:
-    - `conversion_action`, Resource name of the conversion action in the
+    - `conversionAction`, Resource name of the conversion action in the
       format `customers/${customerId}/conversionActions/${conversionActionId}`.
-    - `conversion_value`, The default value of the conversion for the advertiser
-    - `currency_code`, The default currency associated with conversion value;
+    - `conversionValue`, The default value of the conversion for the advertiser
+    - `currencyCode`, The default currency associated with conversion value;
       ISO 4217 3 character currency code e.g. EUR, USD.
-    - `user_identifier_source`: If you uploaded user identifiers in the
+    - `userIdentifierSource`: If you uploaded user identifiers in the
       conversions, you need to specify the [source][user_identifier].
-    - `custom_variable_tags`: An array of custom variable tags. The related
+    - `customVariableTags`: An array of custom variable tags. The related
       key-value pairs should be available in data.
+    - `consent`: Optional. The default consent setting for the event. The
+      `consent` in each conversion data will overwrite the value here.
 
 [click_conversion]: https://developers.google.com/google-ads/api/reference/rpc/latest/ClickConversion
 [user_identifier]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier
@@ -789,7 +798,7 @@ EAIaIQobChMI8rrrq62x4wIVQbDtCh2D3QU0EAAYAiAAEgIFAKE_BwE,foo,2019-07-13 00:01:00,
 Attributed to a Google Click Identifier (`gclid`):
 
 ```
-{"conversion_date_time": "2020-01-01 03:00:00-18:00", "conversion_value": "20", "gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
+{"conversionDateTime": "2020-01-01 03:00:00-18:00", "conversionValue": "20", "gclid": "EAIaIQobChMI3_fTu6O4xxxPwEgEAAYASAAEgK5VPD_example"}
 ```
 
 ### 4.8. ACM: Google Ads Customer Match upload via API
@@ -798,7 +807,7 @@ Attributed to a Google Click Identifier (`gclid`):
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API Code               | ACM                                                                                                                                                               |
 | Data Format            | JSONL                                                                                                                                                             |
-| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_node]. |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Google Ads API endpoint. |
 | **Usage Scenarios**    | Customer Match lets you use your online and offline data to reach and re-engage with your customers across Search, Shopping, Gmail, YouTube, and Display.         |
 | Transfer Data on       | Pub/Sub                                                                                                                                                           |
 | Authorization Method   | OAuth                                                                                                                                                             |
@@ -808,7 +817,6 @@ Attributed to a Google Click Identifier (`gclid`):
 | QPS                    | -                                                                                                                                                                 |
 | Reference              | [Overview: Customer Match][customer_match_overview]                                                                                                               |
 
-[google_ads_node]: https://github.com/Opteo/google-ads-api
 [customer_match_overview]: https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match
 
 - _Sample configuration piece:_
@@ -817,11 +825,17 @@ Attributed to a Google Click Identifier (`gclid`):
 {
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "customerMatchConfig": {
-    "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
-    "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
-    "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-    "list_name": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
-    "upload_key_type": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID",
+    "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+    "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+    "listId": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+    "listName": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+    "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID",
+    "customerMatchUserListMetadata": {
+      "consent":{
+        "adUserData": "GRANTED|DENIED",
+        "adPersonalization": "GRANTED|DENIED"
+      }
+    },
     "operation": "create|remove"
   }
 }
@@ -829,18 +843,24 @@ Attributed to a Google Click Identifier (`gclid`):
 
 - Fields' definition:
   - `developerToken`, Developer token to access the API.
-  - `customer_id`, Google Ads Customer account Id
-  - `login_customer_id`, Login customer account Id (MCC Account Id)
-  - `list_id`, User List id for customer match audience. If `list_id` is
-    available `list_name` and `upload_key_type` will be ignored.
-  - `list_name`, User List name for customer match audience. If the list could
+  - `customerId`, Google Ads Customer account Id
+  - `loginCustomerId`, Login customer account Id (MCC Account Id)
+  - `listId`, User List id for customer match audience. If `listId` is
+    available `listName` and `uploadKeyType` will be ignored.
+  - `listName`, User List name for customer match audience. If the list could
     not be found, it will be created automatically.
-  - `upload_key_type`, Customer match upload key types. Must be one of the
+  - `uploadKeyType`, Customer match upload key types. Must be one of the
     following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
     [Read more about upload key types][upload_key_type]
-  - `operation`, Can be either create or remove in single file; [Read more about operation][user_data_operation]
+  - `customerMatchUserListMetadata`, metadata of the request
+    ([CustomerMatchUserListMetadata][customer_match_userlist_metadata]). It
+    can have a property `consent` which is the consent setting for all the users
+    in this job.
+  - `operation`, Can be either create or remove in single file;
+    [Read more about operation][user_data_operation]
 
-[upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
+[upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/latest/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
+[customer_match_userlist_metadata]: https://developers.google.com/google-ads/api/reference/rpc/latest/CustomerMatchUserListMetadata
 [user_data_operation]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
 
 Tip: For more details see
@@ -924,7 +944,7 @@ Tip: For more details see
 | ---------------------- | ----------------------------------------------------------------------------------------------------     |
 | API Code               | ACA                                                                                                      |
 | Data Format            | JSONL                                                                                                    |
-| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API.     |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Google Ads API.     |
 | **Usage Scenarios**    | Uploading conversion adjustments (e.g. enhanced conversions) to the target conversion.                   |
 | Transfer Data on       | Pub/Sub                                                                                                  |
 | Authorization Method   | OAuth                                                                                                    |
@@ -946,9 +966,9 @@ Tip: For more details see
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "debug": false,
   "adsConfig": {
-    "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
-    "adjustment_type": "ENHANCEMENT"|"RETRACTION"|"RESTATEMENT",
-    "user_identifier_source": "FIRST_PARTY"
+    "conversionAction": "[YOUR-CONVERSION-ACTION-NAME]",
+    "adjustmentType": "ENHANCEMENT"|"RETRACTION"|"RESTATEMENT",
+    "userIdentifierSource": "FIRST_PARTY"
   }
 }
 ```
@@ -960,10 +980,10 @@ Tip: For more details see
   - `debug`, optional, default value is `false`. If it's set as `true`,
     the request is validated but not executed. Only errors are returned.
   - `adsConfig`, configuration items for [conversion adjustments][conversion_adjustments]:
-    - `conversion_action`, Resource name of the conversion action in the
+    - `conversionAction`, Resource name of the conversion action in the
       format `customers/${customerId}/conversionActions/${conversionActionId}`.
-    - `adjustment_type`, for enhanced conversions, it should be `ENHANCEMENT`.
-    - `user_identifier_source`: If you uploaded user identifiers in the
+    - `adjustmentType`, for enhanced conversions, it should be `ENHANCEMENT`.
+    - `userIdentifierSource`: If you uploaded user identifiers in the
       conversions, you need to specify the [source][user_identifier].
 
 [conversion_adjustments]: https://developers.google.com/google-ads/api/reference/rpc/latest/ConversionAdjustment
@@ -971,22 +991,22 @@ Tip: For more details see
 
 - _Sample Data file content:_
 
-For an enhanced conversion (`adjustment_type` is `ENHANCEMENT`) with hashed email as the [`UserIdentifier`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier):
+For an enhanced conversion (`adjustmentType` is `ENHANCEMENT`) with hashed email as the [`UserIdentifier`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserIdentifier):
 
 ```
-{"order_id": "2022032803", "hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+{"orderId": "2022032803", "hashedEmail": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```
 
 For an enhanced conversion with `AddressInfo` in `UserIdentifier`:
 
 ```
-{"order_id":"2022040802", "hashed_email":"47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700","address_info":{"hashed_first_name":"ae3379ac2ab35c1c1cfe33b155f0fb39efaa894a8d84a4dcaa7db23816caffd9","hashed_last_name":"1ce3fb2cb03a19b8fd1afdb0e0bd4aa977b8254805e1d4e15d52b6f94cfd21c7","city":"Pyrmont","country_code":"AU","state":"NSW","postal_code":"2009","hashed_street_address":"6cf827c741a060e66b2642117ea91725a51116ea0af7c1809c0bab5297ecd2b7"}}
+{"orderId":"2022040802", "hashedEmail":"47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700","addressInfo":{"hashedFirstName":"ae3379ac2ab35c1c1cfe33b155f0fb39efaa894a8d84a4dcaa7db23816caffd9","hashedLastName":"1ce3fb2cb03a19b8fd1afdb0e0bd4aa977b8254805e1d4e15d52b6f94cfd21c7","city":"Pyrmont","countryCode":"AU","state":"NSW","postalCode":"2009","hashedStreetAddress":"6cf827c741a060e66b2642117ea91725a51116ea0af7c1809c0bab5297ecd2b7"}}
 ```
 
 For a `RESTATEMENT` type conversions adjustment:
 
 ```
-{"order_id":"2022040801", "restatement_value": {"adjusted_value":"1", "currency_code":"AUD"}, "adjustment_date_time":"2023-02-23 18:01:23+00:00"}
+{"orderId":"2022040801", "restatementValue": {"adjustedValue":"1", "currencyCode":"AUD"}, "adjustmentDateTime":"2023-02-23 18:01:23+00:00"}
 ```
 
 ### 4.11. AOUD: Google Ads Offline User Data Upload (OfflineUserDataJobService)
@@ -995,7 +1015,7 @@ For a `RESTATEMENT` type conversions adjustment:
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API Code               | AOUD                                                                                                                                                                                                                                                                                                    |
 | Data Format            | JSONL                                                                                                                                                                                                                                                                                                   |
-| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Ads API endpoint via [3rd party API Client library][google_ads_node].                                                                                                                                       |
+| What Tentacles does    | Combined the **data** with the **configuration** to build the request body and sent them to Google Ads API endpoint.                                                                                                                                       |
 | **Usage Scenarios**    | 1. Customer Match lets you use your online and offline data to reach and re-engage with your customers across Search, Shopping, Gmail, YouTube, and Display; <br>2. Uploading and matching transaction data from the business (store sales), shows how ads translate into offline purchases. |
 | Transfer Data on       | Cloud Storage                                                                                                                                                                                                                                                                                           |
 | Authorization Method   | OAuth                                                                                                                                                                                                                                                                                                   |
@@ -1005,7 +1025,6 @@ For a `RESTATEMENT` type conversions adjustment:
 | QPS                    | -                                                                                                                                                                                                                                                                                                       |
 | Reference              | [Overview: Customer Match][customer_match_overview]<br> [Upload Store Sales Conversions][upload_store_sales_conversions]                                                                                                                                                                                |
 
-[google_ads_node]: https://github.com/Opteo/google-ads-api
 [customer_match_overview]: https://developers.google.com/google-ads/api/docs/remarketing/audience-types/customer-match
 [upload_store_sales_conversions]: https://developers.google.com/google-ads/api/docs/conversions/upload-store-sales-transactions
 
@@ -1016,47 +1035,65 @@ For a `RESTATEMENT` type conversions adjustment:
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "debug": false,
   "offlineUserDataJobConfig": {
-    "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
-    "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
-    "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-    "list_name": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
-    "operation": "create|remove",
+    "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+    "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
     "type": "CUSTOMER_MATCH_USER_LIST|STORE_SALES_UPLOAD_FIRST_PARTY",
-    "upload_key_type": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
-    "store_sales_metadata": "StoreSalesMetadata|undefined",
-    "transaction_attribute": "TransactionAttribute|undefined",
-    "user_attribute": "UserAttribute|undefined"
+    "operation": "create|remove",
+    "listId": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+    "listName": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+    "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
+    "userAttribute": "UserAttribute|undefined",
+    "customerMatchUserListMetadata": {
+      "consent":{
+        "adUserData": "GRANTED|DENIED",
+        "adPersonalization": "GRANTED|DENIED"
+      }
+    },
+    "storeSalesMetadata": "StoreSalesMetadata|undefined",
+    "transactionAttribute": "TransactionAttribute|undefined",
+    "consent":{
+      "adUserData": "GRANTED|DENIED|undefined",
+      "adPersonalization": "GRANTED|DENIED|undefined"
+    }
   }
 }
 ```
+
+This connector has two main use cases: 'Customer Match user data upload'[*CM*] and
+'Store Sales Conversions upload'[*SSI*]. In the following, some fields only
+support one of the use cases.
 
 - Fields' definition:
   - `developerToken`, Developer token to access the API.
   - `debug`, optional, default value is `false`. In the connector, it should NOT
    be set as `true` because in the `debug` mode the `OfflineUserDataJob` can not
    be created hence the following steps will fail.
-  - `customer_id`, Google Ads Customer account Id
-  - `login_customer_id`, Login customer account Id (MCC Account Id)
-  - `list_id`, User List id for customer match audience. If `list_id` is
-    available `list_name` and `upload_key_type` will be ignored.
-  - `list_name`, User List name for customer match audience. If the list could
-    not be found, it will be created automatically.
+  - `customerId`, Google Ads Customer account Id
+  - `loginCustomerId`, Login customer account Id (MCC Account Id)
+  - `type`, type of user data. It should be `CUSTOMER_MATCH_USER_LIST` for
+    [*CM*] or `STORE_SALES_UPLOAD_FIRST_PARTY` for [*SSI*].
   - `operation`, Can be either create or remove in single file;
     [Read more about operation][user_data_operation]
-  - `type`, type of user data. It should be `CUSTOMER_MATCH_USER_LIST` for
-    customer match uploading or `STORE_SALES_UPLOAD_FIRST_PARTY` for Store vistors
-    data uploading.
-  - `upload_key_type`, only presents for customer match uploading. Must be one
-    of the following: CONTACT_INFO, CRM_ID or MOBILE_ADVERTISING_ID;
+  - `listId`, [*CM*] User List id for customer match audience. If `listId` is
+    available, `listName` and `uploadKeyType` will be ignored.
+  - `listName`, [*CM*] User List name for customer match audience. If the list
+    could not be found, it will be created automatically.
+  - `uploadKeyType`, [*CM*] Must be one of the following: CONTACT_INFO, CRM_ID or
+    MOBILE_ADVERTISING_ID;
     [Read more about upload key types][upload_key_type]
-  - `store_sales_metadata`, only presents for store sales data uploading. The
-    metadata for Store Sales Direct,
+  - `userAttribute`, [*CM*] Shared additional attributes of users,
+    [see user attribute][user_attribute]
+  - `customerMatchUserListMetadata`, [*CM*] metadata of the customer match user
+    list([CustomerMatchUserListMetadata][customer_match_userlist_metadata]). It
+    has a property `consent` which is the consent setting for all the users in
+    this job.
+  - `storeSalesMetadata`, [*SSI*] The metadata for Store Sales Direct,
     [see the details of the metadata][store_sales_metadata].
-  - `transaction_attribute`, used in a `STORE_SALES_UPLOAD_FIRST_PARTY` job for
-    shared additional attributes of transactions,
-   [see transaction attribute][transaction_attribute]
-  - `user_attribute`, used in a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job for shared
-    additional attributes of users, [see transaction attribute][user_attribute]
+  - `transactionAttribute`, [*SSI*] Shared additional attributes of
+    transactions, [see transaction attribute][transaction_attribute]
+  - `consent`, [*SSI*] For Store Sales Conversions, the `consent` setting should
+    be event(each conversion) level. This config setting here is the default
+    value of each conversion.
 
 [upload_key_type]: https://developers.google.com/google-ads/api/reference/rpc/v11/CustomerMatchUploadKeyTypeEnum.CustomerMatchUploadKeyType
 [user_data_operation]: https://developers.google.com/google-ads/api/reference/rpc/latest/UserDataOperation
@@ -1071,7 +1108,7 @@ Tip: For more details see
 
 For a `CUSTOMER_MATCH_USER_LIST` job:
 ```
-{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
+{"hashedEmail": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700"}
 ```
 
 For a `STORE_SALES_UPLOAD_FIRST_PARTY` job, the `config`:
@@ -1080,26 +1117,26 @@ For a `STORE_SALES_UPLOAD_FIRST_PARTY` job, the `config`:
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "offlineUserDataJobConfig": {
     .......
-    "store_sales_metadata": {
-      "transaction_upload_fraction": 1.0,
-      "loyalty_fraction": 1.0
+    "storeSalesMetadata": {
+      "transactionUploadFraction": 1.0,
+      "loyaltyFraction": 1.0
     },
-    "transaction_attribute": {
-      "currency_code": "AUD",
-      "conversion_action": "[YOUR-CONVERSIONS-ACTION]",
+    "transactionAttribute": {
+      "currencyCode": "AUD",
+      "conversionAction": "[YOUR-CONVERSIONS-ACTION]",
     }
   }
 }
 ```
 - `store_sales_metadata`, there are two **required** fields
-need to be offered to create a Store Sales job: `loyalty_fraction` and
-`transaction_upload_fraction`. `1.0` is an example of the value here.
-- `transaction_attribute`, an optional object can be put in `config` for those
+need to be offered to create a Store Sales job: `loyaltyFraction` and
+`transactionUploadFraction`. `1.0` is an example of the value here.
+- `transactionAttribute`, an optional object can be put in `config` for those
 shared attributes.
 
 With this `config`, the data can be:
 ```
-{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "transaction_attribute": {"transaction_date_time": "2018-03-05 09:15:00", "transaction_amount_micros": 10000, "order_id": "1234567890"}}
+{"hashedEmail": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "transactionAttribute": {"transactionDateTime": "2018-03-05 09:15:00", "transactionAmountMicros": 10000, "orderId": "1234567890"}}
 ```
 
 For a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job, a `user_attribute` can be put in
@@ -1109,13 +1146,13 @@ For a `CUSTOMER_MATCH_WITH_ATTRIBUTES` job, a `user_attribute` can be put in
   "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
   "offlineUserDataJobConfig": {
     .......
-    "user_attribute": {
-      "lifetime_value_bucket": 10
+    "userAttribute": {
+      "lifetimeValueBucket": 10
     }
   }
 }
 ```
 Data would be:
 ```
-{"hashed_email": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "user_attribute": {"lifetime_value_micros": 1000000}}
+{"hashedEmail": "47b2a4193b6d05eac87387df282cfbb326ec5296ba56ce8518650ce4113d2700", "userAttribute": {"lifetimeValueBucket": 1000000}}
 ```

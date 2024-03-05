@@ -18,10 +18,11 @@ and [Data Tasks Coordinator]. This library includes:
    - Google Ads click conversions upload
    - Google Ads customer match upload
    - Google Ads enhanced conversions upload
+   - Google Ads offline userdata job data upload
    - Google Ads conversions scheduled uploads based on Google Sheets
    - Measurement Protocol Google Analytics 4
 
-1. Wrapper for some Google APIs for reporting, mainly
+2. Wrapper for some Google APIs for reporting, mainly
    for [Data Tasks Coordinator]:
 
    - Google Ads reporting
@@ -31,7 +32,7 @@ and [Data Tasks Coordinator]. This library includes:
    - YouTube Data API
    - Ads Data Hub querying
 
-1. Utilities wrapper class for Google Cloud Products:
+3. Utilities wrapper class for Google Cloud Products:
 
    - **Firestore Access Object**: Firestore has two modes[[comparison]] which
      have different API. This class, with its two successors, offer a unified
@@ -66,7 +67,7 @@ and [Data Tasks Coordinator]. This library includes:
      an adapter to wrap a Node8 Cloud Functions into Node6 and Node8 compatible
      functions.~~ (This has been removed since v1.9.0)
 
-1. A share library for [Bash] to facilitate installation tasks.
+4. A share library for [Bash] to facilitate installation tasks.
 
 [gmp and google ads connector]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector
 [data tasks coordinator]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/data-tasks-coordinator

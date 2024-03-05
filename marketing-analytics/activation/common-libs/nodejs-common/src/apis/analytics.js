@@ -67,7 +67,7 @@ class Analytics {
   }
 
   /**
-   * Prepares the Google Analytics instace.
+   * Prepares the Google Analytics instance.
    * @return {!google.analytics}
    * @private
    */

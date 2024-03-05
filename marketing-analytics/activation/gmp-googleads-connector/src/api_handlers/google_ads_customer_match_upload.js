@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: {googleads: {GoogleAds, CustomerMatchConfig}},
+  api: { googleadsapi: { GoogleAdsApi: GoogleAds, CustomerMatchConfig } },
   utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
 const { GoogleAdsClickConversionUpload } =

@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Google Ads API version
-GOOGLE_ADS_API_VERSION=13
+GOOGLE_ADS_API_VERSION=16
 
 #######################################
 # Verify whether the current OAuth token, CID and developer token can work.

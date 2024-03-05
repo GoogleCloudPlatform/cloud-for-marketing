@@ -96,6 +96,7 @@ const PICKED_PROPERTIES = [
   'adjustment_date_time',
   'user_agent',
   'gclid_date_time_pair',
+  'consent',
 ];
 
 /**

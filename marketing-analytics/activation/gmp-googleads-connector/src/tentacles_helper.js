@@ -23,26 +23,54 @@ const {
   storage: {StorageFile},
   firestore: { getFirestoreDatabase },
 } = require('@google-cloud/nodejs-common');
-const {ApiConfigOnFirestore, ApiConfigJson, getApiConfig} = require(
-    './api_config/index.js');
-const {ApiConfigItem, getApiNameList} = require('./api_handlers/index.js');
+const { ApiConfigDao } = require('./api_config/api_config_dao.js');
+const {
+  ApiConfigItem,
+  getApiOnGcs,
+  getApiNameList,
+} = require('./api_handlers/index.js');
 const {
   getTopicNameByApi,
   getAttributes,
-  getTentacles,
   guessTentacles,
 } = require('./tentacles.js');
+
+/** @typedef {{string:!ApiConfigItem}|undefined} */
+let ApiConfigJsonItem;
+
+/**
+ * The JSON objects contains different API configurations. It's organized in
+ * API name then configuration name levels. See 'config_api.json.template' for
+ * example.
+ *
+ * @typedef {{
+ *   GA:!ApiConfigJsonItem,
+ *   MP:!ApiConfigJsonItem,
+ *   MP_GA4:!ApiConfigJsonItem,
+ *   CM:!ApiConfigJsonItem,
+ *   SFTP:!ApiConfigJsonItem,
+ *   GS:!ApiConfigJsonItem,
+ *   SA:!ApiConfigJsonItem,
+ *   ACLC:!ApiConfigJsonItem,
+ *   CALL:!ApiConfigJsonItem,
+ *   ACM:!ApiConfigJsonItem,
+ *   ACA:!ApiConfigJsonItem,
+ *   AOUD:!ApiConfigJsonItem,
+ *   PB:!ApiConfigJsonItem,
+ * }}
+ */
+let ApiConfigJson;
 
 /**
  * Uploads ApiConfig from a JSON object to Firestore or Datastore with the given
  * ApiConfigFirestore object.
  * @see './config_api.json.template'
  * @param {!ApiConfigJson} updatedConfigs The API configurations JSON object.
- * @param {!ApiConfigOnFirestore} apiConfig The ApiConfigOnFirestore object.
+ * @param {!ApiConfigDao} apiConfigDao The ApiConfigDao object.
  * @return {!Promise<!Array<!Object<string,boolean>>>} Whether API configuration
  *     updated.
  */
-const uploadApiConfigImpl = (updatedConfigs, apiConfig) => {
+const uploadApiConfigImpl = (updatedConfigs, apiConfigDao) => {
   /**
    * Updates config items for a single Api.
    * @param {string} apiName Api name.
@@ -66,13 +94,11 @@ const uploadApiConfigImpl = (updatedConfigs, apiConfig) => {
    * @param {string} apiName Api name.
    * @return {!Promise<boolean>} Whether this API config item updated.
    */
-  const updateSingleConfig = (configObject, configName, apiName) => {
-    return apiConfig.saveConfig(apiName, configName, configObject)
-        .then((result) => {
-          console.log(
-              `Import Config for API[${apiName}]_config[${configName}]`);
-          return result;
-        });
+  const updateSingleConfig = async (configObject, configName, apiName) => {
+    const result =
+      await apiConfigDao.saveConfig(apiName, configName, configObject);
+    console.log(`Import Config for API[${apiName}]_config[${configName}]`);
+    return result;
   };
 
   return Promise.all(
@@ -98,8 +124,8 @@ const uploadApiConfig = async (apiConfigJson,
    */
   const database = await getFirestoreDatabase();
   console.log('database', database);
-  const apiConfig = new ApiConfigOnFirestore(database, namespace);
-  return uploadApiConfigImpl(updatedConfig, apiConfig);
+  const apiConfigDao = new ApiConfigDao(database, namespace);
+  return uploadApiConfigImpl(updatedConfig, apiConfigDao);
 };
 
 /**
@@ -171,6 +197,7 @@ const initPubsub = (topicPrefix, apiList) => initPubsubImpl(topicPrefix,
 const localApiRequester = async (namespace, file, bucket = undefined) => {
   const fs = require('fs');
   const attributes = getAttributes(file);
+  attributes.gcs = getApiOnGcs().includes(attributes.api).toString();
   console.log(`Test file [${file}] has attributes:`, attributes);
   let messageData;
   if (attributes.gcs === 'true') {

@@ -1,5 +1,22 @@
 # Release Notes
 
+## 4.3.0 (2024-03-05)
+
+### Integrated APIs
+- Updated to the v16 of the Google Ads API.<br>
+  Due to the change of underlying Google Ads API library, the naming
+  convention of Google Ads related conectors (`ACLA`, `ACM`, `ACA` and `AOUD`)
+  are suggested to be changed from the previous `snake_case` to
+  `lowerCamelCase`, including both config items and data fields. Tentacles will
+  support both of them at this stage, but users are encouraged to do the transit
+  when possible.
+
+### Enhancements
+
+- Campaign Manager 360 connector `CM` now supports `update` conversions.
+- Google Ads API related connectors(`ACLC`, `ACM` and `AOUD`) supports `consent`
+  information. [source](https://ads-developers.googleblog.com/2023/10/updates-to-customer-match-conversion.html)
+
 ## 4.2.0 (2023-11-24)
 
 ### Enhancements

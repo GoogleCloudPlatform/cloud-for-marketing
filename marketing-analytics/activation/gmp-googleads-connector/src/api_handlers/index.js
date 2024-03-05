@@ -43,6 +43,8 @@ const { GoogleAdsCustomerMatchConfig, GoogleAdsCustomerMatch }
   = require('./google_ads_customer_match_upload.js');
 const { GoogleAdsOfflineUserDataJobConfig, GoogleAdsOfflineUserDataJobUpload }
   = require('./google_ads_offline_userdata_job.js');
+const { CloudFunctionInvokeConfig, CloudFunctionInvoke }
+  = require('./cloud_function_invoke.js');
 
 /**
  * API configuration types for all APIs that Tentacles supports.
@@ -51,7 +53,8 @@ const { GoogleAdsOfflineUserDataJobConfig, GoogleAdsOfflineUserDataJobUpload }
  * !MeasurementProtocolConfig|!SftpConfig|!SheetsLoadConfig|
  * !SearchAdsConfig|!PubSubMessageConfig|
  * !GoogleAdsConversionConfig|!GoogleAdsCustomerMatchConfig|
- * !GoogleAdsOfflineUserDataJobConfig|!MpGa4IntegrationConfig)}
+ * !GoogleAdsOfflineUserDataJobConfig|!MpGa4IntegrationConfig|
+ * !CloudFunctionInvokeConfig)}
  */
 let ApiConfigItem;
 
@@ -73,6 +76,7 @@ const API_HANDLERS = [
   GoogleAdsConversionAdjustment,
   GoogleAdsCustomerMatch,
   GoogleAdsOfflineUserDataJobUpload,
+  CloudFunctionInvoke,
 ];
 
 /**

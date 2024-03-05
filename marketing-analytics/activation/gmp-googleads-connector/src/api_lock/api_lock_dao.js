@@ -28,7 +28,6 @@ const {
   },
   utils: {getLogger},
 } = require('@google-cloud/nodejs-common');
-const {ApiLock} = require('./api_lock.js');
 
 /**
  * The 'ApiLock' is a document in Firestore (or entity in Datastore) with the
@@ -49,12 +48,18 @@ const {ApiLock} = require('./api_lock.js');
  *   }
  * }}
  */
-let ApiLockObject;
+let ApiLock;
 
 /**
- * Tentacles API Locks implementation base on Firestore.
- * Transaction is required to fulfill the lock.
- * @implements {ApiLock}
+ * Tentacles API Locks data access object. Transaction is required.
+ *
+ * Tentacles queues data by the API name. Multiple files with the same API will
+ * be stored in the same Pub/sub's topic. However, multiple files will also
+ * trigger multiple times 'sending task'. Hence, it may result exceeding the QPS
+ * limit for the specific API.
+ *
+ * To reduce this risk, 'sending task' only works after successfully getting the
+ * lock of that API. 'Sending task' will return the lock after sending data.
  */
 class ApiLockDao extends DataAccessObject {
 
@@ -74,7 +79,15 @@ class ApiLockDao extends DataAccessObject {
     this.logger = getLogger(`LOCK.${database}`);
   }
 
-  /** @override */
+  /**
+   * Gets the lock of a given Pubsub topic name.
+   *
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @param {string} token The token of a lock. A token stands for an instance
+   *   of a lock. It is used to support multiple locks.
+   * @return {!Promise<boolean>} Whether successfully gets the lock.
+   * @abstract
+   */
   async getLock(lockId, token) {
     this.logger.debug(`Try to add Token[${token}] for Lock[${lockId}]`);
     try {
@@ -89,7 +102,15 @@ class ApiLockDao extends DataAccessObject {
     }
   }
 
-  /** @override */
+  /**
+   * Returns the lock of a given Pubsub topic name.
+   *
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @param {string} token The token of a lock. A token stands for an instance
+   *   of a lock. It is used to support multiple locks.
+   * @return {!Promise<boolean>} Whether successfully returns the lock.
+   * @abstract
+   */
   async unlock(lockId, token) {
     this.logger.debug(`Try to release Token[${token}] for Lock[${lockId}]`);
     try {
@@ -104,7 +125,15 @@ class ApiLockDao extends DataAccessObject {
     }
   }
 
-  /** @override */
+  /**
+   * Returns whethere there is available locks. This is a direct check and does
+   * not guarantee the lock will be available when try to get it. It is used
+   * to ramp up sending instance when tasks are just started.
+   *
+   * @param {string} lockId The name of Pub/sub topic is used as lock Id.
+   * @return {!Promise<boolean>} Whether there is an available lock.
+   * @abstract
+   */
   async hasAvailableLock(lockId) {
     const { max, tokens = [] } = await this.load(lockId);
     return max > tokens.length;
@@ -178,7 +207,7 @@ class ApiLockDao extends DataAccessObject {
    * @param {!DatastoreDocumentFacade} documentSnapshot
    * @param {string} lockId
    * @param {string} token
-   * @return {!ApiLockObject|undefined}
+   * @return {!ApiLock|undefined}
    */
   registerTokenForLock(documentSnapshot, lockId, token) {
     let tokens = documentSnapshot.get('tokens') || [];
@@ -214,7 +243,7 @@ class ApiLockDao extends DataAccessObject {
    * @param {!DatastoreDocumentFacade} documentSnapshot
    * @param {string} lockId
    * @param {string} token
-   * @return {!ApiLockObject|undefined}
+   * @return {!ApiLock|undefined}
    */
   releaseTokenForLock(documentSnapshot, lockId, token) {
     const tokens = documentSnapshot.get('tokens') || [];
@@ -233,7 +262,7 @@ class ApiLockDao extends DataAccessObject {
    * @param {string} lockId
    * @param {string|undefined} token If token presents, the new Lock will
    *   regeister the token when it is created.
-   * @return {!ApiLockObject} Api Lock entity.
+   * @return {!ApiLock} Api Lock entity.
    * @private
    */
   getNewLockEntity(lockId, token) {
@@ -248,7 +277,7 @@ class ApiLockDao extends DataAccessObject {
    * @param {number} max
    * @param {string|undefined} token
    * @param {Array<{{token:string, updatedAt: number}}>=} tokens
-   * @return {!ApiLockObject} Api Lock entity to be created or updated.
+   * @return {!ApiLock} Api Lock entity to be created or updated.
    */
   getUpdatedLockEntity(max, token, tokens = []) {
     if (token) tokens.push({ token, updatedAt: Date.now() });

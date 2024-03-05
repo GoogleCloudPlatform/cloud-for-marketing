@@ -370,7 +370,9 @@ class DoubleClickSearch {
     const doubleclicksearch = await this.getApiClient_();
     const response = await doubleclicksearch.reports.getFile(
         {reportId, reportFragment});
-    if (response.status === 200) return response.data;
+    if (response.status === 200) {
+      return Buffer.from(await response.data.arrayBuffer()).toString();
+    }
     const errorMsg =
         `Error in get file from reports: ${reportFragment}@${reportId}`;
     this.logger.error(errorMsg, response);

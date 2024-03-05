@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: { googleads: { GoogleAds, OfflineUserDataJobConfig } },
+  api: { googleadsapi: { GoogleAdsApi: GoogleAds, OfflineUserDataJobConfig } },
   utils: { getProperValue, BatchResult },
   storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');

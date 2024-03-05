@@ -98,7 +98,7 @@ class StorageFile {
       stream.on('data', (chunk) => void chunks.push(chunk));
       stream.on('end', () => {
         console.log(`Get [${this.fileName}] from ${start} to ${end}`);
-        resolve(chunks.join(''));
+        resolve(Buffer.concat(chunks).toString());
       });
       stream.on('error', (error) => void reject(error));
     });
@@ -124,9 +124,12 @@ class StorageFile {
       checkPoint = Math.max(start, end - possibleLineBreakRange + 1);
     }
     const content = await this.loadContent(checkPoint, end);
-    const index = Buffer.from(content).lastIndexOf(LINE_BREAKER);
+    let i = 0;
+    while (content.charCodeAt(i) === 0xFFFD) i++;
+    const cleanedContent = i > 0 ? content.slice(i) : content;
+    const index = Buffer.from(cleanedContent).lastIndexOf(LINE_BREAKER);
     if (index >= 0) {
-      return checkPoint + index;
+      return checkPoint + i + index;
     }
     if (checkPoint > start) {
       return this.getLastLineBreaker(
@@ -176,7 +179,7 @@ class StorageFile {
         .on('finish', async () => {
           const [{ contentType }] = await this.file.getMetadata();
           const [file] = await outputFile.setMetadata({ contentType });
-          return file.name;
+          resolve(file.name);
         });
     });
   }

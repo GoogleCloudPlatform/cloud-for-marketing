@@ -21,6 +21,8 @@
 const winston = require('winston');
 const {inspect} = require('util');
 const { LoggingWinston } = require('@google-cloud/logging-winston');
+const { request } = require('gaxios');
+const lodash = require('lodash');
 
 /**
  * The result of a batch of data sent to target API. The batch here means the
@@ -487,7 +489,7 @@ const extractObject = (paths) => {
     paths.forEach((path) => {
       const [value, owner, property] = path.split('.')
           .reduce(transcribe, [sourceObject, output, undefined]);
-      if (value) {
+      if (typeof value !== 'undefined') {
         owner[property] = value;
       }
     });
@@ -537,6 +539,88 @@ const changeNamingFromSnakeToLowerCamel = (name) => {
       (initial) => initial.substring(1).toUpperCase());
 };
 
+/**
+ * For more details, see:
+ * https://developers.google.com/google-ads/api/docs/rest/design/json-mappings
+ * @param {string} name Identifiers.
+ * @return {string}
+ */
+const changeNamingFromLowerCamelToSnake = (name) => {
+  return name.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+};
+
+/**
+ * Converts a JSON object which has snake naming convention to lower camel
+ * naming.
+ *
+ * @param {object} obj
+ * @return {object}
+ */
+const changeObjectNamingFromSnakeToLowerCamel = (obj) => {
+  if (Array.isArray(obj)) {
+    return obj.map(changeObjectNamingFromSnakeToLowerCamel);
+  } else if (typeof obj === 'object') {
+    const newObj = {};
+    Object.keys(obj).forEach((key) => {
+      newObj[changeNamingFromSnakeToLowerCamel(key)] =
+        changeObjectNamingFromSnakeToLowerCamel(obj[key]);
+    });
+    return newObj;
+  } else {
+    return obj;
+  }
+}
+
+/**
+ * Converts a JSON object which has lower camel naming convention to snake
+ * naming.
+ *
+ * @param {object} obj
+ * @return {object}
+ */
+const changeObjectNamingFromLowerCamelToSnake = (obj) => {
+  if (Array.isArray(obj)) {
+    return obj.map(changeObjectNamingFromLowerCamelToSnake);
+  } else if (typeof obj === 'object') {
+    const newObj = {};
+    Object.keys(obj).forEach((key) => {
+      newObj[changeNamingFromLowerCamelToSnake(key)] =
+        changeObjectNamingFromLowerCamelToSnake(obj[key]);
+    });
+    return newObj;
+  } else {
+    return obj;
+  }
+}
+
+/**
+ * Returns the response data for a HTTP request. It will retry the specific
+ * times if there was errors happened.
+ * @param {object} options Options for the request.
+ * @param {object=} logger Default is `console`.
+ * @param {number=} retryTimes Default value 3.
+ * @return {object}
+ */
+const requestWithRetry = async (options, logger = console, retryTimes = 3) => {
+  let processedTimes = 0;
+  do {
+    // Wait sometime (2s, 4s, 8s, ...) before each retry.
+    if (processedTimes > 0) await wait(2 ** processedTimes * 1000);
+    try {
+      const requestOption = lodash.merge({
+        responseType: 'json',
+        method: 'POST',
+      }, options);
+      const response = await request(requestOption);
+      return response.data;
+    } catch (error) {
+      processedTimes++;
+      if (processedTimes > retryTimes) throw error;
+      logger.error(`Request ${JSON.stringify(options)}`, error);
+    }
+  } while (processedTimes <= retryTimes)
+}
+
 // noinspection JSUnusedAssignment
 module.exports = {
   getLogger,
@@ -554,4 +638,8 @@ module.exports = {
   getObjectByPath,
   changeNamingFromSnakeToUpperCamel,
   changeNamingFromSnakeToLowerCamel,
+  changeNamingFromLowerCamelToSnake,
+  changeObjectNamingFromSnakeToLowerCamel,
+  changeObjectNamingFromLowerCamelToSnake,
+  requestWithRetry,
 };

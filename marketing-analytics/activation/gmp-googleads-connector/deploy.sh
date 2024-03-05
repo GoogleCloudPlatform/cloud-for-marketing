@@ -279,6 +279,24 @@ from Pub/Sub topic [${PROJECT_NAMESPACE}-push]."
 }
 
 #######################################
+# Deploy Cloud Functions 'Transporter'.
+# Globals:
+#   PROJECT_NAMESPACE
+# Arguments:
+#   None
+#######################################
+deploy_cloud_functions_file_job_manager(){
+  local cf_flag=()
+  cf_flag+=(--entry-point=manageFile)
+  cf_flag+=(--trigger-http)
+  set_cloud_functions_default_settings cf_flag
+  printf '%s\n' " 4. '${PROJECT_NAMESPACE}_http' support HTTP request to create\
+ or return status of a TentaclesFile."
+  gcloud functions deploy "${PROJECT_NAMESPACE}"_http "${cf_flag[@]}"
+  quit_if_failed $?
+}
+
+#######################################
 # Deploy three Cloud Functions for Tentacles.
 # Globals:
 #   REGION

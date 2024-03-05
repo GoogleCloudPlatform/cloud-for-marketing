@@ -21,7 +21,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const {GoogleAuth, OAuth2Client, JWT, Compute} = require('google-auth-library');
+const {
+  GoogleAuth,
+  OAuth2Client,
+  UserRefreshClient,
+  JWT,
+  Compute,
+} = require('google-auth-library');
 const { SecretManager } = require('../components/secret_manager.js');
 const { getLogger } = require('../components/utils.js');
 
@@ -77,6 +83,7 @@ class AuthClient {
     this.logger = getLogger('AUTH');
     this.scopes = scopes;
     this.env = Object.assign({}, process.env, overwrittenEnv);
+    this.initialized = false;
   }
 
   /**
@@ -88,6 +95,10 @@ class AuthClient {
    * and service account key file if there is no secret name was set in the env.
    */
   async prepareCredentials() {
+    if (this.initialized === true) {
+      this.logger.info(`This authClient has been initialized.`);
+      return;
+    }
     if (this.env[DEFAULT_ENV_SECRET]) {
       const secretmanager = new SecretManager({
         projectId: this.env.GCP_PROJECT,
@@ -95,26 +106,24 @@ class AuthClient {
       const secret = await secretmanager.access(this.env[DEFAULT_ENV_SECRET]);
       if (secret) {
         const secretObj = JSON.parse(secret);
-        if (secretObj.token) {
-          this.oauthToken = secretObj;
-        } else {
-          this.serviceAccountKey = secretObj;
-        }
+        if (secretObj.token) this.oauthToken = secretObj;
+        else this.serviceAccountKey = secretObj;
         this.logger.info(`Get secret from SM ${this.env[DEFAULT_ENV_SECRET]}.`);
-        return;
+      } else {
+        this.logger.warn(`Cannot find SM ${this.env[DEFAULT_ENV_SECRET]}.`);
       }
-      this.logger.warn(`Cannot find SM ${this.env[DEFAULT_ENV_SECRET]}.`);
+    } else {// To be compatible with previous solution.
+      const oauthTokenFile = this.getContentFromEnvVar(DEFAULT_ENV_OAUTH);
+      if (oauthTokenFile) {
+        this.oauthToken = JSON.parse(oauthTokenFile);
+      }
+      const serviceAccountKeyFile =
+        this.getContentFromEnvVar(DEFAULT_ENV_KEYFILE);
+      if (serviceAccountKeyFile) {
+        this.serviceAccountKey = JSON.parse(serviceAccountKeyFile);
+      }
     }
-    // To be compatible with previous solution.
-    const oauthTokenFile = this.getContentFromEnvVar(DEFAULT_ENV_OAUTH);
-    if (oauthTokenFile) {
-      this.oauthToken = JSON.parse(oauthTokenFile);
-    }
-    const serviceAccountKeyFile =
-      this.getContentFromEnvVar(DEFAULT_ENV_KEYFILE);
-    if (serviceAccountKeyFile) {
-      this.serviceAccountKey = JSON.parse(serviceAccountKeyFile);
-    }
+    this.initialized = true;
   }
 
   /**
@@ -137,7 +146,7 @@ class AuthClient {
    * 1. OAuth, return an OAuth token if available.
    * 2. JWT, return JWT client if a service account key is available.
    * 3. ADC if none of these files exists.
-   * @return {!OAuth2Client|!JWT|!Compute}
+   * @return {!UserRefreshClient|!JWT|!Compute}
    */
   getDefaultAuth() {
     if (typeof this.oauthToken !== 'undefined') {
@@ -167,13 +176,14 @@ class AuthClient {
 
   /**
    * Returns an OAuth2 client based on the given key file.
-   * @return {!OAuth2Client}
+   * @return {!UserRefreshClient}
    */
   getOAuth2Client() {
     this.ensureCredentialExists_(this.oauthToken, 'OAuth token');
-    const { client_id, client_secret, token } = this.oauthToken;
-    const oAuth2Client = new OAuth2Client(client_id, client_secret);
-    oAuth2Client.setCredentials({ refresh_token: token.refresh_token });
+    const { client_id, client_secret, token: { refresh_token } }
+      = this.oauthToken;
+    const oAuth2Client =
+      new UserRefreshClient(client_id, client_secret, refresh_token);
     return oAuth2Client;
   }
 

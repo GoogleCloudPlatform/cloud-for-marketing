@@ -41,12 +41,16 @@ const API_VERSION = 'v4';
  * profileId, idType, conversion, customVariables, encryptionInfo.
  * The 'idType' can be one of the values: 'encryptedUserId', 'gclid' or
  * 'mobileDeviceId'.
+ * The 'operation' can be 'insert' or 'update'. The default value is 'insert'.
+ * 'insert' stands for https://developers.google.com/doubleclick-advertisers/rest/v4/conversions/batchinsert
+ * 'update' stands for https://developers.google.com/doubleclick-advertisers/rest/v4/conversions/batchupdate
  * For other properties, see
  * https://developers.google.com/doubleclick-advertisers/guides/conversions_update
  *
  * @typedef {{
  *   profileId:string,
  *   idType:string,
+ *   operation:'insert'|'update'|undefined,
  *   conversion:{
  *     floodlightConfigurationId:string,
  *     floodlightActivityId:string,
@@ -60,7 +64,7 @@ const API_VERSION = 'v4';
  *   }|undefined),
  * }}
  */
-let InsertConversionsConfig;
+let ConversionsConfig;
 
 /**
  * List of properties that will be take from the data file as elements of a
@@ -155,7 +159,7 @@ class DfaReporting {
   /**
    * Returns the function to sends out a request to CM with a batch of
    * conversions.
-   * @param {!InsertConversionsConfig} config Campaign Manager configuration.
+   * @param {!ConversionsConfig} config Campaign Manager configuration.
    * @return {!SendSingleBatch} Function which can send a batch of hits to
    *     Campaign Manager.
    */
@@ -171,6 +175,15 @@ class DfaReporting {
       /** @type {function} Gets the conversion elements from the data object. */
       const filterObject = getFilterFunction(PICKED_PROPERTIES);
       const time = new Date().getTime();
+      const operation =
+        config.operation === 'update' ? 'batchupdate' : 'batchinsert';
+      // customVariables is not supported by batchupdate.
+      // https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#CustomFloodlightVariable
+      if (operation === 'batchupdate' &&
+        typeof config.customVariables !== 'undefined') {
+        this.logger.warn('customVariables is not supported by batchupdate');
+        delete config.customVariables;
+      }
       const conversions = lines.map((line) => {
         const record = JSON.parse(line);
         const conversion = Object.assign(
@@ -184,7 +197,7 @@ class DfaReporting {
         // Custom Variables
         if (typeof config.customVariables !== 'undefined') {
           conversion.customVariables = config.customVariables.map(
-              (variable) => ({'type': variable, 'value': record[variable],}));
+            (variable) => ({ 'type': variable, 'value': record[variable], }));
         }
         // User Identifiers
         if (record.userIdentifiers) {
@@ -225,7 +238,7 @@ class DfaReporting {
       };
       try {
         const dfareporting = await this.getApiClient_();
-        const response = await dfareporting.conversions.batchinsert({
+        const response = await dfareporting.conversions[operation]({
           profileId: config.profileId,
           requestBody: requestBody,
         });
@@ -411,7 +424,7 @@ class DfaReporting {
 
 module.exports = {
   DfaReporting,
-  InsertConversionsConfig,
+  ConversionsConfig,
   API_VERSION,
   API_SCOPES,
 };

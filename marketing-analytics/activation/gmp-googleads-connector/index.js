@@ -87,3 +87,14 @@ exports.requestApi = async (eventData, context) => {
   const apiRequester = tentacles.getApiRequester();
   return apiRequester(eventData, context);
 };
+
+/**
+ * Creates TentaclesFile entity and trigger Tentacles to send out the data or
+ * returns the status of a specified TentaclesFile entity Id.
+ * @param {Object} request Cloud Function request context.
+ * @param {Object} response Cloud Function response context.
+ */
+exports.manageFile = async (request, response) => {
+  const tentacles = await guessTentacles();
+  tentacles.fileJobManager(request, response);
+}

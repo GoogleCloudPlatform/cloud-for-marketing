@@ -28,7 +28,42 @@ const {
   },
   utils: { getLogger }
 } = require('@google-cloud/nodejs-common');
-const {TaskStatus, TentaclesTask} = require('./tentacles_task.js');
+
+/**
+ * Status of Tentacles Task.
+ * @enum {string}
+ */
+const TentaclesTaskStatus = {
+  QUEUING: 'queuing',
+  TRANSPORTED: 'transported',
+  SENDING: 'sending',
+  DONE: 'done',
+  FAILED: 'failed',
+  ERROR: 'error',
+};
+
+/**
+ * @typedef {{
+ *   api:string,
+ *   apiMessageId:(string|undefined),
+ *   config:string,
+ *   createdAt:(!Date|undefined),
+ *   dataMessageId:(string|undefined),
+ *   dryRun:string,
+ *   end:(string|undefined),
+ *   error:(string|undefined),
+ *   fileId:(string|number),
+ *   finishedTime:(!Date|undefined),
+ *   gcs:(string|undefined),
+ *   size:(string|undefined),
+ *   slicedFile:(string|undefined),
+ *   start:(string|undefined),
+ *   startSending:(!Date|undefined),
+ *   status:(!TentaclesTaskStatus|undefined),
+ *   topic:(string|undefined),
+ * }}
+ */
+let TentaclesTask;
 
 /**
  * Returns an operation on the specified task.
@@ -41,10 +76,9 @@ let TaskOperation;
 const DEFAULT_PROCESS_TIMES = 4;
 
 /**
- * Tentacles Task data object Firestore native mode or Datastore mode.
- * @implements {TentaclesTask}
+ * Tentacles Task data access object.
  */
-class TentaclesTaskOnFirestore extends DataAccessObject {
+class TentaclesTaskDao extends DataAccessObject {
 
   /**
    * Initializes TentaclesTask Dao instance.
@@ -118,32 +152,47 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
     }
   }
 
-  /** @override */
+  /**
+   * Creates the task Entity based on the given information.
+   * @param {!TentaclesTask} entitySkeleton Task information.
+   * @return {!Promise<string|number>} Created Task ID.
+   */
   async createTask(entitySkeleton) {
     const entity = Object.assign(
-        {}, entitySkeleton,
-        {status: TaskStatus.QUEUING, createdAt: new Date()});
+      {}, entitySkeleton,
+      { status: TentaclesTaskStatus.QUEUING, createdAt: new Date() });
     const id = await this.create(entity);
     this.loggerForDashboard.info(
-        JSON.stringify(Object.assign({action: 'createTask', id}, entity)));
+      JSON.stringify(Object.assign({ action: 'createTask', id }, entity)));
     return id;
   }
 
-  /** @override */
+  /**
+   * Saves the Pub/Sub message ID in Tentacles Task.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @param {!Object<string,string>} taskData Task data that will be updated
+   *     into the Task.
+   * @return {!Promise<boolean>} Whether updates successfully.
+   */
   updateTask(id, data) {
     /** @type {!TaskOperation} */
     const appendInfo = () => data;
     return this.operateInTransaction_(id, appendInfo);
   }
 
-  /** @override */
+  /**
+   * Checks whether this message has been transported or not. If not, transport
+   * it and changes its status to 'TRANSPORTED' and returns true.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @return {!Promise<boolean>} Whether this task is transported successfully.
+   */
   transport(id) {
     /** @type {!TaskOperation} */
     const transport = (documentSnapshot) => {
       const status = documentSnapshot.get('status');
-      if (status === TaskStatus.QUEUING) {
+      if (status === TentaclesTaskStatus.QUEUING) {
         return {
-          status: TaskStatus.TRANSPORTED,
+          status: TentaclesTaskStatus.TRANSPORTED,
           transportedTime: new Date(),
         };
       }
@@ -151,7 +200,14 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
     return this.operateInTransaction_(id, transport);
   }
 
-  /** @override */
+  /**
+   * Checks whether this message has been handled or not. If not, updates its
+   * status to 'SENDING' and returns true. Pub/Sub occasionally sends duplicated
+   * messages. If it happened, the status of the duplicated Task will be wrong
+   * and fail the check here, hence no task will be executed repeatedly.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @return {!Promise<boolean>} Whether this task started successfully.
+   */
   async start(id) {
     // Errors can't be passed out of a transaction, so use it to hold errors.
     const errors = [];
@@ -159,16 +215,16 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
     const startTask = (documentSnapshot) => {
       const status = documentSnapshot.get('status');
       const processedTimes = documentSnapshot.get('processedTimes') || 0;
-      if (status === TaskStatus.TRANSPORTED && processedTimes === 0) {
+      if (status === TentaclesTaskStatus.TRANSPORTED && processedTimes === 0) {
         return {
-          status: TaskStatus.SENDING,
+          status: TentaclesTaskStatus.SENDING,
           startSending: new Date(),
           processedTimes: 1,
         };
-      } else if (status === TaskStatus.SENDING) { // 'retry'
+      } else if (status === TentaclesTaskStatus.SENDING) { // 'retry'
         if (processedTimes < DEFAULT_PROCESS_TIMES) {
           return {
-            status: TaskStatus.SENDING,
+            status: TentaclesTaskStatus.SENDING,
             startSending: new Date(),
             processedTimes: processedTimes + 1,
           };
@@ -183,14 +239,19 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
     return result;
   }
 
-  /** @override */
+  /**
+   * Finishes a task by updating the status 'DONE'.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @param {boolean} taskDone Whether this task succeeded.
+   * @return {!Promise<boolean>} Whether this task finished successfully.
+   */
   finish(id, taskDone) {
     /** @type {!TaskOperation} */
     const finish = (documentSnapshot) => {
       const status = documentSnapshot.get('status');
-      if (status === TaskStatus.SENDING) {
+      if (status === TentaclesTaskStatus.SENDING) {
         return {
-          status: taskDone ? TaskStatus.DONE : TaskStatus.FAILED,
+          status: taskDone ? TentaclesTaskStatus.DONE : TentaclesTaskStatus.FAILED,
           finishedTime: new Date(),
         };
       }
@@ -198,13 +259,18 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
     return this.operateInTransaction_(id, finish);
   }
 
-  /** @override */
+  /**
+   * Logs error message in the Task.
+   * @param {string|number|undefined} id Tentacles Task ID.
+   * @param {!Error} error Error which is happened in processing the task.
+   * @return {!Promise<boolean>} Whether this error is logged successfully.
+   */
   logError(id, error) {
     /** @type {!TaskOperation} */
     const saveErrorMessage = (task) => {
       this.logger.warn(`Error in this task[${id}]: `, error);
       return {
-        status: TaskStatus.ERROR,
+        status: TentaclesTaskStatus.ERROR,
         finishedTime: new Date(),
         error: error.toString(),
       };
@@ -213,4 +279,8 @@ class TentaclesTaskOnFirestore extends DataAccessObject {
   }
 }
 
-exports.TentaclesTaskOnFirestore = TentaclesTaskOnFirestore;
+module.exports = {
+  TentaclesTaskStatus,
+  TentaclesTask,
+  TentaclesTaskDao,
+};

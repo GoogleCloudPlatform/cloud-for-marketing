@@ -20,7 +20,7 @@
 'use strict';
 
 const {
-  api: {dfareporting: {DfaReporting, InsertConversionsConfig}},
+  api: { dfareporting: { DfaReporting, ConversionsConfig } },
   utils: { getProperValue, BatchResult },
 } = require('@google-cloud/nodejs-common');
 const { ApiHandler } = require('./api_handler.js');
@@ -40,12 +40,12 @@ const NUMBER_OF_THREADS = 10;
 /**
  * Configuration for a Campaign Manager(CM) conversions upload.
  * For CM conversions uploading, a 'profileId' is required as
- * 'InsertConversionsConfig' suggests. But here a property 'cmAccountId' (CM
+ * 'ConversionsConfig' suggests. But here a property 'cmAccountId' (CM
  * account Id) exists instead. The reason is that different users(email based)
  * have different profiles for the same CM account. In order NOT to bind the
  * configuration to a specific user(email), the function uses CM
  * account Id plus current user(email) to get the current profile. After that,
- * put the profileId into the 'InsertConversionsConfig' and invoke the function
+ * put the profileId into the 'ConversionsConfig' and invoke the function
  * to upload conversions.
  *
  * @typedef {{
@@ -53,7 +53,7 @@ const NUMBER_OF_THREADS = 10;
  *   recordsPerRequest:(number|undefined),
  *   qps:(number|undefined),
  *   numberOfThreads:(number|undefined),
- *   cmConfig:!InsertConversionsConfig,
+ *   cmConfig:!ConversionsConfig,
  *   secretName:(string|undefined),
  * }}
  */

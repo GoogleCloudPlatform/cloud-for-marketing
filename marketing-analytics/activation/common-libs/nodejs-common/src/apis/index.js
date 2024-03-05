@@ -25,7 +25,7 @@ exports.AuthClient = require('./auth_client.js');
  * APIs integration class for DFA Reporting API.
  * @const {{
  *   DfaReporting:!DfaReporting,
- *   InsertConversionsConfig:!InsertConversionsConfig,
+ *   ConversionsConfig:!ConversionsConfig,
  * }}
  */
 exports.dfareporting = require('./dfa_reporting.js');
@@ -78,6 +78,14 @@ exports.spreadsheets = require('./spreadsheets.js');
 exports.doubleclicksearch = require('./doubleclick_search.js');
 
 /**
+ * APIs integration class for Search Ads 360 Reporting.
+ * @const {{
+*   SearchAds:!SearchAds,
+* }}
+*/
+exports.searchads = require('./search_ads.js');
+
+/**
  * APIs integration class for DoubleClick BidManager (DV360).
  * @const {{
  *   QueryResource:!QueryResource,
@@ -103,6 +111,18 @@ exports.bigquery = require('./bigquery.js');
  * }}
  */
 exports.googleads = require('./google_ads.js');
+
+/**
+ * APIs integration class for Google Ads with Google API library.
+ * @const {{
+*   GoogleAdsApi:!GoogleAdsApi,
+*   ConversionConfig:!ConversionConfig,
+*   CustomerMatchConfig: !CustomerMatchConfig,
+*   OfflineUserDataJobConfig: !OfflineUserDataJobConfig,
+*   CustomerMatchRecord: !CustomerMatchRecord,
+* }}
+*/
+exports.googleadsapi = require('./google_ads_api.js');
 
 /**
  * APIs integration class for Ads Data Hub.

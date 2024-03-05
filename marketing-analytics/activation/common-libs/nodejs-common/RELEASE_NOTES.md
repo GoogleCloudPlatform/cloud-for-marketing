@@ -1,5 +1,10 @@
 # Release Notes
 
+## 2.1.0 (2024-03-05)
+
+### Update to the v3 of the DV360 API
+### Update to the v16 of the Google Ads API
+
 ## 2.0.0 (2023-11-24)
 
 ### Firestore's non-default database is supported
