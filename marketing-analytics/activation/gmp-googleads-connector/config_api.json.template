@@ -1,16 +1,20 @@
 {
   "CM": {
     "foo": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "cmAccountId": "[YOUR-DCM-ACCOUNT-ID]",
       "cmConfig": {
         "idType": "encryptedUserId",
+        "operation": "insert|update|undefined",
         "conversion": {
           "floodlightConfigurationId": "[YOUR-FL-CONFIG-ID]",
           "floodlightActivityId": "[YOUR-FL-ACTIVITY-ID]",
-          "quantity": 1
+          "quantity": 1,
+          "ordinal": "[UNIX_EPOCH]"
         },
         "customVariables": [
-          "[YOUR-U-VARIABLES-NAME-1]", "[YOUR-U-VARIABLES-NAME-2]"
+          "[YOUR-U-VARIABLES-NAME-1]",
+          "[YOUR-U-VARIABLES-NAME-2]"
         ],
         "encryptionInfo": {
           "encryptionEntityId": "[YOUR-ENCRYPTION-ID]",
@@ -22,6 +26,7 @@
   },
   "GA": {
     "bar": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "dataImportHeader": "[YOUR-DATA-IMPORT-HEADER]",
       "gaConfig": {
         "accountId": "[YOUR-GA-ACCOUNT-ID]",
@@ -32,7 +37,7 @@
   },
   "MP": {
     "baz": {
-      "mpConfig":{
+      "mpConfig": {
         "v": "1",
         "t": "transaction",
         "ni": "1",
@@ -41,9 +46,28 @@
       }
     }
   },
+  "MP_GA4": {
+    "foo": {
+      "mpGa4Config": {
+        "queryString": {
+          "measurement_id": "[YOUR_APP_ID]",
+          "api_secret": "[YOUR_API_SECRET]"
+        },
+        "requestBody": {
+          "non_personalized_ads": false,
+          "events": [
+            {
+              "name": "[YOUR_EVENT_NAME]",
+              "params": {}
+            }
+          ]
+        }
+      }
+    }
+  },
   "SFTP": {
     "qux": {
-      "sftp":{
+      "sftp": {
         "host": "[YOUR-SFTP-HOST]",
         "port": "[YOUR-SFTP-PORT]",
         "username": "[YOUR-SFTP-USERNAME]",
@@ -53,6 +77,7 @@
   },
   "GS": {
     "foo": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "spreadsheetId": "[YOUR-SPREADSHEET-ID]",
       "sheetName": "[YOUR-SHEET-NAME]",
       "sheetHeader": "[ANYTHING-PUT-AHEAD-OF-CSV]",
@@ -67,6 +92,7 @@
   },
   "SA": {
     "bar": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "saConfig": {
         "currencyCode": "[YOUR-CURRENCY-CODE]",
         "type": "TRANSACTION",
@@ -85,26 +111,92 @@
     }
   },
   "ACLC": {
-    "foo" : {
+    "foo": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
       "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
       "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
       "adsConfig": {
-        "conversion_action": "[YOUR-CONVERSION-ACTION-NAME]",
-        "conversion_value": "[YOUR-CONVERSION-VALUE]",
-        "currency_code": "[YOUR-CURRENCY-CODE]"
+        "conversionAction": "[YOUR-CONVERSION-ACTION-NAME]",
+        "conversionValue": "[YOUR-CONVERSION-VALUE]",
+        "currencyCode": "[YOUR-CURRENCY-CODE]",
+        "userIdentifierSource": "[USER_IDENTIFIER_SOURCE]",
+        "customVariableTags": "[YOUR-CUSTOM-VARIABLE-TAGS]",
+        "consent": {
+          "adUserData": "GRANTED|DENIED|undefined",
+          "adPersonalization": "GRANTED|DENIED|undefined"
+        }
       }
     }
   },
   "ACM": {
-    "foo" : {
+    "foo": {
+      "secretName": "[YOUR-SECRET-NAME]",
       "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
       "customerMatchConfig": {
-        "customer_id": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
-        "login_customer_id": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
-        "list_id": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
-        "list_type": "[YOUR-CUSTOMER-MATCH-LIST-TYPE]",
+        "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+        "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+        "listId": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+        "listName": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+        "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID",
+        "customerMatchUserListMetadata": {
+          "consent": {
+            "adUserData": "GRANTED|DENIED",
+            "adPersonalization": "GRANTED|DENIED"
+          }
+        },
         "operation": "create|remove"
+      }
+    }
+  },
+  "ACA": {
+    "foo": {
+      "secretName": "[YOUR-SECRET-NAME]",
+      "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+      "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+      "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+      "adsConfig": {
+        "conversionAction": "[YOUR-CONVERSION-ACTION-NAME]",
+        "adjustmentType": "ENHANCEMENT|RETRACTION|RESTATEMENT",
+        "userIdentifierSource": "FIRST_PARTY"
+      }
+    }
+  },
+  "AOUD": {
+    "for_customer_match_user_data": {
+      "secretName": "[YOUR-SECRET-NAME]",
+      "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+      "offlineUserDataJobConfig": {
+        "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+        "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+        "type": "CUSTOMER_MATCH_USER_LIST",
+        "operation": "create|remove",
+        "listId": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
+        "listName": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
+        "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
+        "userAttribute": "UserAttribute|undefined",
+        "customerMatchUserListMetadata": {
+          "consent": {
+            "adUserData": "GRANTED|DENIED",
+            "adPersonalization": "GRANTED|DENIED"
+          }
+        }
+      }
+    },
+    "for_store_sales_conversions": {
+      "secretName": "[YOUR-SECRET-NAME]",
+      "developerToken": "[YOUR-GOOGLE-ADS-DEV-TOKEN]",
+      "offlineUserDataJobConfig": {
+        "customerId": "[YOUR-GOOGLE-ADS-ACCOUNT-ID]",
+        "loginCustomerId": "[YOUR-LOGIN-GOOGLE-ADS-ACCOUNT-ID]",
+        "type": "CUSTOMER_MATCH_USER_LIST",
+        "operation": "create|remove",
+        "storeSalesMetadata": "StoreSalesMetadata|undefined",
+        "transactionAttribute": "TransactionAttribute|undefined",
+        "consent": {
+          "adUserData": "GRANTED|DENIED|undefined",
+          "adPersonalization": "GRANTED|DENIED|undefined"
+        }
       }
     }
   }
