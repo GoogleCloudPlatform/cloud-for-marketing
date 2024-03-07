@@ -68,7 +68,8 @@ Other differences should be noted are:
     - [4.3.2. Submenu item `Upload selected config to Firestore`](#432-submenu-item-upload-selected-config-to-firestore)
     - [4.3.3. Submenu item `Upload selected data to test Tentacles`](#433-submenu-item-upload-selected-data-to-test-tentacles)
     - [4.3.4. Submenu item `Upload all configs to Firestore`](#434-submenu-item-upload-all-configs-to-firestore)
-    - [4.3.5. Submenu item `Reset sheet (will lose modification)`](#435-submenu-item-reset-sheet-will-lose-modification)
+    - [4.3.5. Submenu item `Append all configs from Firestore to Sheets`](#435-submenu-item-append-all-configs-from-firestore-to-sheets)
+    - [4.3.6. Submenu item `Reset sheet (will lose modification)`](#436-submenu-item-reset-sheet-will-lose-modification)
 
 ## 1. Preparation
 
@@ -325,6 +326,10 @@ For the sample data format, see [`Content of data files`](../README.md#34-conten
 Upload all API configurations to Firestore. It is used to replace the previous
 bash command `update_api_config`.
 
-#### 4.3.5. Submenu item `Reset sheet (will lose modification)`
+#### 4.3.5. Submenu item `Append all configs from Firestore to Sheets`
+
+Download all API configurations from Firestore and append them to the sheet `Tentacles Config`.
+
+#### 4.3.6. Submenu item `Reset sheet (will lose modification)`
 
 Clean this sheet and generate a new one with those template configurations only.
