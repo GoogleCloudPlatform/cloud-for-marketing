@@ -50,6 +50,11 @@ const TRANSFER_STATE_CANCELLED = 'CANCELLED';
 /** Executes BigQuery Data Transfer run job. */
 class DataTransferTask extends BaseTask {
 
+  /** @override */
+  isManualAsynchronous() {
+    return true;
+  }
+
   /**
    * Gets a BigQuery Data Transfer service client instance.
    * @return {DataTransferServiceClient}

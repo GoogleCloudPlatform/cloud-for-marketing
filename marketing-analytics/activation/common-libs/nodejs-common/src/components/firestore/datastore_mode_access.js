@@ -75,7 +75,7 @@ class DatastoreModeAccess {
    */
   getKey(id) {
     const keyPath = [this.kind];
-    if (id) keyPath.push(isNaN(id) ? id : parseInt(id));
+    if (id) keyPath.push(isNaN(id) ? id : this.datastore.int(id));
     return this.datastore.key({
       namespace: this.namespace,
       path: keyPath,
@@ -116,10 +116,11 @@ class DatastoreModeAccess {
     const key = this.getKey(id);
     const apiResponse =
       await this.datastore.save({ key, data, excludeLargeProperties: true });
-    // Default key in Datastore is a number in response like following.
+    // Default key in Datastore is an int as string in response. It could be
+    // larger than JavaScript max safe integer, so keep it as string here.
     // With a given id, the key in response is null.
     const updatedId = id !== undefined ? id
-      : +apiResponse[0].mutationResults[0].key.path[0].id;
+      : apiResponse[0].mutationResults[0].key.path[0].id;
     this.logger.debug(`Result of saving ${updatedId}@${this.kind}: `,
       JSON.stringify(apiResponse));
     // Datastore has a delay to write entity. This method only returns id

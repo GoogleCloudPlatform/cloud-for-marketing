@@ -68,31 +68,38 @@ class DoubleClickBidManagerReport extends Report {
    * separated in two different chunks, an extra parameter 'last' is used to
    * store data from the last chunk.
    *
-   * @param {stream} content
+   * @param {stream} reportStream
    * @return {string}
    */
-  clean(content) {
-    let last = '';
+  clean(reportStream) {
+    const END_TAG = '\n\n';
+    let previousPiece = '';
+    let ended = false;
     const streamReportTransform = new Transform({
       transform(chunk, encoding, callback) {
-        const data = chunk.toString();
-        const toCheck = last + data;
-        if (toCheck.indexOf('\n\n') === -1) {
-          const output = last;
-          last = data;
+        const currentPiece = chunk.toString();
+        const toCheck = previousPiece + currentPiece;
+        if (ended) return callback();
+        if (toCheck.indexOf(END_TAG) === -1) {
+          const output = previousPiece;
+          previousPiece = currentPiece;
           callback(null, output);
         } else {
-          const lines = toCheck.substring(0, toCheck.indexOf('\n\n')).split('\n');
-          if (lines[lines.length - 1].startsWith(',')) {
-            lines.pop();
+          ended = true;
+          const latest =
+            toCheck.substring(0, toCheck.indexOf(END_TAG)).split('\n');
+          if (latest[latest.length - 1].startsWith(',')) {
+            latest.pop();
           }
-          callback(null, lines.join('\n'));
-          this.end();
+          this.push(latest.join('\n'));
+          this.push(null);
+          callback();
         }
       }
     });
-    content.on('error', (error) => streamReportTransform.emit('error', error));
-    return content.pipe(streamReportTransform);
+    reportStream
+      .on('error', (error) => streamReportTransform.emit('error', error));
+    return reportStream.pipe(streamReportTransform);
   }
 }
 

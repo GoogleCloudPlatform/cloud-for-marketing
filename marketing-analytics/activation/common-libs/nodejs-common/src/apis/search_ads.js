@@ -20,7 +20,7 @@
 
 const { request: gaxiosRequest } = require('gaxios');
 const { google } = require('googleapis');
-const AuthClient = require('./auth_client.js');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const { getLogger } = require('../components/utils.js');
 const { getCleanCid, RestSearchStreamTransform }
   = require('./base/ads_api_common.js');
@@ -35,7 +35,7 @@ const API_VERSION = 'v0';
  * Search Ads 360 Reporting API stub.
  * See: https://developers.google.com/search-ads/reporting/api/reference/release-notes
  */
-class SearchAds {
+class SearchAds extends GoogleApiClient {
 
   /**
    * @constructor
@@ -43,8 +43,19 @@ class SearchAds {
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'searchads360';
     this.logger = getLogger('API.SA');
+  }
+
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -59,27 +70,16 @@ class SearchAds {
    * @return {!google.searchads360}
    * @private
    */
-  async getApiClient_(loginCustomerId) {
+  async getApiClient(loginCustomerId) {
     this.logger.debug(`Initialized SA reporting for ${loginCustomerId}`);
     const options = {
-      version: API_VERSION,
-      auth: await this.getAuth_(),
+      version: this.getVersion(),
+      auth: await this.getAuth(),
     };
     if (loginCustomerId) {
       options.headers = { 'login-customer-id': getCleanCid(loginCustomerId) };
     }
     return google.searchads360(options);
-  }
-
-  /**
-   * Gets the auth object.
-   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
-   */
-  async getAuth_() {
-    if (this.auth) return this.auth;
-    await this.authClient.prepareCredentials();
-    this.auth = this.authClient.getDefaultAuth();
-    return this.auth;
   }
 
   /**
@@ -96,7 +96,7 @@ class SearchAds {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rpc/google.ads.searchads360.v0.services#searchsearchads360response
    */
   async getPaginatedReport(customerId, loginCustomerId, query, options = {}) {
-    const searchads = await this.getApiClient_(loginCustomerId);
+    const searchads = await this.getApiClient(loginCustomerId);
     const requestBody = Object.assign({
       query,
       pageSize: 10000,
@@ -120,7 +120,7 @@ class SearchAds {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/search
    */
   async restStreamReport(customerId, loginCustomerId, query) {
-    const auth = await this.getAuth_();
+    const auth = await this.getAuth();
     const headers = Object.assign(
       await auth.getRequestHeaders(), {
       'login-customer-id': getCleanCid(loginCustomerId),
@@ -166,7 +166,7 @@ class SearchAds {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/v0/searchAds360Fields#SearchAds360Field
    */
   async getReportField(fieldName) {
-    const searchads = await this.getApiClient_();
+    const searchads = await this.getApiClient();
     const resourceName = `searchAds360Fields/${fieldName}`;
     const response =
       await searchads.searchAds360Fields.get({ resourceName });
@@ -185,7 +185,7 @@ class SearchAds {
    */
   async searchReportField(adFields,
     metadata = ['name', 'data_type', 'is_repeated', 'type_url',]) {
-    const searchads = await this.getApiClient_();
+    const searchads = await this.getApiClient();
     const selectClause = metadata.join(',');
     const fields = adFields.join('","');
     const query = `SELECT ${selectClause} WHERE name IN ("${fields}")`;
@@ -203,7 +203,7 @@ class SearchAds {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/v0/customers.customColumns#CustomColumn
    */
   async listCustomColumns(customerId, loginCustomerId) {
-    const searchads = await this.getApiClient_(loginCustomerId);
+    const searchads = await this.getApiClient(loginCustomerId);
     const response = await searchads.customers.customColumns.list({ customerId });
     return response.data.customColumns;
   }
@@ -219,7 +219,7 @@ class SearchAds {
    */
   async getCustomColumn(columnId, customerId, loginCustomerId) {
     const resourceName = `customers/${customerId}/customColumns/${columnId}`;
-    const searchads = await this.getApiClient_(loginCustomerId);
+    const searchads = await this.getApiClient(loginCustomerId);
     const response = await searchads.customers.customColumns.get({ resourceName });
     return response.data;
   }

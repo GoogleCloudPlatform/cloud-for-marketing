@@ -21,6 +21,7 @@
 
 const stream = require('stream');
 const {google} = require('googleapis');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const {Schema$Upload} = google.analytics;
 const AuthClient = require('./auth_client.js');
 const {wait, getLogger, BatchResult} = require('../components/utils.js');
@@ -55,31 +56,26 @@ let DataImportClearConfig;
 /**
  * Google Analytics API v3 stub.
  */
-class Analytics {
+class Analytics extends GoogleApiClient {
   /**
    * @constructor
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'analytics';
     this.logger = getLogger('API.GA');
   }
 
-  /**
-   * Prepares the Google Analytics instance.
-   * @return {!google.analytics}
-   * @private
-   */
-  async getApiClient_() {
-    if (this.analytics) return this.analytics;
-    await this.authClient.prepareCredentials();
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.analytics = google.analytics({
-      version: API_VERSION,
-      auth: this.authClient.getDefaultAuth(),
-    });
-    return this.analytics;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -102,7 +98,7 @@ class Analytics {
         },
         config);
 
-    const analytics = await this.getApiClient_();
+    const analytics = await this.getApiClient();
     const response = await analytics.management.uploads.uploadData(
         uploadConfig);
     this.logger.debug('Configuration: ', config);
@@ -151,7 +147,7 @@ class Analytics {
    * @return {!Promise<!Schema$Upload>} Updated data import Job status.
    */
   async checkJobStatus(jobConfig) {
-    const analytics = await this.getApiClient_();
+    const analytics = await this.getApiClient();
     const { data: job } = await analytics.management.uploads.get(jobConfig);
     if (job.status !== 'PENDING') return job;
     this.logger.debug(
@@ -169,7 +165,7 @@ class Analytics {
    * @return {!Promise<!Array<string>>}
    */
   async listAccounts() {
-    const analytics = await this.getApiClient_();
+    const analytics = await this.getApiClient();
     const response = await analytics.management.accounts.list();
     return response.data.items.map(
         (account) => `Account id: ${account.name}[${account.id}]`
@@ -182,7 +178,7 @@ class Analytics {
    * @return {!Promise<!Array<Object>>}
    */
   async listUploads(config) {
-    const analytics = await this.getApiClient_();
+    const analytics = await this.getApiClient();
     const response = await analytics.management.uploads.list(config);
     return response.data.items;
   }
@@ -203,7 +199,7 @@ class Analytics {
     const request = Object.assign({}, config, {
       resource: {customDataImportUids},
     });
-    const analytics = await this.getApiClient_();
+    const analytics = await this.getApiClient();
     await analytics.management.uploads.deleteUploadData(request);
     this.logger.debug('Delete uploads: ', customDataImportUids);
   }

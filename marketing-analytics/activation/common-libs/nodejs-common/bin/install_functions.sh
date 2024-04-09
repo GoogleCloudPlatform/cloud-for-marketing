@@ -1560,6 +1560,7 @@ set_cloud_functions_default_settings() {
   default_cf_flag+=(--set-env-vars=DEBUG="${DEBUG}")
   default_cf_flag+=(--set-env-vars=IN_GCP="${IN_GCP}")
   default_cf_flag+=(--set-env-vars=DATABASE_ID="${DATABASE_ID}")
+  default_cf_flag+=(--set-env-vars=DATABASE_MODE="${DATABASE_MODE}")
 }
 
 #######################################

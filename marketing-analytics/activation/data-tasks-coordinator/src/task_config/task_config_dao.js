@@ -32,6 +32,7 @@ const TaskType = {
   LOAD: 'load',
   QUERY: 'query',
   EXPORT: 'export',
+  CREATE_EXTERNAL: 'create_external',
   DATA_TRANSFER: 'data_transfer',
   EXPORT_SCHEMA: 'export_schema',
   DELETE_DATASET: 'delete_dataset',
@@ -51,6 +52,7 @@ const TaskType = {
   // Tasks dependencies management tasks
   KNOT: 'knot',
   MULTIPLE: 'multiple',
+  SPEED_CONTROLLED: 'speed_controlled',
 };
 
 /**

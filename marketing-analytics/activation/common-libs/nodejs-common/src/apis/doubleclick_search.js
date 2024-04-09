@@ -19,9 +19,8 @@
 
 'use strict';
 
-const {google} = require('googleapis');
 const {request} = require('gaxios');
-const AuthClient = require('./auth_client.js');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const {
   getLogger,
   SendSingleBatch,
@@ -118,7 +117,7 @@ let ReportRequest;
  * Quota limits, see:
  * https://support.google.com/adsihc/answer/6346075?hl=en
  */
-class DoubleClickSearch {
+class DoubleClickSearch extends GoogleApiClient {
 
   /**
    * @constructor
@@ -126,34 +125,19 @@ class DoubleClickSearch {
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'doubleclicksearch';
     this.logger = getLogger('API.DS');
   }
 
-  /**
-   * Prepares the Google SA360 instance.
-   * @return {!google.doubleclicksearch}
-   * @private
-   */
-  async getApiClient_() {
-    if (this.doubleclicksearch) return this.doubleclicksearch;
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.doubleclicksearch = google.doubleclicksearch({
-      version: API_VERSION,
-      auth: await this.getAuth_(),
-    });
-    return this.doubleclicksearch;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
   }
 
-  /**
-   * Gets the auth object.
-   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
-   */
-  async getAuth_() {
-    if (this.auth) return this.auth;
-    await this.authClient.prepareCredentials();
-    this.auth = this.authClient.getDefaultAuth();
-    return this.auth;
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -172,7 +156,7 @@ class DoubleClickSearch {
     });
     this.logger.debug('Sending out availabilities', availabilities);
     try {
-      const doubleclicksearch = await this.getApiClient_();
+      const doubleclicksearch = await this.getApiClient();
       const response = await doubleclicksearch.conversion.updateAvailability(
           {requestBody: {availabilities}});
       this.logger.debug('Get response: ', response);
@@ -221,7 +205,7 @@ class DoubleClickSearch {
         numberOfLines: lines.length,
       };
       try {
-        const doubleclicksearch = await this.getApiClient_();
+        const doubleclicksearch = await this.getApiClient();
         const response = await doubleclicksearch.conversion.insert(
             {requestBody: {conversion: conversions}}
         );
@@ -322,7 +306,7 @@ class DoubleClickSearch {
    * @return {!Promise<string>}
    */
   async requestReports(requestBody) {
-    const doubleclicksearch = await this.getApiClient_();
+    const doubleclicksearch = await this.getApiClient();
     const { status, data } = await doubleclicksearch.reports.request({ requestBody });
     if (status >= 200 && status < 300) {
       return data.id;
@@ -341,7 +325,7 @@ class DoubleClickSearch {
    * }>>}
    */
   async getReportUrls(reportId) {
-    const doubleclicksearch = await this.getApiClient_();
+    const doubleclicksearch = await this.getApiClient();
     const { status, data } = await doubleclicksearch.reports.get({ reportId });
     switch (status) {
       case 200:
@@ -367,11 +351,11 @@ class DoubleClickSearch {
    * @return {!Promise<string>}
    */
   async getReportFile(reportId, reportFragment) {
-    const doubleclicksearch = await this.getApiClient_();
+    const doubleclicksearch = await this.getApiClient();
     const response = await doubleclicksearch.reports.getFile(
         {reportId, reportFragment});
     if (response.status === 200) {
-      return Buffer.from(await response.data.arrayBuffer()).toString();
+      return response.data;
     }
     const errorMsg =
         `Error in get file from reports: ${reportFragment}@${reportId}`;
@@ -387,7 +371,7 @@ class DoubleClickSearch {
    * @return {!Promise<ReadableStream>}
    */
   async getReportFileStream(url) {
-    const auth = await this.getAuth_();
+    const auth = await this.getAuth();
     const headers = await auth.getRequestHeaders();
     const response = await request({
       method: 'GET',

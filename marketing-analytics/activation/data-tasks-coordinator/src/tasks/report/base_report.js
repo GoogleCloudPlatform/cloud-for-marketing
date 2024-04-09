@@ -20,12 +20,13 @@
 const {TableSchema: BqTableSchema} = require('@google-cloud/bigquery');
 const {
   api: {
-    doubleclicksearch: {ReportRequest: Sa360ReportConfig},
+    doubleclicksearch: { ReportRequest: Sa360LegacyReportConfig },
     googleads: ReportQueryConfig,
     doubleclickbidmanager: {RequestBody: Dv360RequestBody},
     youtube: {ListChannelsConfig, ListVideosConfig},
   }
 } = require('@google-cloud/nodejs-common');
+const { StorageFileConfig } = require('../../task_config/task_config_dao.js');
 
 /**
  * Campaign Manager report configuration.
@@ -51,17 +52,30 @@ let CmReportConfig;
 let Dv360ReportConfig;
 
 /**
+ * SA360 (Search Ads 360) Reporting API configuration.
+ * @typedef {{
+ *   secretName: (string|undefined),
+ *   customerId: string,
+ *   loginCustomerId: string,
+ *   query:(string|undefined),
+ *   file:(!StorageFileConfig|undefined),
+ * }}
+ */
+let Sa360ReportConfig;
+
+/**
  * General API result configuration.
  * @typedef {{
  *   secretName: (string|undefined),
  *   packageName: string,
- *   className: string,
- *   functionObjectName: (string|undefined),
- *   functionName: string,
+ *   api: string,
+ *   resource: string,
+ *   functionName: (string|undefined),
  *   args: (Object|undefined),
  *   limit: (number|undefined),
  *   entityPath: string,
  *   pageTokenPath: (string|undefined),
+ *   fieldMask: (string|undefined),
  * }}
  */
 let ApiResultConfig;
@@ -73,6 +87,8 @@ let ApiResultConfig;
  *   developerToken: string,
  *   customerId: string|undefined,
  *   loginCustomerId: string|undefined,
+ *   query:(string|undefined),
+ *   file:(!StorageFileConfig|undefined),
  *   reportQuery: ReportQueryConfig|undefined,
  * }}
  */
@@ -99,6 +115,9 @@ let YouTubeReportConfig;
  *   target: 'DV360',
  *   config: Dv360ReportConfig,
  * } | {
+ *   target: 'DS',
+ *   config: Sa360LegacyReportConfig,
+ * } | {
  *   target: 'SA360',
  *   config: Sa360ReportConfig,
  * } | {
@@ -106,6 +125,9 @@ let YouTubeReportConfig;
  *   config: ApiResultConfig,
  * } | {
  *   target: 'ADS',
+ *   config: AdsReportConfig,
+ * } | {
+ *   target: 'ADSL',
  *   config: AdsReportConfig,
  * } | {
  *   target: 'YT',
@@ -179,10 +201,11 @@ class Report {
   /**
    * Returns the schema of current report's data structure to help BigQuery load
    * the data into Table.
+   * @param {Object<string,string>=} parameters Parameters of this instance.
    * @return {!BqTableSchema} BigQuery load schema, see:
    *     https://cloud.google.com/bigquery/docs/schemas
    */
-  generateSchema() {
+  generateSchema(parameters) {
     throw new Error('Unimplemented method.');
   }
 

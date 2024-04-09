@@ -19,8 +19,7 @@
 
 const { Transform } = require('stream');
 const {
-  extractObject,
-  changeObjectNamingFromLowerCamelToSnake,
+  getFilterAndStringifyFn,
   getLogger,
 } = require('../../components/utils.js');
 
@@ -36,22 +35,6 @@ function getCleanCid(cid) {
 const START_TAG = '"results":';
 const FIELD_MASK_TAG = '"fieldMask"';
 const END_TAG = '"requestId"';
-
-/**
- * Generates a function that can convert a given JSON object to a JSON string
- * with only specified fields(fieldMask), in specified naming convention.
- * @param {string} fieldMask The 'fieldMask' string from response.
- * @param {boolean=} snakeCase Whether or not output JSON in snake naming.
- */
-function generateProcessFn(fieldMask, snakeCase = false) {
-  const extractor = extractObject(fieldMask.split(','));
-  return (originalObject) => {
-    const extracted = extractor(originalObject);
-    const generatedObject = snakeCase
-      ? changeObjectNamingFromLowerCamelToSnake(extracted) : extracted;
-    return JSON.stringify(generatedObject);
-  };
-};
 
 /**
  * A stream.Transform that can extract properties and convert naming of the
@@ -85,7 +68,7 @@ class RestSearchStreamTransform extends Transform {
           .substring(maskIndex + FIELD_MASK_TAG.length, rawString.indexOf(END_TAG))
           .split('"')[1];
         this.logger.debug(`Got fieldMask: ${fieldMask}`);
-        this.processFn = generateProcessFn(fieldMask, this.snakeCase);
+        this.processFn = getFilterAndStringifyFn(fieldMask, this.snakeCase);
       }
       const resultsWithTailing = rawString.substring(startIndex, maskIndex);
       const results = resultsWithTailing.substring(

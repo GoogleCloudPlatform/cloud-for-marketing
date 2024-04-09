@@ -21,7 +21,7 @@
 
 const {
   api: { googleadsapi: { GoogleAdsApi: GoogleAds, OfflineUserDataJobConfig } },
-  utils: { getProperValue, BatchResult },
+  utils: { getProperValue, BatchResult, changeObjectNamingFromSnakeToLowerCamel },
   storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');
 const { GoogleAdsCustomerMatch } = require('./google_ads_customer_match_upload.js');
@@ -100,9 +100,10 @@ class GoogleAdsOfflineUserDataJobUpload extends GoogleAdsCustomerMatch {
       records = message;
     }
     try {
-      const { offlineUserDataJobConfig } = config;
+      const { offlineUserDataJobConfig } =
+        changeObjectNamingFromSnakeToLowerCamel(config);
       if (offlineUserDataJobConfig.type.startsWith('CUSTOMER_MATCH')) {
-        offlineUserDataJobConfig.list_id =
+        offlineUserDataJobConfig.listId =
           await this.getOrCreateUserList(googleAds, offlineUserDataJobConfig);
       }
       const jobResourceName =
@@ -110,7 +111,7 @@ class GoogleAdsOfflineUserDataJobUpload extends GoogleAdsCustomerMatch {
       this.logger.info('jobResourceName: ', jobResourceName);
       const managedSend = this.getManagedSendFn(config);
       const configedUpload = googleAds.getAddOperationsToOfflineUserDataJobFn(
-        config.offlineUserDataJobConfig, jobResourceName);
+        offlineUserDataJobConfig, jobResourceName);
       const result = await managedSend(configedUpload, records, messageId);
       this.logger.info('add userdata result: ', result);
       await googleAds.runOfflineUserDataJob(

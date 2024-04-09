@@ -19,6 +19,7 @@
 'use strict';
 
 const {google} = require('googleapis');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const {
   Schema$Channel,
   Schema$Video,
@@ -26,8 +27,7 @@ const {
   Schema$Playlist,
   Schema$Search,
 } = google.youtube;
-const AuthClient = require('./auth_client.js');
-const {getLogger} = require('../components/utils.js');
+const { getLogger } = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/youtube.force-ssl'
@@ -159,34 +159,26 @@ let ListSearchConfig;
  * Search list type definition, see:
  * https://developers.google.com/youtube/v3/docs/search/list
  */
-class YouTube {
+class YouTube extends GoogleApiClient {
   /**
    * @constructor
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
-    /**
-     * Logger object from 'log4js' package where this type is not exported.
-     */
+    super(env);
+    this.googleApi = 'youtube';
     this.logger = getLogger('API.YT');
   }
 
-  /**
-     * Prepares the Google YouTube instance.
-     * @return {!google.youtube}
-     * @private
-     */
-  async getApiClient_() {
-    if (this.youtube) return this.youtube;
-    await this.authClient.prepareCredentials();
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.youtube = google.youtube({
-      version: API_VERSION,
-      auth: this.authClient.getDefaultAuth(),
-    });
-    return this.youtube;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -200,7 +192,7 @@ class YouTube {
     const channelListRequest = Object.assign({}, config);
     channelListRequest.part = channelListRequest.part.join(',')
     try {
-      const youtube = await this.getApiClient_();
+      const youtube = await this.getApiClient();
       const response = await youtube.channels.list(channelListRequest);
       this.logger.debug('Response: ', response);
       return response.data.items;
@@ -223,7 +215,7 @@ class YouTube {
     const videoListRequest = Object.assign({}, config);
     videoListRequest.part = videoListRequest.part.join(',')
     try {
-      const youtube = await this.getApiClient_();
+      const youtube = await this.getApiClient();
       const response = await youtube.videos.list(videoListRequest);
       this.logger.debug('Response: ', response);
       return response.data.items;
@@ -247,7 +239,7 @@ class YouTube {
     const commentThreadsRequest = Object.assign({}, config);
     commentThreadsRequest.part = commentThreadsRequest.part.join(',')
     try {
-      const youtube = await this.getApiClient_();
+      const youtube = await this.getApiClient();
       const response = await youtube.commentThreads.list(commentThreadsRequest);
       this.logger.debug('Response: ', response.data);
       return response.data.items;
@@ -282,7 +274,7 @@ class YouTube {
     }
 
     try {
-      const youtube = await this.getApiClient_();
+      const youtube = await this.getApiClient();
       const response = await youtube.playlists.list(playlistsRequest);
       this.logger.debug('Response: ', response.data);
       if (response.data.nextPageToken) {
@@ -324,7 +316,7 @@ class YouTube {
     }
 
     try {
-      const youtube = await this.getApiClient_();
+      const youtube = await this.getApiClient();
       const response = await youtube.search.list(searchRequest);
       this.logger.debug('Response: ', response.data);
       if (response.data.nextPageToken) {

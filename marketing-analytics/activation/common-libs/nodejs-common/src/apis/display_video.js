@@ -19,14 +19,8 @@
 
 'use strict';
 
-const { google } = require('googleapis');
-const AuthClient = require('./auth_client.js');
-const {
-  getLogger,
-  getObjectByPath,
-  SendSingleBatch,
-  BatchResult,
-} = require('../components/utils.js');
+const { GoogleApiClient } = require('./base/google_api_client.js');
+const { getLogger } = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/display-video',
@@ -40,7 +34,7 @@ const API_VERSION = 'v3';
  * Bid Manager API.
  * @see https://developers.google.com/bid-manager/reference/rest
  */
-class DisplayVideo {
+class DisplayVideo extends GoogleApiClient {
 
   /**
    * @constructor
@@ -48,44 +42,19 @@ class DisplayVideo {
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'displayvideo';
     this.logger = getLogger('API.DV3API');
   }
 
-  /**
-   * Prepares the Google DV3 instance.
-   * @return {!google.displayvideo}
-   * @private
-   */
-  async getApiClient_() {
-    if (this.displayvideo) return this.displayvideo;
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.displayvideo = google.displayvideo({
-      version: API_VERSION,
-      auth: await this.getAuth_(),
-    });
-    return this.displayvideo;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
   }
 
-  /**
-   * Gets the auth object.
-   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
-   */
-  async getAuth_() {
-    if (this.auth) return this.auth;
-    await this.authClient.prepareCredentials();
-    this.auth = this.authClient.getDefaultAuth();
-    return this.auth;
-  }
-
-  /**
-   * Gets the instance of function object based on Google API client library.
-   * @param {string|undefined} path
-   * @return {Object}
-   */
-  async getFunctionObject(path) {
-    const instance = await this.getApiClient_();
-    return getObjectByPath(instance, path);
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
 }

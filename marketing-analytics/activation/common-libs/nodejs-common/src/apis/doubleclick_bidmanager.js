@@ -19,8 +19,7 @@
 
 'use strict';
 
-const {google} = require('googleapis');
-const AuthClient = require('./auth_client.js');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const { getLogger } = require('../components/utils.js');
 
 const API_SCOPES = Object.freeze([
@@ -29,24 +28,23 @@ const API_SCOPES = Object.freeze([
 const API_VERSION = 'v2';
 
 /**
- * The returned information of get a query.
- * @typedef {{
- *   running:boolean,
- *   latestReportRunTimeMs:string,
- *   googleCloudStoragePathForLatestReport:string,
- * }}
- */
-let QueryResource;
-
-/**
  * RequestBody controls the data range of reports.
  * see:
- * https://developers.google.com/bid-manager/v1.1/queries/runquery#request-body
+ * https://developers.google.com/bid-manager/reference/rest/v2/queries/run#RunQueryRequest
  * @typedef {{
- *   dataRange: string,
- *   reportDataStartTimeMs: long,
- *   reportDataEndTimeMs: long,
- *   timezoneCode: string
+ *   dataRange: {
+ *     range: Range,
+ *     customStartDate: {
+ *       year: integer,
+ *       month: integer,
+ *       day: integer,
+ *     },
+ *     customEndDate: {
+*       year: integer,
+*       month: integer,
+*       day: integer,
+*     },
+ *   }
  * }}
  */
 let RequestBody;
@@ -56,31 +54,26 @@ let RequestBody;
  * Note: DV360 report API only support OAuth 2.0, see:
  * https://developers.google.com/bid-manager/how-tos/authorizing
  */
-class DoubleClickBidManager {
+class DoubleClickBidManager extends GoogleApiClient {
   /**
    * @constructor
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'doubleclickbidmanager';
     this.logger = getLogger('API.DV3');
   }
 
-  /**
-   * Prepares the Google DBM instance.
-   * @return {!google.doubleclickbidmanager}
-   * @private
-   */
-  async getApiClient_() {
-    if (this.doubleclickbidmanager) return this.doubleclickbidmanager;
-    await this.authClient.prepareCredentials();
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.doubleclickbidmanager = google.doubleclickbidmanager({
-      version: API_VERSION,
-      auth: this.authClient.getDefaultAuth(),
-    });
-    return this.doubleclickbidmanager;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -91,21 +84,21 @@ class DoubleClickBidManager {
    * @return {!Promise<number>} Report Id.
    */
   async runQuery(queryId, requestBody = undefined) {
-    const doubleclickbidmanager = await this.getApiClient_();
+    const doubleclickbidmanager = await this.getApiClient();
     const response = await doubleclickbidmanager.queries.run(
         {queryId, requestBody});
     return response.data.key.reportId;
   }
 
   /**
-   * Gets a query resource.
+   * Gets a query metadata.
    * See https://developers.google.com/bid-manager/reference/rest/v2/queries/get
    * @param {number} queryId Id of the query.
-   * @return {!Promise<!QueryResource>} Query resource, see
-   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#Query
+   * @return {!Promise<!QueryMetadata>} Query metadata, see
+   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#QueryMetadata
    */
   async getQuery(queryId) {
-    const doubleclickbidmanager = await this.getApiClient_();
+    const doubleclickbidmanager = await this.getApiClient();
     const response = await doubleclickbidmanager.queries.get({ queryId });
     return response.data.metadata;
   }
@@ -117,14 +110,14 @@ class DoubleClickBidManager {
    * @return {!Promise<number>} Id of created query.
    */
   async createQuery(query) {
-    const doubleclickbidmanager = await this.getApiClient_();
+    const doubleclickbidmanager = await this.getApiClient();
     const response = await doubleclickbidmanager.queries.create(
         {requestBody: query});
     return response.data.queryId;
   }
 
   async getQueryReport(queryId, reportId) {
-    const doubleclickbidmanager = await this.getApiClient_();
+    const doubleclickbidmanager = await this.getApiClient();
     const response = await doubleclickbidmanager.queries.reports.get(
       { queryId, reportId });
     return response.data.metadata;
@@ -136,7 +129,7 @@ class DoubleClickBidManager {
    * @return {!Promise<boolean>} Whether the query was deleted.
    */
   async deleteQuery(queryId) {
-    const doubleclickbidmanager = await this.getApiClient_();
+    const doubleclickbidmanager = await this.getApiClient();
     try {
       const { status } = await doubleclickbidmanager.queries.delete({ queryId });
       return status === 200;
@@ -148,7 +141,6 @@ class DoubleClickBidManager {
 }
 
 module.exports = {
-  QueryResource,
   RequestBody,
   DoubleClickBidManager,
 };

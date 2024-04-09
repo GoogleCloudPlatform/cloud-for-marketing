@@ -268,7 +268,7 @@ class LoadTask extends BigQueryAbstractTask {
    */
   async getSchemaFromReportTask_(task, retriedTimes = 0) {
     try {
-      const schema = await task.getReport().generateSchema();
+      const schema = await task.generateSchema();
       return schema;
     } catch (error) {
       if (task.getReport().isFatalError(error.toString())) {
@@ -305,5 +305,6 @@ module.exports = {
   TableSchema,
   LoadOptions,
   LoadTaskConfig,
+  LoadTaskDestination,
   LoadTask,
 };

@@ -826,18 +826,29 @@ const getTentacles = (namespace, database) => {
 /**
  * Probes the Google Cloud Project's Firestore mode (Native or Datastore), then
  * uses it to create an instance of Tentacles.
+ * @param {(string|undefined)=} namespace
+ * @param {(string|undefined)=} projectId
+ * @param {(string|undefined)=} databaseId
+ * @param {(string|undefined)=} databaseMode
  * @return {!Promise<!Tentacles>}
  */
 const guessTentacles = async (namespace = process.env['PROJECT_NAMESPACE'],
   projectId = process.env['GCP_PROJECT'],
-  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) => {
+  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE,
+  databaseMode = process.env['DATABASE_MODE']) => {
   if (!namespace) {
     console.warn(
       'Fail to find ENV variables PROJECT_NAMESPACE, will set as `tentacles`'
     );
     namespace = 'tentacles';
   }
-  const database = await getFirestoreDatabase(projectId, databaseId);
+  if (!databaseMode) {
+    console.warn(
+      'Database mode is not set. Please consider upgrade this solution.');
+  }
+  const database = databaseMode
+    ? { source: DataSource[databaseMode], id: databaseId }
+    : await getFirestoreDatabase(projectId, databaseId);
   return getTentacles(namespace, database);
 };
 

@@ -55,48 +55,61 @@ class CampaignManagerReport extends Report {
   /**
    * Cleans up the content of report. CM reports are unable to be customized, so
    * use this function to get rid of unwanted lines, e.g. summary line.
-   * @param {stream} stream
+   * @param {stream} reportStream
    * @return {string}
    */
-  clean(stream) {
-    let last = '';
+  clean(reportStream) {
+    const START_TAG = '\nReport Fields';
+    const END_TAG = '\nGrand Total:';
+
+    let previousPiece = '';
     let started = false;
+    let ended = false;
     const streamReportTransform = new Transform({
       transform(chunk, encoding, callback) {
-        const data = chunk.toString();
-        let toCheck = last + data;
+        const currentPiece = chunk.toString();
+        let toCheck = previousPiece + currentPiece;
+        if (ended) return callback();
         if (!started) {
-          const startIndex = toCheck.indexOf('Report Fields');
+          const startIndex = toCheck.indexOf(START_TAG);
           if (startIndex === -1) {
-            last = toCheck;
-            callback(null, '');
+            previousPiece = toCheck;
+            return callback(null, '');
           } else {
-            last = '';
-            toCheck = toCheck.substring(startIndex + 'Report Fields'.length + 1);
+            previousPiece = '';
+            toCheck = toCheck.substring(startIndex + START_TAG.length + 1);
             started = true;
           }
         }
         if (started) {
-          const endIndex = toCheck.indexOf('Grand Total:');
+          const endIndex = toCheck.indexOf(END_TAG);
           if (endIndex === -1) {
-            const output = last;
-            last = last === '' ? toCheck : data;
+            let output = '';
+            if (currentPiece.length < END_TAG.length) {
+              previousPiece = toCheck;
+            } else {
+              output = previousPiece;
+              previousPiece = previousPiece === '' ? toCheck : currentPiece;
+            }
             callback(null, output);
           } else {
-            callback(null, toCheck.substring(0, endIndex));
-            this.end();
+            ended = true;
+            this.push(toCheck.substring(0, endIndex + 1));
+            this.push(null);
+            callback();
           }
         }
       }
     });
-    stream.on('error', (error) => streamReportTransform.emit('error', error));
+    reportStream
+      .on('error', (error) => streamReportTransform.emit('error', error));
     streamReportTransform.on('end', () => {
       if (!started) {
         streamReportTransform.emit('error',
           new Error(`Can't find 'Report Fields' line. Wrong report format?`));
       }
     });
-    return stream.pipe(streamReportTransform);
+    return reportStream.pipe(streamReportTransform);
   }
 }
 

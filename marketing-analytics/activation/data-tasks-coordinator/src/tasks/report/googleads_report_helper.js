@@ -18,8 +18,11 @@
  */
 
 'use strict';
-const {api: {googleads: {GoogleAdsField}}} = require(
-    '@google-cloud/nodejs-common');
+const lodash = require('lodash');
+const {
+  api: { googleadsapi: { GoogleAdsField } },
+  utils: { changeNamingFromSnakeToLowerCamel },
+} = require('@google-cloud/nodejs-common');
 
 /**
  * Definition of the field in BigQuery schema.
@@ -37,24 +40,24 @@ let FieldInSchema;
  * objects defined in Google Ads API. Those detailed properties don't show up at
  * the GoogleAdsFieldService. They will fail the load job to BigQuery without
  * detailed definition in schema.
- * So we need to manually define the (required) fields.
- * TODO: (question) Is there a way to get this part?
+ * So we need to manually define the (required) fields in snake case to align
+ * with the responses of Google Ads API.
+ * Note, only needed fields are mapped.
  *
  * @type {{string: Array<FieldInSchema>}}
  */
 const GOOGLE_ADS_MESSAGES = {
-  // Only map needed fields.
-  // https://developers.google.com/google-ads/api/reference/rpc/v7/AdTextAsset
+  // https://developers.google.com/google-ads/api/reference/rpc/latest/AdTextAsset
   AdTextAsset: [
     {name: 'text', type: 'STRING',},
     {name: 'pinned_field', type: 'STRING',},
   ],
-  // https://developers.google.com/google-ads/api/reference/rpc/v7/PolicyTopicEntry
+  // https://developers.google.com/google-ads/api/reference/rpc/latest/PolicyTopicEntry
   PolicyTopicEntry: [
     {name: 'topic', type: 'STRING',},
     {name: 'type', type: 'STRING',},
   ],
-  // https://developers.google.com/google-ads/api/reference/rpc/v7/AdGroupAdAssetPolicySummary
+  // https://developers.google.com/google-ads/api/reference/rpc/latest/AdGroupAdAssetPolicySummary
   AdGroupAdAssetPolicySummary: [
     {
       name: 'policy_topic_entries',
@@ -68,7 +71,7 @@ const GOOGLE_ADS_MESSAGES = {
     {name: 'review_status', type: 'STRING',},
     {name: 'approval_status', type: 'STRING',},
   ],
-  // https://developers.google.com/google-ads/api/reference/rpc/v7/ChangeEvent.ChangedResource
+  // https://developers.google.com/google-ads/api/reference/rpc/latest/ChangeEvent.ChangedResource
   ChangedResource: [
     {
       name: 'campaign',
@@ -88,6 +91,40 @@ const GOOGLE_ADS_MESSAGES = {
     },
   ],
 };
+
+/**
+ * By default, the mapped fields in snake_case. This function returns the mapped
+ * fields in lower camel case.
+ * @see GOOGLE_ADS_MESSAGES
+ * @param {!Array<!FieldInSchema>} mappedFields
+ * @return {!Array<!FieldInSchema>}
+ */
+const convertMappedMessageCase = (mappedFields) => {
+  return mappedFields.map((field) => {
+    const newField = lodash.merge({}, field,
+      { name: changeNamingFromSnakeToLowerCamel(field.name) })
+    if (field.fields) {
+      newField.fields = convertMappedMessageCase(field.fields);
+    }
+    return newField;
+  })
+}
+
+/**
+ * Gets the mapped messages based on specified case type.
+ * @param {boolean=} snakeCase
+ * @return {!Array<!FieldInSchema>}
+ */
+const getMappedMessages = (snakeCase = false) => {
+  if (snakeCase === true) return GOOGLE_ADS_MESSAGES;
+  const GOOGLE_ADS_MESSAGES_CAMEL_CASE = {};
+  Object.keys(GOOGLE_ADS_MESSAGES).forEach((key) => {
+    GOOGLE_ADS_MESSAGES_CAMEL_CASE[key] =
+      convertMappedMessageCase(GOOGLE_ADS_MESSAGES[key]);
+  });
+  return GOOGLE_ADS_MESSAGES_CAMEL_CASE;
+}
+
 
 /**
  * Maps the array of AdsFields to a structured object. e.g. AdsFields array
@@ -162,14 +199,13 @@ const getBigQueryDataType = (dateType) => {
  * @return {!FieldInSchema}
  */
 const getSingleField = (name, adsField, mappedTypes) => {
-  // console.log(name, adsField);
-  const type = getBigQueryDataType(adsField.data_type);
+  const type = getBigQueryDataType(adsField.dataType);
   const field = {name, type};
-  if (adsField.is_repeated) field.mode = 'REPEATED';
+  if (adsField.isRepeated) field.mode = 'REPEATED';
   if (type === 'RECORD') {
-    const types = adsField.type_url.split('.');
+    const types = adsField.typeUrl.split('.');
     const fields = mappedTypes[types[types.length - 1]];
-    if (!fields) throw new Error(`${adsField.type_url} isn't defined.`);
+    if (!fields) throw new Error(`${adsField.typeUrl} isn't defined.`);
     field.fields = fields;
   }
   return field;
@@ -200,22 +236,30 @@ const getSingleField = (name, adsField, mappedTypes) => {
  *
  * To understand more about:
  * 1. Google Ads segments:
- *    https://developers.google.com/google-ads/api/fields/v4/segments
+ *    https://developers.google.com/google-ads/api/fields/latest/segments
  * 2. Google Ads metrics:
- *    https://developers.google.com/google-ads/api/fields/v4/metrics
+ *    https://developers.google.com/google-ads/api/fields/latest/metrics
  * 3. Google Ads resources:
- *    https://developers.google.com/google-ads/api/reference/rpc/v4/overview
+ *    https://developers.google.com/google-ads/api/reference/rpc/latest/overview
  * 4. BigQuery data type:
  *    https://cloud.google.com/bigquery/docs/schemas#standard_sql_data_types
  *
- * @param {Array<string>} adsFieldNames
- * @param {{string:GoogleAdsField}} adsFieldsMap
- * @param {{string:Array<FieldInSchema>}=} mappedTypes
- *     Default value @link GOOGLE_ADS_MESSAGES
+ * @param {!Array<string>} adsFieldNames
+ * @param {!Array<!GoogleAdsField>} adsFields
+ * @param {boolean=} snakeCase Default value False
  * @return {!Array<FieldInSchema>}
  */
-const getSchemaFields = (adsFieldNames, adsFieldsMap,
-    mappedTypes = GOOGLE_ADS_MESSAGES) => {
+const getSchemaFields = (adsFieldNames, adsFields, snakeCase = false) => {
+  const adsFieldsMap = {};
+  adsFields.forEach((adsField) => {
+    const key = snakeCase
+      ? adsField.name : changeNamingFromSnakeToLowerCamel(adsField.name);
+    adsFieldsMap[key] = adsField;
+  });
+  const finalFieldNames = snakeCase
+    ? adsFieldNames : adsFieldNames.map(changeNamingFromSnakeToLowerCamel);
+  const mappedTypes = getMappedMessages(snakeCase);
+
   /**
    * Map an array of GoogleAdsFields to an array of fields in BigQuery load
    * schema.
@@ -238,7 +282,7 @@ const getSchemaFields = (adsFieldNames, adsFieldsMap,
           (subKey) => getSchemaFromObject(subKey, value[subKey], newPrefix)),
     };
   };
-  const structuredAdFields = mapAdsFieldsToObject(adsFieldNames);
+  const structuredAdFields = mapAdsFieldsToObject(finalFieldNames);
   return Object.keys(structuredAdFields).map(
       (key) => getSchemaFromObject(key, structuredAdFields[key]));
 }

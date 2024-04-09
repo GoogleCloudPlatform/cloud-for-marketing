@@ -19,6 +19,7 @@
 'use strict';
 
 const {google} = require('googleapis');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const {Params$Resource$Spreadsheets$Get} = google.sheets;
 const AuthClient = require('./auth_client.js');
 const {getLogger, BatchResult} = require('../components/utils.js');
@@ -63,7 +64,7 @@ let DimensionRange;
 /**
  * Google Spreadsheets API v4 stub.
  */
-class Spreadsheets {
+class Spreadsheets extends GoogleApiClient {
   /**
    * Init Spreadsheets API client.
    * @param {string} spreadsheetId
@@ -71,29 +72,21 @@ class Spreadsheets {
    *     variables.
    */
   constructor(spreadsheetId, env = process.env) {
+    super(env);
+    this.googleApi = 'sheets';
     /** @const {string} */
     this.spreadsheetId = spreadsheetId;
-    this.authClient = new AuthClient(API_SCOPES, env);
-    /**
-     * Logger object from 'log4js' package where this type is not exported.
-     */
     this.logger = getLogger('API.GS');
   }
 
-  /**
-   * Prepares the Google Sheets instance.
-   * @return {!google.sheets}
-   * @private
-   */
-  async getApiClient_() {
-    if (this.sheets) return this.sheets;
-    await this.authClient.prepareCredentials();
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.sheets = google.sheets({
-      version: API_VERSION,
-      auth: this.authClient.getDefaultAuth(),
-    });
-    return this.sheets;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
+  }
+
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -108,7 +101,7 @@ class Spreadsheets {
       spreadsheetId: this.spreadsheetId,
       ranges: sheetName,
     };
-    const sheets = await this.getApiClient_();
+    const sheets = await this.getApiClient();
     const response = await sheets.spreadsheets.get(request);
     const sheet = response.data.sheets[0];
     this.logger.debug(`Get sheet[${sheetName}]: `, sheet);
@@ -127,7 +120,7 @@ class Spreadsheets {
       range: sheetName,
     };
     try {
-      const sheets = await this.getApiClient_();
+      const sheets = await this.getApiClient();
       const response = await sheets.spreadsheets.values.clear(request);
       const data = response.data;
       this.logger.debug(`Clear sheet[${sheetName}}]: `, data);
@@ -180,7 +173,7 @@ class Spreadsheets {
       ranges: sheetName,
     };
     try {
-      const sheets = await this.getApiClient_();
+      const sheets = await this.getApiClient();
       const response = await sheets.spreadsheets.get(request);
       const sheet = response.data.sheets[0];
       const sheetId = sheet.properties.sheetId;
@@ -232,7 +225,7 @@ class Spreadsheets {
       numberOfLines: data.trim().split('\n').length,
     };
     try {
-      const sheets = await this.getApiClient_();
+      const sheets = await this.getApiClient();
       const response = await sheets.spreadsheets.batchUpdate(request);
       const data = response.data;
       this.logger.debug(`Batch[${batchId}] uploaded: `, data);

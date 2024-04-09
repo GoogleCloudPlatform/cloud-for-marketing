@@ -32,6 +32,7 @@ const {
  * @typedef {{
  *   destinationFormat:string,
  *   printHeader:boolean,
+ *   allowMultiple:boolean,
  * }}
  */
 let ExtractOptions;
@@ -74,9 +75,10 @@ class ExportTask extends BigQueryAbstractTask {
     /** @const {File} */ const storageFile = this.getStorage(destination)
         .bucket(destination.bucket)
         .file(destination.name);
+    const { allowMultiple = true } = this.config.options || {};
     return this.exportTable_(sourceTable, storageFile).catch((error) => {
-      if (!destination.name.includes('*') && error.message.includes(
-          'too large to be exported to a single file')) {
+      if (!destination.name.includes('*') && allowMultiple &&
+        error.message.includes('too large to be exported to a single file')) {
         this.logger.info(
             'Source table is too large to be exported in one file. Trying to '
             + 'add * to the output file and export again now...');
@@ -97,9 +99,11 @@ class ExportTask extends BigQueryAbstractTask {
    * @private
    */
   async exportTable_(sourceTable, storageFile) {
+    const destination = this.config.destination;
     const [job] = await sourceTable.extract(storageFile, this.config.options);
     const errors = job.status.errors;
     if (errors && errors.length > 0) throw errors;
+    const destinationUris = job.configuration.extract.destinationUris;
     const fileCounts = job.statistics.extract.destinationUriFileCounts[0];
     const status = job.status.state;
     const { jobReference } = job;
@@ -108,7 +112,8 @@ class ExportTask extends BigQueryAbstractTask {
         `Job[${jobId}] status ${status} with ${fileCounts} files.`);
     return {
       jobId,
-      parameters: this.appendParameter({ jobReference }),
+      parameters: this.appendParameter(
+        { jobReference, destination, destinationFile: destinationUris.join(',') }),
     };
   }
 }

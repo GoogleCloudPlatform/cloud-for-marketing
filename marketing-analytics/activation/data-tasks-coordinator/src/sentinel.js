@@ -200,9 +200,6 @@ class Sentinel {
       if (this.isBigQueryLoggingMessage_(message)) {
         return this.finishBigQueryTask_(message);
       }
-      if (this.isBigQueryDataTransferMessage_(message)) {
-        return this.finishBigQueryDataTransferTask_(message);
-      }
       throw new Error(`Unknown message: ${getMessage(message)}`);
     };
     return coordinateTask;
@@ -278,30 +275,6 @@ class Sentinel {
     const payload = JSON.parse(data);
     const event = payload.protoPayload.serviceData.jobCompletedEvent;
     return this.handleBigQueryJobCompletedEvent_(event);
-  }
-
-  /**
-   * Returns whether this is a message from BigQuery Data Transfer of a completed run job.
-   */
-  isBigQueryDataTransferMessage_(message) {
-    try {
-      const attributes = message.attributes || {};
-      return attributes.eventType === 'TRANSFER_RUN_FINISHED'
-          && attributes.payloadFormat === 'JSON_API_V1';
-    } catch (error) {
-      this.logger.error(
-        'Checking whether the message is from BigQuery Data Transfer',
-          error
-      );
-      return false;
-    }
-  }
-
-  /** Finishes the task (if any) related to the completed job in the message. */
-  finishBigQueryDataTransferTask_(message) {
-    const data = getMessage(message);
-    const payload = JSON.parse(data);
-    return this.handleBigQueryDataTransferTask_(payload);
   }
 
   /**
@@ -413,6 +386,7 @@ class Sentinel {
   async prepareExternalTask_(taskConfigId, parameters) {
     const taskConfig = await this.taskConfigDao.load(taskConfigId);
     if (!taskConfig) throw new Error(`Fail to load Task ${taskConfigId}`);
+    parameters.taskConfigId = taskConfigId;
     const task = this.buildTask(taskConfig, parameters);
     task.injectContext(this.options);
     return task;
@@ -505,38 +479,6 @@ class Sentinel {
     }
     this.logger.debug(`BigQuery JobId[${jobId}] is not a Sentinel Job.`);
   }
-
-  /**
-   * Based on the incoming message, updates the TaskLog and triggers next tasks
-   * if there is any in TaskConfig of the current finished task.
-   * For Data Transfer tasks, the taskLog saves the 'name' of run job
-   * as 'job id' which is generated when the job starts at the beginning.
-   * When the job is done, the datatransfer job will be sent here with the run
-   * job 'name'. So we can match to TaskLogs in database
-   * waiting for the job is done.
-   * @param payload
-   * @return {!Promise<(!Array<string>|number|undefined)>} The message Id array
-   *     of the next tasks and an empty Array if there is no followed task.
-   *     Returns taskLogId (number) when an error occurs.
-   *     Returns undefined if there is no related taskLog.
-   * @private
-   */
-  async handleBigQueryDataTransferTask_(payload) {
-    const jobId = payload.name;
-    const jobStatus = payload.state;
-    this.logger.debug(`Data Transfer job[${jobId}] status: ${jobStatus}`);
-    const filter = { property: 'jobId', value: jobId };
-    const taskLogs = await this.taskLogDao.list([filter]);
-    if (taskLogs.length > 1) {
-      throw new Error(`Find more than one task with Job Id: ${jobId}`);
-    }
-    if (taskLogs.length === 1) {
-      return this.finishTask_(taskLogs[0].id);
-    }
-    this.logger.debug(
-      `BigQuery Data Transfer JobId[${jobId}] is not a Sentinel Job.`
-    );
-  }
 }
 
 /**
@@ -584,18 +526,53 @@ const getDatePartition = (filename) => {
  */
 const getDefaultParameters = (parameters, timezone = 'UTC',
     unixMillis = Date.now()) => {
+  const DATE_KEYWORDS = [
+    'now',
+    'today',
+    'add',
+    'set',
+    'sub',
+    'hyphenated',
+    'timestamp',
+    'ms',
+    'last',
+    'current',
+    'year',
+    'quarter',
+    'month',
+    'week',
+    'start',
+    'end',
+  ];
   /**
    * Returns the value based on the given parameter name.
    * @param {string=} parameter
    * @return {string|number}
    */
   const getDefaultValue = (parameter) => {
-    const regex = /(now)|(today)|(add)|(set)|(sub)|(hyphenated)|(timestamp)|(ms)/gi;
+    const regex = new RegExp(DATE_KEYWORDS.map((k) => `(${k})`).join('|'), 'ig');
     let realParameter = parameter.replace(/(yesterday)/ig, 'today_sub_1')
       .replace(regex, (match) => match.toLowerCase());
     const now = DateTime.fromMillis(unixMillis, {zone: timezone});
     if (realParameter === 'now') return now.toISO(); // 'now' is a Date ISO String.
     if (realParameter === 'today') return now.toFormat('yyyyMMdd');
+    // [last|current]_[week|month|quarter|year]_[start|end]
+    if (realParameter.startsWith('last_')
+      || realParameter.startsWith('current_')) {
+      const pattern =
+        /^(last|current)_(week|month|quarter|year)_(start|end)(_.+)?$/;
+      if (!pattern.test(realParameter))
+        throw new Error(`Malformed of default parameter: ${parameter}`);
+      const periods = realParameter.split('_');
+      const target = periods.slice(0, 3).join('_');
+      const targetPeriod = realParameter.startsWith('last_')
+        ? now.minus({ [periods[1]]: 1 }) : now;
+      const targetDate = targetPeriod[`${periods[2]}Of`](periods[1]);
+      const diff = now.diff(targetDate, 'day').toObject().days;
+      const mathMethod = periods[2] === 'start' ? 'floor' : 'ceil';
+      const replacedString = `today_sub_${Math[mathMethod](diff)}`;
+      realParameter = realParameter.replace(target, replacedString);
+    }
     if (!realParameter.startsWith('today')) {
       throw new Error(`Unknown default parameter: ${parameter}`);
     }
@@ -680,17 +657,25 @@ const getSentinel = async (namespace, database) => {
  * @param {(string|undefined)=} namespace
  * @param {(string|undefined)=} projectId
  * @param {(string|undefined)=} databaseId
+ * @param {(string|undefined)=} databaseMode
  * @return {!Promise<!Sentinel>}
  */
 const guessSentinel = async (namespace = process.env['PROJECT_NAMESPACE'],
   projectId = process.env['GCP_PROJECT'],
-  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE) => {
+  databaseId = process.env['DATABASE_ID'] || DEFAULT_DATABASE,
+  databaseMode = process.env['DATABASE_MODE']) => {
   if (!namespace) {
     console.warn(
         'Fail to find ENV variables PROJECT_NAMESPACE, will set as `sentinel`');
     namespace = 'sentinel';
   }
-  const database = await getFirestoreDatabase(projectId, databaseId);
+  if (!databaseMode) {
+    console.warn(
+      'Database mode is not set. Please consider upgrade this solution.');
+  }
+  const database = databaseMode
+    ? { source: DataSource[databaseMode], id: databaseId }
+    : await getFirestoreDatabase(projectId, databaseId);
   return getSentinel(namespace, database);
 };
 

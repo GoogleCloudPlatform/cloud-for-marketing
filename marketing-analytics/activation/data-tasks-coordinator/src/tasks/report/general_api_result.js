@@ -17,7 +17,7 @@
 
 'use strict';
 
-const { api, utils: { getObjectByPath } }
+const { api, utils: { getObjectByPath, getFilterAndStringifyFn } }
   = require('@google-cloud/nodejs-common');
 const { Report } = require('./base_report.js');
 
@@ -32,8 +32,8 @@ const { Report } = require('./base_report.js');
  * following conditions:
  * 1. It has its own class(`className`) and been exported as an object
  * (`packageName`) in the `api` object of nodejs-common;
- * 2. The class offer a function named `getFunctionObject` to return the
- * instance of function object created based on Google API client library;
+ * 2. The class offer a function named `getApiClient` to return the
+ * instance of this Api based on Google API client library;
  * 3. If the API supports next page token, then the proper way to use the token
  * is to set it as property `pageToken` in the following request.
  * @see ApiResultConfig in './base_report.js'
@@ -42,8 +42,11 @@ class GeneralApiResult extends Report {
 
   constructor(config, apiStub) {
     super(config);
-    const { packageName, className } = this.config;
-    this.apiStub = apiStub || new api[packageName][className](super.getOption());
+    const { packageName: configedPackage, api: className } = this.config;
+    const packageName =
+      configedPackage ? configedPackage : className.toLowerCase();
+    this.apiStub =
+      apiStub || new api[packageName][className](super.getOption());
   }
 
   /** @override */
@@ -53,7 +56,7 @@ class GeneralApiResult extends Report {
 
   /** @override */
   isReady(parameters) {
-    return Promise.resolve(true);
+    return true;
   }
 
   /** @override */
@@ -64,29 +67,52 @@ class GeneralApiResult extends Report {
   /** @override */
   async getContent(parameters) {
     const {
-      functionObjectName,
-      functionName,
+      resource,
+      functionName = 'list',
       args,
       limit = 0,
       entityPath,
       pageTokenPath,
+      fieldMask,
     } = this.config;
-    const functionObject =
-      await this.apiStub.getFunctionObject(functionObjectName);
+    const apiClient = await this.apiStub.getApiClient();
+    const functionObject = getObjectByPath(apiClient, resource);
+    const transformFn =
+      fieldMask ? getFilterAndStringifyFn(fieldMask) : JSON.stringify;
     let result = [];
     let updatedArgs = args;
     let pageToken;
     do {
       const response = await functionObject[functionName](updatedArgs);
-      result = result.concat(getObjectByPath(response, entityPath));
+      result =
+        result.concat(getObjectByPath(response, entityPath).map(transformFn));
       if (pageTokenPath) {
         pageToken = getObjectByPath(response, pageTokenPath);
-        if (pageToken) updatedArgs = Object.assign(args, { pageToken });
+        if (pageToken) updatedArgs =
+          Object.assign(args, getNextPageArgs(pageTokenPath, pageToken));
       }
     } while (pageToken && (limit === 0 || limit > result.length));
     result = limit > 0 ? result.slice(0, limit) : result;
-    return result.map(JSON.stringify).join('\n');
+    return result.join('\n');
   }
+}
+
+/**
+ * Getst the arguments for next page (request) of the same Api request.
+ * @param {string} pageTokenPath
+ * @param {string} value
+ * @return {object} Extra arguments for next page (request).
+ */
+function getNextPageArgs(pageTokenPath, value) {
+  if (pageTokenPath.endsWith('nextPageToken')) {
+    return { pageToken: value };
+  }
+  if (pageTokenPath.endsWith('nextLink')) {
+    const urlParams = new URL(value);
+    const index = urlParams.searchParams.get('start-index');
+    return { 'start-index': index };
+  }
+  throw new Error(`Unsupported pageTokenPath: ${pageTokenPath}`);
 }
 
 module.exports = { GeneralApiResult };

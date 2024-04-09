@@ -25,7 +25,7 @@ const {
       GoogleAdsField,
     }
   },
-  utils: {extractObject,},
+  utils: { extractObject, changeObjectNamingFromSnakeToLowerCamel },
 } = require('@google-cloud/nodejs-common');
 const {Report} = require('./base_report.js');
 const {getSchemaFields} = require('./googleads_report_helper.js');
@@ -68,12 +68,9 @@ class GoogleAdsReport extends Report {
         (this.config.reportQuery.segments || [])
             .concat(this.config.reportQuery.metrics || [])
             .concat(this.config.reportQuery.attributes || []);
-    const adsFields = await this.ads.searchMetaData(this.config.loginCustomerId,
-        adsFieldNames);
-    /** @type {{string:!GoogleAdsField}} */ const adsFieldsMap = {};
-    adsFields.forEach(
-        (adsField) => void (adsFieldsMap[adsField.name] = adsField));
-    const fields = getSchemaFields(adsFieldNames, adsFieldsMap);
+    const adsFields = (await this.ads.searchMetaData(this.config.loginCustomerId,
+      adsFieldNames)).map(changeObjectNamingFromSnakeToLowerCamel);
+    const fields = getSchemaFields(adsFieldNames, adsFields, true);
     return {fields};
   }
 

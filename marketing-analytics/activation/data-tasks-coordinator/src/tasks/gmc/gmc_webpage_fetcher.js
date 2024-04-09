@@ -97,7 +97,7 @@ class GmcWebpageFetch extends BaseTask {
             dom.window.document.querySelector('[itemtype="http://schema.org/Offer"]');
           for (let i = 0; i < offer.children.length; i++) {
             const key = offer.children[i].getAttribute('itemprop');
-            const value = offer.children[i].innerHTML.trim();
+            const value = offer.children[i].getAttribute('content').trim();
             result[key] = value;
           }
           break;

@@ -19,9 +19,8 @@
 
 'use strict';
 
-const {google} = require('googleapis');
-const {request} = require('gaxios');
-const AuthClient = require('./auth_client.js');
+const { request } = require('gaxios');
+const { GoogleApiClient } = require('./base/google_api_client.js');
 const {
   getLogger,
   getFilterFunction,
@@ -94,7 +93,7 @@ const MAX_IDENTIFIERS_PER_USER = 5;
  * Google DfaReport API v3.0 stub.
  * see https://developers.google.com/doubleclick-advertisers/service_accounts
  */
-class DfaReporting {
+class DfaReporting extends GoogleApiClient {
 
   /**
    * @constructor
@@ -102,34 +101,19 @@ class DfaReporting {
    *     variables.
    */
   constructor(env = process.env) {
-    this.authClient = new AuthClient(API_SCOPES, env);
+    super(env);
+    this.googleApi = 'dfareporting';
     this.logger = getLogger('API.CM');
   }
 
-  /**
-    * Prepares the Google DfaReport API instance.
-    * @return {!google.dfareporting}
-    * @private
-    */
-  async getApiClient_() {
-    if (this.dfareporting) return this.dfareporting;
-    this.logger.debug(`Initialized ${this.constructor.name} instance.`);
-    this.dfareporting = google.dfareporting({
-      version: API_VERSION,
-      auth: await this.getAuth_(),
-    });
-    return this.dfareporting;
+  /** @override */
+  getScope() {
+    return API_SCOPES;
   }
 
-  /**
-   * Gets the auth object.
-   * @return {!Promise<{!OAuth2Client|!JWT|!Compute}>}
-   */
-  async getAuth_() {
-    if (this.auth) return this.auth;
-    await this.authClient.prepareCredentials();
-    this.auth = this.authClient.getDefaultAuth();
-    return this.auth;
+  /** @override */
+  getVersion() {
+    return API_VERSION;
   }
 
   /**
@@ -140,7 +124,7 @@ class DfaReporting {
    * @return {!Promise<string>}
    */
   async getProfileId(accountId) {
-    const dfareporting = await this.getApiClient_();
+    const dfareporting = await this.getApiClient();
     const { data: { items } } = await dfareporting.userProfiles.list();
     const profiles = items.filter(
         (profile) => profile.accountId === accountId
@@ -237,7 +221,7 @@ class DfaReporting {
         numberOfLines: lines.length,
       };
       try {
-        const dfareporting = await this.getApiClient_();
+        const dfareporting = await this.getApiClient();
         const response = await dfareporting.conversions[operation]({
           profileId: config.profileId,
           requestBody: requestBody,
@@ -304,7 +288,7 @@ class DfaReporting {
    * @return {!Promise<!Array<string>>}
    */
   async listUserProfiles() {
-    const dfareporting = await this.getApiClient_();
+    const dfareporting = await this.getApiClient();
     const { data: { items } } = await dfareporting.userProfiles.list();
     return items.map(({profileId, userName, accountId, accountName}) => {
       return `Profile: ${profileId}[${userName}] `
@@ -349,7 +333,7 @@ class DfaReporting {
    */
   async runReport(config) {
     const profileId = await this.getProfileForOperation_(config);
-    const dfareporting = await this.getApiClient_();
+    const dfareporting = await this.getApiClient();
     const { startDate, endDate } = config;
     if (startDate && endDate) {
       const { data: report } = await dfareporting.reports.get({
@@ -392,7 +376,7 @@ class DfaReporting {
    */
   async getReportFileUrl(config) {
     const profileId = await this.getProfileForOperation_(config);
-    const dfareporting = await this.getApiClient_();
+    const dfareporting = await this.getApiClient();
     const response = await dfareporting.reports.files.get({
       profileId,
       reportId: config.reportId,
@@ -410,7 +394,7 @@ class DfaReporting {
    * @return {!Promise<stream>}
    */
   async getReportFileStream(url) {
-    const auth = await this.getAuth_();
+    const auth = await this.getAuth();
     const headers = await auth.getRequestHeaders();
     const response = await request({
       method: 'GET',

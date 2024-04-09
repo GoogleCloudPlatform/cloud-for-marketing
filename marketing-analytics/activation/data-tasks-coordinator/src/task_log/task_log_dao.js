@@ -88,9 +88,7 @@ const FIELD_NAMES = {
 let TaskLog;
 
 /**
- * Base Task Log data access class on Firestore. The underlying transactions
- * in native mode and datastore mode are different, so there will be two sub-
- * classes for these two different modes.
+ * Base Task Log data access class on Firestore.
  */
 class TaskLogDao extends DataAccessObject {
 

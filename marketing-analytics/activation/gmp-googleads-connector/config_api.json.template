@@ -173,7 +173,7 @@
         "operation": "create|remove",
         "listId": "[YOUR-CUSTOMER-MATCH-LIST-ID]",
         "listName": "[YOUR-CUSTOMER-MATCH-LIST-NAME]",
-        "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|CRM_ID|undefined",
+        "uploadKeyType": "CONTACT_INFO|CRM_ID|MOBILE_ADVERTISING_ID|undefined",
         "userAttribute": "UserAttribute|undefined",
         "customerMatchUserListMetadata": {
           "consent": {

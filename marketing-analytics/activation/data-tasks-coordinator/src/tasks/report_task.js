@@ -130,11 +130,10 @@ class ReportTask extends BaseTask {
     } catch (error) {
       if (report.isFatalError(error.toString())) {
         this.logger.error(
-          'Fail immediately without retry for ReportTask error: ',
-          error.toString());
+          'Fail immediately without retry for ReportTask error: ', error);
         throw error;
       } else {
-        this.logger.error('Retry for ReportTask error: ', error.toString());
+        this.logger.error('Retry for ReportTask error: ', error);
         throw new RetryableError(error.toString());
       }
     }
@@ -145,7 +144,20 @@ class ReportTask extends BaseTask {
    * @return {Report} Report instance.
    */
   getReport() {
-    return this.options.buildReport(this.config.source);
+    if (!this.report) {
+      this.report = this.options.buildReport(this.config.source);
+    }
+    return this.report;
+  }
+
+  /**
+   * Returns the schema of current report's data structure to help BigQuery load
+   * the data into Table.
+   * @return {!BqTableSchema} BigQuery load schema, see:
+   *     https://cloud.google.com/bigquery/docs/schemas
+   */
+  generateSchema() {
+    return this.getReport().generateSchema(this.parameters);
   }
 
   /**

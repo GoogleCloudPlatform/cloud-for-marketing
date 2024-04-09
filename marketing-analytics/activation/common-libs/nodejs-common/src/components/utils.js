@@ -487,7 +487,7 @@ const extractObject = (paths) => {
   return (sourceObject) => {
     const output = {};
     paths.forEach((path) => {
-      const [value, owner, property] = path.split('.')
+      const [value, owner, property] = path.trim().split('.')
           .reduce(transcribe, [sourceObject, output, undefined]);
       if (typeof value !== 'undefined') {
         owner[property] = value;
@@ -509,7 +509,7 @@ const getObjectByPath = (obj, paths) => {
     paths.split('.').filter((key) => !!key).forEach((key) => {
       instance = instance[key];
       if (!instance) {
-        console.error('Fail to get function containter', paths);
+        console.error('Fail to get element from path:', paths);
         return instance;
       }
     });
@@ -591,7 +591,24 @@ const changeObjectNamingFromLowerCamelToSnake = (obj) => {
   } else {
     return obj;
   }
-}
+};
+
+/**
+ * Generates a function that can convert a given JSON object to a JSON string
+ * with only specified fields(fieldMask), in specified naming convention.
+ * @param {string} fieldMask The 'fieldMask' string from response.
+ * @param {boolean=} snakeCase Whether or not output JSON in snake naming.
+ */
+const getFilterAndStringifyFn = (fieldMask, snakeCase = false) => {
+  const extractor = extractObject(
+    Array.isArray(fieldMask) ? fieldMask : fieldMask.split(','));
+  return (originalObject) => {
+    const extracted = extractor(originalObject);
+    const generatedObject = snakeCase
+      ? changeObjectNamingFromLowerCamelToSnake(extracted) : extracted;
+    return JSON.stringify(generatedObject);
+  };
+};
 
 /**
  * Returns the response data for a HTTP request. It will retry the specific
@@ -619,7 +636,7 @@ const requestWithRetry = async (options, logger = console, retryTimes = 3) => {
       logger.error(`Request ${JSON.stringify(options)}`, error);
     }
   } while (processedTimes <= retryTimes)
-}
+};
 
 // noinspection JSUnusedAssignment
 module.exports = {
@@ -641,5 +658,6 @@ module.exports = {
   changeNamingFromLowerCamelToSnake,
   changeObjectNamingFromSnakeToLowerCamel,
   changeObjectNamingFromLowerCamelToSnake,
+  getFilterAndStringifyFn,
   requestWithRetry,
 };

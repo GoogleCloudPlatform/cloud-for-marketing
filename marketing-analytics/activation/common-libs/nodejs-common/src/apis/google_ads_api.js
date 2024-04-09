@@ -1100,7 +1100,7 @@ class GoogleAdsApi {
    */
   buildCustomerMatchUserListMetadata_(config) {
     const { customerId, listId, customerMatchUserListMetadata } = config;
-    const resourceName = `customers/${customerId}/userLists/${listId}`;
+    const resourceName = `customers/${getCleanCid(customerId)}/userLists/${listId}`;
     return new CustomerMatchUserListMetadata(Object.assign({
       userList: resourceName,
     }, customerMatchUserListMetadata));
@@ -1521,7 +1521,7 @@ const buildConversionJsonList = (lines, config, conversionFields,
         conversion.customVariables = variables.map((variable) => {
           return new CustomVariable({
             conversionCustomVariable:
-              `customers/${customerId}/conversionCustomVariables/${customVariables[variable]}`,
+              `customers/${getCleanCid(customerId)}/conversionCustomVariables/${customVariables[variable]}`,
             value: record[variable],
           });
         });

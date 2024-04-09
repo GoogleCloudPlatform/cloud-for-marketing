@@ -21,7 +21,7 @@
 
 const {
   api: { googleadsapi: { GoogleAdsApi: GoogleAds, CustomerMatchConfig } },
-  utils: { getProperValue, BatchResult },
+  utils: { getProperValue, changeObjectNamingFromSnakeToLowerCamel, BatchResult },
 } = require('@google-cloud/nodejs-common');
 const { GoogleAdsClickConversionUpload } =
   require('./google_ads_click_conversions_upload.js');
@@ -74,17 +74,16 @@ class GoogleAdsCustomerMatch extends GoogleAdsClickConversionUpload {
    * Creates the list if it doesn't exist and returns the Id.
    * @param {GoogleAds} googleAds Injected Google Ads instance.
    * @param {{
-   *   list_id:(string|undefined),
-   *   list_name:(string|undefined),
-   *   upload_key_type:('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
+   *   listId:(string|undefined),
+   *   listName:(string|undefined),
+   *   uploadKeyType:('CONTACT_INFO'|'CRM_ID'|'MOBILE_ADVERTISING_ID'|undefined),
    * }} config
    * @return {string} User list Id.
    */
   async getOrCreateUserList(googleAds, config) {
-    if (config.list_id) return config.list_id;
-    if (!config.list_name || !config.upload_key_type) {
-      throw new Error(
-        `Missing user list info in ${JSON.stringify(config)}`);
+    if (config.listId) return config.listId;
+    if (!config.listName || !config.uploadKeyType) {
+      throw new Error(`Missing user list info in ${JSON.stringify(config)}`);
     }
     const listId = await googleAds.getCustomerMatchUserListId(config);
     if (listId) {
@@ -108,9 +107,10 @@ class GoogleAdsCustomerMatch extends GoogleAdsClickConversionUpload {
    * @return {!Promise<BatchResult>}
    */
   async sendDataInternal(googleAds, records, messageId, config) {
-    const { customerMatchConfig } = config;
+    const { customerMatchConfig } =
+      changeObjectNamingFromSnakeToLowerCamel(config);
     try {
-      customerMatchConfig.list_id =
+      customerMatchConfig.listId =
         await this.getOrCreateUserList(googleAds, customerMatchConfig);
     } catch (error) {
       this.logger.error('Error in UserdataService: ', error);

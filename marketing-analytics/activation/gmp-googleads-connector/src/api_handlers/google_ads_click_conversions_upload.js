@@ -21,7 +21,7 @@
 
 const {
   api: { googleadsapi: { GoogleAdsApi: GoogleAds, ConversionConfig } },
-  utils: { getProperValue, BatchResult },
+  utils: { getProperValue, changeObjectNamingFromSnakeToLowerCamel, BatchResult },
 } = require('@google-cloud/nodejs-common');
 const { ApiHandler } = require('./api_handler.js');
 
@@ -128,11 +128,12 @@ class GoogleAdsClickConversionUpload extends ApiHandler {
    * @return {!BatchResult|undefined}
    */
   async setCustomVariable(googleAds, config) {
-    const { customerId, loginCustomerId, adsConfig } = config;
-    if (adsConfig.custom_variable_tags) {
+    const { customerId, loginCustomerId, adsConfig } =
+      changeObjectNamingFromSnakeToLowerCamel(config);
+    if (adsConfig.customVariableTags) {
       try {
         adsConfig.customVariables = await Promise.all(
-          adsConfig.custom_variable_tags.map(async (tag) => {
+          adsConfig.customVariableTags.map(async (tag) => {
             const id = await googleAds.getConversionCustomVariableId(tag,
               customerId, loginCustomerId);
             if (!id) throw new Error(`Couldn't find the tag named ${tag}.`);

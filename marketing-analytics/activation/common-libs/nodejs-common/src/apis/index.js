@@ -88,7 +88,6 @@ exports.searchads = require('./search_ads.js');
 /**
  * APIs integration class for DoubleClick BidManager (DV360).
  * @const {{
- *   QueryResource:!QueryResource,
  *   DoubleClickBidManager:!DoubleClickBidManager,
  * }}
  */

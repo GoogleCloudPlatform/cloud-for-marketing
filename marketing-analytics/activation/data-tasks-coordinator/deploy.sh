@@ -39,6 +39,7 @@ CONFIG_ITEMS=(
   "REGION"
   "GCS_BUCKET"
   "DATABASE_ID"
+  "DATABASE_MODE"
   "SECRET_NAME"
   "INBOUND"
 )
@@ -437,13 +438,15 @@ EOF
   quit_if_failed $?
   check_firestore_existence
   local auth
-  if [[ -f "$(pwd)/${OAUTH2_TOKEN_JSON}" ]]; then
+  if [[ -n "${SECRET_NAME}" ]]; then
+    auth="SECRET_NAME=${SECRET_NAME}"
+  elif [[ -f "$(pwd)/${OAUTH2_TOKEN_JSON}" ]]; then
     auth="OAUTH2_TOKEN_JSON=$(pwd)/${OAUTH2_TOKEN_JSON}"
   elif [[ -f "$(pwd)/${SA_KEY_FILE}" ]]; then
     auth="API_SERVICE_ACCOUNT=$(pwd)/${SA_KEY_FILE}"
   fi
   printf '%s\n' "  Setting environment variable of auth: ${auth}"
-  env "${auth}" node -e "require('./index.js').startTaskFromLocal(\
+  env "${auth}" "DEBUG=true" node -e "require('./index.js').startTaskFromLocal(\
     process.argv[1], process.argv[2], '${PROJECT_NAMESPACE}')" "$@"
 }
 

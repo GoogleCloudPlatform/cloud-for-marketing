@@ -76,7 +76,7 @@ class ApiLockDao extends DataAccessObject {
      * @type {number}
      */
     this.maxTimeForLocks = 10 * 60 * 1000;
-    this.logger = getLogger(`LOCK.${database}`);
+    this.logger = getLogger(`LOCK.${database.source}.${database.id}`);
   }
 
   /**

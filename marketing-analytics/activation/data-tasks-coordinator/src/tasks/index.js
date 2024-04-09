@@ -27,6 +27,7 @@ const { QueryTask } = require('./bigquery/query_task.js');
 const { ExportSchemaTask } = require('./bigquery/export_schema_task.js');
 const { DeleteDatasetTask } = require('./bigquery/delete_dataset_task.js');
 const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
+const { CreateExternalTableTask } = require('./bigquery/create_external_table.js');
 const { CopyGcsTask } = require('./copy_gcs_task.js');
 const { GmcXmlFeedToJsonlTask } = require('./gmc/gmc_xml_feed_to_jsonl_task.js');
 const { GmcWebpageFetch } = require('./gmc/gmc_webpage_fetcher.js');
@@ -35,6 +36,7 @@ const { PredictTask } = require('./predict_task.js');
 const { QueryAdhTask } = require('./query_adh_task.js');
 const { ReportTask } = require('./report_task.js');
 const { KnotTask } = require('./knot_task.js');
+const { SpeedControlledTask } = require('./internal/speed_controlled_task.js');
 const { MultipleTask } = require('./multiple_task.js');
 
 /**
@@ -48,6 +50,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.EXPORT_SCHEMA]: ExportSchemaTask,
   [TaskType.DELETE_DATASET]: DeleteDatasetTask,
   [TaskType.DATA_TRANSFER]: DataTransferTask,
+  [TaskType.CREATE_EXTERNAL]: CreateExternalTableTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
   [TaskType.DOWNLOAD]: DownloadTask,
   [TaskType.GMC_XML_FEED_TO_JSONL]: GmcXmlFeedToJsonlTask,
@@ -57,6 +60,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.REPORT]: ReportTask,
   [TaskType.KNOT]: KnotTask,
   [TaskType.MULTIPLE]: MultipleTask,
+  [TaskType.SPEED_CONTROLLED]: SpeedControlledTask,
 });
 
 /**

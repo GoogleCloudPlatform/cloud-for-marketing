@@ -21,7 +21,7 @@
 
 const {
   api: { googleadsapi: { GoogleAdsApi: GoogleAds } },
-  utils: { BatchResult },
+  utils: { BatchResult, changeObjectNamingFromSnakeToLowerCamel },
 } = require('@google-cloud/nodejs-common');
 const {
   GoogleAdsConversionConfig,
@@ -47,7 +47,8 @@ class GoogleAdsCallConversionUpload extends GoogleAdsClickConversionUpload {
     const result = await this.setCustomVariable(googleAds, config);
     if (result) return result;
     const managedSend = this.getManagedSendFn(config);
-    const { customerId, loginCustomerId, adsConfig } = config;
+    const { customerId, loginCustomerId, adsConfig } =
+      changeObjectNamingFromSnakeToLowerCamel(config);
     const configuredUpload = googleAds.getUploadCallConversionFn(customerId,
       loginCustomerId, adsConfig);
     return managedSend(configuredUpload, records, messageId);

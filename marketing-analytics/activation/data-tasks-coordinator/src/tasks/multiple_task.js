@@ -15,9 +15,10 @@
 /** @fileoverview Multiple Task class file. */
 
 'use strict';
+const lodash = require('lodash');
 const {nanoid} = require('nanoid');
 const {
-  utils: {apiSpeedControl, getProperValue,},
+  utils: { apiSpeedControl, getProperValue, replaceParameters, requestWithRetry },
   storage: {StorageFile},
 } = require('@google-cloud/nodejs-common');
 const {
@@ -28,6 +29,11 @@ const {
 } = require('../task_config/task_config_dao.js');
 const {FIELD_NAMES} = require('../task_log/task_log_dao.js');
 const { KnotTask } = require('./knot_task.js');
+const {
+  TentaclesFileOption,
+  getRequestOption,
+  getFileUrl,
+} = require('./internal/speed_controlled_task.js');
 
 /**
  * `estimateRunningTime` Number of minutes to wait before doing the first task
@@ -47,11 +53,13 @@ const { KnotTask } = require('./knot_task.js');
  *     target:'pubsub',
  *     qps:number|undefined,
  *     recordSize: number|undefined,
+ *     message: object|undefined,
  *   }|{
  *     taskId:string,
  *     target:'gcs',
- *     file:!StorageFileConfig,
-*      recordSize: number|undefined,
+ *     recordSize: number|undefined,
+ *     file:(!StorageFileConfig|undefined),
+ *     http:(!TentaclesFileOption|undefined),
  *   },
  *   multiple:{
  *     estimateRunningTime:(number|undefined),
@@ -87,6 +95,17 @@ class MultipleTask extends KnotTask {
     return this.parameters.numberOfTasks > 0;
   }
 
+  /**
+   * @override
+   * This task can have un-replaced parameters as it will start other tasks, so
+   * it is possible that those parameters will be replaced with given data for
+   * the target tasks..
+   */
+  setConfig_() {
+    this.config = JSON.parse(
+      replaceParameters(this.originalConfigString, this.parameters, true));
+  }
+
   /** @override */
   async doTask() {
     let records;
@@ -106,8 +125,12 @@ class MultipleTask extends KnotTask {
     const multipleTag = nanoid();
     if (this.config.destination.target === 'pubsub') {
       numberOfTasks = await this.startThroughPubSub_(multipleTag, records);
-    } else {
-      numberOfTasks = await this.startThroughStorage_(multipleTag, records);
+    } else if (this.config.destination.target === 'gcs') {
+      if (this.config.destination.file) {
+        numberOfTasks = await this.startThroughStorage_(multipleTag, records);
+      } else if (this.config.destination.http) {
+        numberOfTasks = await this.startThroughHttp_(multipleTag, records);
+      }
     }
     return {
       parameters: this.appendParameter({
@@ -129,6 +152,7 @@ class MultipleTask extends KnotTask {
    */
   async startThroughPubSub_(tag, records) {
     const qps = getProperValue(this.config.destination.qps, 1, false);
+    const { message: configedMessage } = this.config.destination;
     const managedSend = apiSpeedControl(
       this.recordSize, 1, qps, (batchResult) => batchResult);
     const sendSingleMessage = async (lines, batchId) => {
@@ -140,11 +164,17 @@ class MultipleTask extends KnotTask {
       if (this.recordSize > 1) {
         extraParameters.records = lines.join('\n');
       }
+      const finalParameters =
+        Object.assign({}, this.parameters, extraParameters);
+      const message = configedMessage
+        ? replaceParameters(JSON.stringify(configedMessage), finalParameters)
+        : JSON.stringify(finalParameters);
       try {
         await this.taskManager.startTasks(
           this.config.destination.taskId,
           { [FIELD_NAMES.MULTIPLE_TAG]: tag },
-          JSON.stringify(Object.assign({}, this.parameters, extraParameters)));
+          message
+        );
         return true;
       } catch (error) {
         this.logger.error(`Pub/Sub message[${batchId}] failed.`, error);
@@ -228,6 +258,74 @@ class MultipleTask extends KnotTask {
           keyFilename: destination.keyFilename,
         });
     await outputFile.getFile().save(content);
+    return tasks.length;
+  }
+
+  /**
+   * Sends a file to Tentacles HTTP Cloud Functions to start the multiple task.
+   * In this way, the Tentacles config can be embedded here and not required to
+   * be uploaded to Tentacles' Firestore. It also brings the flexibility to
+   * modify the config items based on the file to be processed.
+   * @param {string} tag The multiple task tag to mark task instances.
+   * @param {!Array<string>} records Array of multiple task instances data. Each
+   *     element is a JSON string of the 'appendedParameters' object for an task
+   *     instance.
+   * @return {!Promise<number>} Number of multiple tasks.
+   * @private
+   */
+  async startThroughHttp_(tag, records) {
+    const tasks = [];
+    const tentaclesFile = {};
+    // Generate a new file if there are more than one record for one task.
+    if (this.recordSize > 1) {
+      for (let i = 0; i < records.length; i += this.recordSize) {
+        const chunk = records.slice(i, i + this.recordSize);
+        tasks.push(JSON.stringify({ records: chunk.join('\n') }));
+      }
+      const sourceFile = this.config.source.file;
+      tentaclesFile.file = {
+        bucket: sourceFile.bucket,
+        name: sourceFile.name + '_for_multiple_task',
+      };
+      const outputFile = StorageFile.getInstance(
+        tentaclesFile.file.bucket, tentaclesFile.file.name, {
+        projectId: sourceFile.projectId,
+        keyFilename: sourceFile.keyFilename,
+      });
+      await outputFile.getFile().save(tasks.join('\n'));
+    } else {
+      tasks.push(...records);
+      tentaclesFile.file = this.config.source.file;
+    }
+    // To keep the TaskConfig simple, fill default fields here.
+    const tentaclesFileOption = lodash.merge({
+      service: {
+        projectId: '${projectId}',
+        locationId: '${locationId}',
+        namespace: '${namespace}',
+      },
+      attributes: { api: 'PB' },
+      config: {
+        topic: this.taskManager.getMonitorTopicName(),
+        attributes: {
+          taskId: this.config.destination.taskId,
+          [FIELD_NAMES.MULTIPLE_TAG]: tag,
+        }
+      }
+    }, this.config.destination.http);
+    const finalOption = JSON.parse(replaceParameters(
+      JSON.stringify(tentaclesFileOption), this.parameters, true));
+    const options = await getRequestOption(finalOption);
+    const file = getFileUrl(tentaclesFile);
+    const { attributes, config } = finalOption;
+    options.data = {
+      file,
+      attributes,
+      config,
+    };
+    const result = await requestWithRetry(options, this.logger);
+    const { fileId } = result;
+    this.parameters.tentaclesFileId = fileId;
     return tasks.length;
   }
 
