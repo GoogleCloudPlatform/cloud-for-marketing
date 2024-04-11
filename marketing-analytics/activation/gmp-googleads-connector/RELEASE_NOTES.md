@@ -1,5 +1,26 @@
 # Release Notes
 
+## 4.4.1 (2024-04-11)
+
+
+### Enhancements
+
+- Campaign Manager 360 connector `CM` now supports `adUserDataConsent` for
+consent for ad user data.
+
+
+## 4.4.0 (2024-04-09)
+
+### Enhancements
+
+- API classes were refactored for easy maintainance.
+- Dependencies version upgraded.
+
+### Bug fix
+
+- Configurations of Google Ads API now support lowerCamelCase, as well as
+snake_case.
+
 ## 4.3.0 (2024-03-05)
 
 ### Integrated APIs

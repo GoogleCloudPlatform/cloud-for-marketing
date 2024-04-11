@@ -10,7 +10,8 @@
           "floodlightConfigurationId": "[YOUR-FL-CONFIG-ID]",
           "floodlightActivityId": "[YOUR-FL-ACTIVITY-ID]",
           "quantity": 1,
-          "ordinal": "[UNIX_EPOCH]"
+          "ordinal": "[UNIX_EPOCH]",
+          "adUserDataConsent": "GRANTED|DENIED|undefined"
         },
         "customVariables": [
           "[YOUR-U-VARIABLES-NAME-1]",

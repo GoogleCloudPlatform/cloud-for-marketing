@@ -54,6 +54,7 @@ const API_VERSION = 'v4';
  *     floodlightConfigurationId:string,
  *     floodlightActivityId:string,
  *     quantity:(number|undefined),
+ *     adUserDataConsent:ConsentStatus,
  *   },
  *   customVariables:(!Array<string>|undefined),
  *   encryptionInfo:({
@@ -76,6 +77,7 @@ const PICKED_PROPERTIES = [
   'timestampMicros',
   'value',
   'quantity',
+  'adUserDataConsent',
 ];
 
 /**
@@ -90,7 +92,7 @@ const IDENTIFIERS = [
 
 const MAX_IDENTIFIERS_PER_USER = 5;
 /**
- * Google DfaReport API v3.0 stub.
+ * Google DfaReport API v4.0 stub.
  * see https://developers.google.com/doubleclick-advertisers/service_accounts
  */
 class DfaReporting extends GoogleApiClient {
