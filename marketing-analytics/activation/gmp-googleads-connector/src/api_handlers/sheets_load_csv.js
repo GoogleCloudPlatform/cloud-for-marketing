@@ -48,7 +48,8 @@ const DEFAULT_PASTE_TYPE = 'PASTE_NORMAL';
  *     https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#pastedatarequest
  *
  * @typedef {{
-*   spreadsheetId:string,
+*   spreadsheetId:(string|undefined),
+*   spreadsheetUrl:(string|undefined},
 *   sheetName:string,
 *   sheetHeader:(string|undefined),
 *   requestLength:(number|undefined),
@@ -75,6 +76,10 @@ class GoogleSheetLoadCsv extends ApiHandler {
    * @override
    */
   sendData(message, messageId, config) {
+    if (!config.spreadsheetId && config.spreadsheetUrl) {
+      const id = /spreadsheets\/d\/([^\/]*)\//i.exec(config.spreadsheetUrl);
+      if (id) config.spreadsheetId = id[1];
+    }
     const spreadsheets = new Spreadsheets(
       config.spreadsheetId, this.getOption(config));
     return this.sendDataInternal(spreadsheets, message, messageId, config);

@@ -109,21 +109,73 @@ class Spreadsheets extends GoogleApiClient {
   }
 
   /**
-   * Clears the content of the Sheet.
-   * see:
-   * https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear
+   * Returns whether the sheet with speicified name exists.
+   * @param {string} sheetName
+   * @return {boolean}
+   */
+  async hasSheet(sheetName) {
+    const sheets = await this.getApiClient();
+    const spreadsheet = await sheets.spreadsheets.get(
+      { spreadsheetId: this.spreadsheetId });
+    return spreadsheet.data.sheets.some(
+      ({ properties: { title } }) => title === sheetName);
+  }
+
+  /**
+   * Creates a sheet with the gvien name.
+   *
+   * @param {string} sheetName
+   */
+  async createSheet(sheetName) {
+    const sheets = await this.getApiClient();
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: this.spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
+      }
+    });
+  }
+
+  /**
+   * Deletes a sheet with the gvien name.
+   *
+   * @param {string} sheetName
+   */
+  async deleteSheet(sheetName) {
+    if (await this.hasSheet(sheetName)) {
+      const sheetId = await this.getSheetId(sheetName);
+      const sheets = await this.getApiClient();
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: this.spreadsheetId,
+        requestBody: {
+          requests: [{ deleteSheet: { sheetId } }],
+        }
+      });
+    }
+  }
+
+  /**
+   * Clears the content of the Sheet. If the Sheet doesn't exist, then creates
+   * an empty sheet with the sheetName..
+   * @see https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear
    * @param {string} sheetName Name of the Sheet.
    */
   async clearSheet(sheetName) {
-    const request = {
-      spreadsheetId: this.spreadsheetId,
-      range: sheetName,
-    };
     try {
-      const sheets = await this.getApiClient();
-      const response = await sheets.spreadsheets.values.clear(request);
-      const data = response.data;
-      this.logger.debug(`Clear sheet[${sheetName}}]: `, data);
+      const hasSheet = await this.hasSheet(sheetName);
+      if (!hasSheet) {
+        await this.createSheet(sheetName);
+        this.logger.debug(`Create sheet[${sheetName}]`);
+      } else {
+        const sheets = await this.getApiClient();
+        const request = {
+          spreadsheetId: this.spreadsheetId,
+          range: sheetName,
+        };
+        const response = await sheets.spreadsheets.values.clear(request);
+        const data = response.data;
+        this.logger.debug(`Clear sheet[${sheetName}]: `, data);
+      }
     } catch (error) {
       this.logger.error(error.toString());
       throw error;
