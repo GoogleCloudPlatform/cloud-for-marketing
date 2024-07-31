@@ -39,21 +39,24 @@ function onOpen() {
    * @param {!Array<{
    *   name: string|undefined,
    *   method: string|undefined,
-   *   seperateLine: boolean|undefined,
+  *   seperator: boolean|undefined,
    * }>} menuItems An array of menu item.
    */
   const insertMenuItem = (menu, menuItems) => {
-    menuItems.forEach(({ name, method, seperateLine }) => {
-      if (!seperateLine) {
+    menuItems.forEach(({ name, method, separator }) => {
+      if (!separator) {
         menu.addItem(name, method);
-      }
-      else {
+      } else {
         menu.addSeparator();
       }
     });
   }
   const menu = SpreadsheetApp.getUi().createMenu('🤖 Cyborg');
-  SOLUTION_MENUS.forEach(({ sheetName, menuItem = [] }) => {
+  SOLUTION_MENUS.forEach(({ sheetName, menuItem = [], separator }) => {
+    if (separator) {
+      menu.addSeparator();
+      return;
+    }
     if (menuItem.length === 0) return;
     if (sheetName) {
       const subMenu = SpreadsheetApp.getUi().createMenu(sheetName);

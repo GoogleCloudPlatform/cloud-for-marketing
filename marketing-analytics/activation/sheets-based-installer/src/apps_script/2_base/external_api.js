@@ -70,6 +70,33 @@ class ExternalApi extends ApiBase {
   }
 
   /**
+   * If target API is not enabled in the backend GCP, this function will try
+   * to enable it when it gets a speicific error.
+   * @override
+   */
+  fetchAndReturnJson(url, params) {
+    const response = super.fetchAndReturnJson(url, params);
+    if (response.error) {
+      const { error } = response;
+      if (error.code === 403
+        && error.message.indexOf('API has not been used in project') > -1) {
+        const regex = /not been used in project ([0-9]*) before or it is disabled/;
+        const projectId = regex.exec(error.message)[1];
+        if (projectId) {
+          const result = gcloud.enableApi(this.api, projectId);
+          if (result.status === RESOURCE_STATUS.OK) {
+            console.log(`Enabled ${this.name} for the backend project.`);
+            Utilities.sleep(5000); // Wait 5 seconds to let the enabled API work.
+            return super.fetchAndReturnJson(url, params);
+          }
+          console.log(`Failed to enabled ${this.name} for the backend project.`);
+        }
+      }
+    }
+    return response;
+  }
+
+  /**
    * @override
    * Returns an OAuth access key baded on the given OAuth refresh token.
    * @return {string} access token.

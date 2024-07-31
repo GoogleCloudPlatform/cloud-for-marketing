@@ -34,6 +34,7 @@ let SheetLoadOptions;
  *     given column. By default, a column will be merged vertically if the
  *     values are the same. This object defines other columns will be merged
  *     veritically when the given column has the same value.
+ *   `frozenRow` how many rows from the beginning to be frozen. Default 1.
  * @typedef {{
  *   columnName: !Array<string>,
  *   columnFormat: !Object<string, (!RangeStyle|!Array<!RangeStyle>)>|undefined,
@@ -44,6 +45,7 @@ let SheetLoadOptions;
  *   initialData: Array<Array<string|number>>,
  *   columnsToBeMerged: !Array<string>|undefined,
  *   columnsToBeMergedMap: !Object<string, !Array<string>>|undefined,
+ *   frozenRow: number|undefined,
  * }}
  */
 let SheetConfig;
@@ -60,6 +62,12 @@ let SheetConfig;
 */
 let RangeStyle;
 
+/**
+ * @const {string} COLUMN_NAME_FOR_DEFAULT_CONFIG A name of column holds the
+ * configurations as default values for other columns.
+ */
+const COLUMN_NAME_FOR_DEFAULT_CONFIG = 'default_';
+
 /** Style for column. */
 const COLUMN_STYLES = {
   ALIGN_MIDDLE_AND_CENTER: [
@@ -67,6 +75,8 @@ const COLUMN_STYLES = {
     { fn: 'setVerticalAlignment', format: 'middle' },
   ],
   ALIGN_MIDDLE: { fn: 'setVerticalAlignment', format: 'middle' },
+  ALIGN_TOP: { fn: 'setVerticalAlignment', format: 'top' },
+  MONO_FONT: { fn: 'setFontFamily', format: 'Consolas' },
 }
 
 /** Default headline style. */
@@ -204,6 +214,7 @@ class EnhancedSheet {
     if (appendedData.length > 0) {
       this.append(appendedData);
     }
+    SpreadsheetApp.flush();
   }
 
   /**
@@ -223,6 +234,7 @@ class EnhancedSheet {
       columnWidth,
       columnDataRange,
       columnConditionalFormat,
+      frozenRow = 1,
     } = sheetConfig;
     if (columnFormat)
       this.setColumnFormat_(columns, columnFormat);
@@ -235,6 +247,7 @@ class EnhancedSheet {
     const style = Object.assign({}, DEFAULT_HEADLINE_STYLE,
       headlineStyle || sheetConfig.headlineStyle);
     this.setHeadlineStyle_(columns, style);
+    this.sheet.setFrozenRows(frozenRow);
   }
 
   /**
@@ -266,13 +279,15 @@ class EnhancedSheet {
    * @param {!Object<string, (!RangeStyle|!Array<!RangeStyle>)>} columnFormat
    *   A map contains formats for columns. The `key` is the column names and the
    *  `value` is `RangeStyle` or an array of `RangeStyle`.
-   *   A specific key `default_` stands for the format of the whole content.
+   *   A specific column (@see COLUMN_NAME_FOR_DEFAULT_CONFIG) offers for the
+   *   format of the whole content.
    * @private
    */
   setColumnFormat_(columns, columnFormat = {}) {
-    if (columnFormat.default_) {
+    if (columnFormat[COLUMN_NAME_FOR_DEFAULT_CONFIG]) {
       const exceptHeadline = this.sheet.getRange('2:' + this.sheet.getMaxRows());
-      this.setRangeFormat_(exceptHeadline, columnFormat.default_);
+      this.setRangeFormat_(exceptHeadline,
+        columnFormat[COLUMN_NAME_FOR_DEFAULT_CONFIG]);
     }
     columns.forEach((column, index) => {
       const format = columnFormat[column];
@@ -309,7 +324,7 @@ class EnhancedSheet {
    * @private
    */
   setColumnWidth_(columns, columnWidth = {}) {
-    const defaultWidth = columnWidth.default_ || 100;
+    const defaultWidth = columnWidth[COLUMN_NAME_FOR_DEFAULT_CONFIG] || 100;
     columns.forEach((field, index) => {
       const width = columnWidth[field] || defaultWidth;
       this.sheet.setColumnWidth(index + 1, width);

@@ -27,11 +27,11 @@ const ATTRIBUTE_NAMES = {
 
 /** Checks the namespace. */
 const checkNamespace = (namespace) => {
-  const regex = /^[a-z][a-z0-9_]{2,15}$/;
+  const regex = /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/;
   const result = regex.test(namespace);
   if (result) return { status: RESOURCE_STATUS.OK };
   const message =
-    'Expected 3 to 16 of lower letters, digits or underscores with a leading letter.';
+    'Expected 3 to 16 of lower letters, digits or hyphen with a leading letter.';
   return { status: RESOURCE_STATUS.ERROR, message };
 };
 
@@ -87,13 +87,13 @@ const checkSheetsUrl = (sheetUrl) => {
   if (!sheetUrl) {
     return {
       status: RESOURCE_STATUS.ERROR,
-      message: 'Make a copy of the template and enter the URL of your copy.',
+      message: 'Enter the URL of the Google Sheets.',
     };
   }
   if (!getSpreadsheetIdFromUrl(sheetUrl)) {
     return {
       status: RESOURCE_STATUS.ERROR,
-      message: 'Can not get the Spreadsheet Id from the URL',
+      message: 'Can not get the Google Sheets Id from the URL',
     };
   }
 };
@@ -171,6 +171,15 @@ const MOJO_CONFIG_TEMPLATE = {
     editType: RESOURCE_EDIT_TYPE.READONLY,
     checkFn: gcloud.checkOrEnableApi,
   },
+  apikeys: {
+    category: 'Google Cloud',
+    resource: 'API Keys',
+    attributeName: 'Key name',
+    propertyName: 'apiKey',
+    editType: RESOURCE_EDIT_TYPE.READONLY,
+    checkFn: gcloud.checkApiKey,
+    enableFn: gcloud.createApiKey,
+  },
   firestore: {
     category: 'Google Cloud',
     resource: 'Firestore',
@@ -227,7 +236,7 @@ const MOJO_CONFIG_TEMPLATE = {
         attributeValue: '720'
       }
     ],
-    propertyName: 'datasetId',
+    propertyName: 'dataset',
     checkFn: gcloud.checkDataset,
     enableFn: gcloud.createOrUpdateDataset,
   },
@@ -251,6 +260,5 @@ const MOJO_CONFIG_TEMPLATE = {
     category: 'Configuration',
     resource: 'Sheet URL',
     editType: RESOURCE_EDIT_TYPE.USER_INPUT,
-    attributeName: 'Template',
   },
 };

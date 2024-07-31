@@ -248,7 +248,7 @@ const showExplicitAuthSidebar = () => {
  */
 const EXPLICIT_AUTH_MENUITEM = {
   menuItem: [
-    { seperateLine: true },
+    { separator: true },
     {
       name: 'Explicit authorization',
       method: 'showExplicitAuthSidebar',

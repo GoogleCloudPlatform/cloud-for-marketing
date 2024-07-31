@@ -69,7 +69,7 @@ class MojoSheet {
         name: 'Apply changes',
         method: `${this.menuFunctionHolder}.applyChanges`,
       },
-      { seperateLine: true },
+      { separator: true },
       {
         name: 'Recheck resources (even it is OK)',
         method: `${this.menuFunctionHolder}.recheckResources`,

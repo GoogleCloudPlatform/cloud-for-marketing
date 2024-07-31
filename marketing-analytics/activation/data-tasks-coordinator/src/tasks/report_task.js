@@ -68,8 +68,14 @@ class ReportTask extends BaseTask {
   }
 
   /** @override */
-  isDone() {
-    return this.getReport().isReady(this.parameters);
+  async isDone() {
+    const report = this.getReport();
+    try {
+      const result = await report.isReady(this.parameters);
+      return result;
+    } catch (error) {
+      this.triageError_(error);
+    }
   }
 
   /** @override */
@@ -80,6 +86,12 @@ class ReportTask extends BaseTask {
     const report = this.getReport();
     try {
       const content = await report.getContent(this.parameters);
+      if (content === '') { // Empty report
+        this.logger.warn('Got empty report', this.parameters);
+        return {
+          parameters: this.appendParameter({ reportFile: 'EMPTY_REPORT' }),
+        };
+      }
       this.logger.debug('Got result from report');
       const storageFile = StorageFile.getInstance(
           bucket,
@@ -128,14 +140,7 @@ class ReportTask extends BaseTask {
       if (!result) throw new Error('Timeout');
       return {parameters: this.appendParameter({reportFile: {bucket, name,}})};
     } catch (error) {
-      if (report.isFatalError(error.toString())) {
-        this.logger.error(
-          'Fail immediately without retry for ReportTask error: ', error);
-        throw error;
-      } else {
-        this.logger.error('Retry for ReportTask error: ', error);
-        throw new RetryableError(error.toString());
-      }
+      this.triageError_(error);
     }
   }
 
@@ -168,6 +173,26 @@ class ReportTask extends BaseTask {
    */
   needCompression_(name) {
     return name.toLowerCase().endsWith('.gz')
+  }
+
+  /**
+   * If the error is not fatal (e.g. not an auth error), the task might worth a
+   * retry. In this case, this function will throw a wrapped 'RetryableError'
+   * error so the following codes will pick it up and retry; otherwise, the
+   * normal error will be thrown out.
+   * @param {Error} error
+   * @private
+   */
+  triageError_(error) {
+    const report = this.getReport();
+    if (report.isFatalError(error.toString())) {
+      this.logger.error(
+        'Fail immediately without retry for ReportTask error: ', error);
+      throw error;
+    } else {
+      this.logger.error('Retry for ReportTask error: ', error);
+      throw new RetryableError(error.toString());
+    }
   }
 }
 

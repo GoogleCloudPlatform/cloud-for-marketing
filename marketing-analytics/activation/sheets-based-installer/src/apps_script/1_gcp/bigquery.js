@@ -127,6 +127,18 @@ class BigQuery extends ApiBase {
   }
 
   /**
+   * Deteles an existing table.
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables/delete
+   * @param {string} tableId
+   * @return {object}
+   */
+  deleteTable(tableId) {
+    const response = this.mutate(
+      `datasets/${this.datasetId}/tables/${tableId}`, {}, 'DELETE');
+    return response;
+  }
+
+  /**
    * Creates or updates a table.
    * @param {!Table} config
    * @return {!Table}
@@ -181,13 +193,13 @@ class BigQuery extends ApiBase {
 
   /**
    * Updates information in an existing dataset.
-   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/patch
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/update
    * @param {string} datasetId
    * @param {!Dataset} config
    * @return {!Dataset}
    */
   updateDataset(datasetId = this.datasetId, config = {}) {
-    const response = this.mutate(`datasets/${datasetId}`, config, 'PATCH');
+    const response = this.mutate(`datasets/${datasetId}`, config, 'PUT');
     return response;
   }
 

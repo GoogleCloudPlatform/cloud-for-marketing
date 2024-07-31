@@ -1,7 +1,17 @@
 # Release Notes
 
-## 4.4.1 (2024-04-11)
+## 4.5.0 (2024-07-31)
 
+### Enhancements
+
+- Dependencies version upgraded.
+
+### Bug fix
+
+- Fixed: When data files are empty, there is a chance that the task is shown
+as `Timeout` in the dashboard.
+
+## 4.4.1 (2024-04-11)
 
 ### Enhancements
 

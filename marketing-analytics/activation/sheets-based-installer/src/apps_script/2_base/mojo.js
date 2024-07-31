@@ -129,7 +129,7 @@ const MOJO_SHEET_CONFIG = {
     'Attribute Value': 250,
     'Note': 400,
     'Property Name': 150,
-    default_: 100,
+    [COLUMN_NAME_FOR_DEFAULT_CONFIG]: 100,
   },
   columnFormat: {
     'Category': COLUMN_STYLES.ALIGN_MIDDLE_AND_CENTER,
@@ -137,7 +137,8 @@ const MOJO_SHEET_CONFIG = {
     'Enable': COLUMN_STYLES.ALIGN_MIDDLE_AND_CENTER,
     'Attribute Name': { fn: 'setFontColor', format: '#5F6368' },
     'Status': COLUMN_STYLES.ALIGN_MIDDLE_AND_CENTER,
-    default_: { fn: 'setFontFamily', format: 'Google Sans' },
+    [COLUMN_NAME_FOR_DEFAULT_CONFIG]:
+      { fn: 'setFontFamily', format: 'Google Sans' },
   },
   columnsToBeMerged: [
     'Category',
@@ -294,7 +295,13 @@ class Mojo {
       const { group, optionalType = OPTIONAL_TYPE.MANDATORY } = row;
       row.enable = this.initializeEnableCell_(enableCell, group, optionalType);
       if (row.propertyName) {
-        propertyA1s[row.propertyName] = valueCell.getA1Notation();
+        if (propertyA1s[row.propertyName]) {
+          console.warn(`Property '${row.propertyName}' has A1 notation `,
+            propertyA1s[row.propertyName], ', will ignore the new A1 notation',
+            valueCell.getA1Notation());
+        } else {
+          propertyA1s[row.propertyName] = valueCell.getA1Notation();
+        }
       }
       // Prepare data array from the row
       Object.keys(row).forEach((key) => {

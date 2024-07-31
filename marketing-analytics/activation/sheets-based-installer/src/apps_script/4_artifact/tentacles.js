@@ -78,6 +78,10 @@ const TENTACLES_CONNECTORS = Object.freeze([
     desc: 'Pub/Sub Messages Send',
     api: 'pubsub.googleapis.com',
   },
+  {
+    code: 'CF',
+    desc: 'Invoke Cloud Functions',
+  },
 ]);
 
 /**
@@ -115,16 +119,11 @@ class Tentacles extends PrimeSolution {
 
   /** @override */
   deployCloudFunctions(name) {
-    switch (name) {
-      case `${this.namespace}_init`:
-        return this.deployInitiator(name);
-      case `${this.namespace}_tran`:
-        return this.deployTransporter(name);
-      case `${this.namespace}_api`:
-        return this.deployApiRequester(name);
-      default:
-        throw new Error(`Unknown Cloud Functions ${name}`);
-    }
+    if (name.endsWith('init')) return this.deployInitiator(name);
+    if (name.endsWith('tran')) return this.deployTransporter(name);
+    if (name.endsWith('api')) return this.deployApiRequester(name);
+    if (name.endsWith('http')) return this.deployFileJobManager(name);
+    Error(`Unknown Cloud Functions ${name}`);
   }
 
   /**
@@ -168,6 +167,20 @@ class Tentacles extends PrimeSolution {
     eventTrigger.failurePolicy = { retry: {} };
     return this.deploySingleCloudFunction(functionName,
       { entryPoint, eventTrigger }, this.getSecretEnv()
+    );
+  }
+
+  /**
+   * Deploy Tentacles `manageFile` Cloud Functions.
+   *
+   * @param {string=} functionName
+   * @return {string} The name of operation.
+   */
+  deployFileJobManager(functionName = `${this.namespace}_http`) {
+    const entryPoint = 'manageFile';
+    const httpsTrigger = {};
+    return this.deploySingleCloudFunction(functionName,
+      { entryPoint, httpsTrigger }
     );
   }
 

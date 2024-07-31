@@ -77,6 +77,9 @@ class PrimeSolution {
     this.databaseId = options.databaseId || DEFAULT_DATABASE;
     this.cloudFunctions = new CloudFunctions(this.projectId, this.locationId);
     this.secretName = options.secretName;
+    const firestore = new Firestore(this.projectId, this.databaseId);
+    const { type } = firestore.getDatabase();
+    this.databaseMode = FIRESTORE_MODE_FOR_DAO[type];
   }
 
   /**
@@ -213,24 +216,7 @@ Object.assign(module.exports, require('${this.getPackageName()}'));
       { file: 'index.js', content: this.getIndexFile() },
       { file: 'package.json', content: this.getPackageFile() },
     ]
-    const blobs = files.map(({ file, content }) => {
-      const data = content.split('').map((c) => c.charCodeAt(0));
-      const blob = Utilities.newBlob(data);
-      blob.setName(file);
-      return blob;
-    });
-    const { uploadUrl, error } = this.cloudFunctions.generateUploadUrl();
-    if (error) {
-      console.log(error);
-      throw error;
-    }
-    UrlFetchApp.fetch(uploadUrl, {
-      method: 'put',
-      payload: Utilities.zip(blobs),
-      contentType: 'application/zip',
-      headers: { 'x-goog-content-length-range': '0,104857600' },
-    });
-    this.sourceUploadUrl = uploadUrl;
+    this.sourceUploadUrl = this.cloudFunctions.uploadSourceAndReturnUrl(files);
     return this.sourceUploadUrl;
   }
 
@@ -246,6 +232,7 @@ Object.assign(module.exports, require('${this.getPackageName()}'));
       PROJECT_NAMESPACE: this.namespace,
       VERSION: this.getDeployVersion(),
       DATABASE_ID: this.databaseId,
+      DATABASE_MODE: this.databaseMode,
     }, variables);
   }
 

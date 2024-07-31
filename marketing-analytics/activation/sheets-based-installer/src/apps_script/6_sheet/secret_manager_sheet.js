@@ -19,42 +19,82 @@
  */
 class SecretManagerSheet extends PlainSheet {
 
-  constructor() {
-    super();
-    this.sheetName = 'Secret Manager';
-    this.columnName = [
-      'Name',
-      'Latest Version',
-      'State',
-      'Created',
-    ];
-    this.fields = this.columnName.map(camelize);
-    this.columnWidth = {
-      'Name': 200,
-      'Latest Version': 100,
-      'State': 100,
-      'Created': 300,
-    };
-    this.columnFormat = {
-      'Latest Version': { fn: 'setHorizontalAlignment', format: 'center' },
-      'State': { fn: 'setHorizontalAlignment', format: 'center' },
-      default_: { fn: 'setFontFamily', format: 'Consolas' },
-    };
-    this.headlineStyle = {
+  get defaultSheetName() {
+    return 'Secret Manager';
+  }
+
+  get defaultHeadlineStyle() {
+    return {
       backgroundColor: '#FBBC04',
       fontColor: 'white',
-    }
-    // Menu items
-    this.menuItem = [
+    };
+  }
+
+  get columnConfiguration() {
+    return [
+      { name: 'Name', width: 200 },
       {
-        name: 'Refresh secrets',
-        method: `${this.menuFunctionHolder}.listSecrets`,
+        name: 'Latest Version', width: 100,
+        format: { fn: 'setHorizontalAlignment', format: 'center' },
       },
       {
-        name: 'Reset sheet',
-        method: `${this.menuFunctionHolder}.initialize`,
+        name: 'State', width: 100,
+        format: { fn: 'setHorizontalAlignment', format: 'center' },
       },
+      { name: 'Created', width: 300 },
+      { name: COLUMN_NAME_FOR_DEFAULT_CONFIG, format: COLUMN_STYLES.MONO_FONT },
     ];
+  }
+
+  get inherentMenuItems() {
+    return [
+      { name: 'Refresh secrets', method: 'listSecrets' },
+      {
+        name: 'Save OAuth token in deployed Cloud Functions to Secret Manager',
+        method: 'saveOauthTokenFromCloudFunctionsToSecretManager',
+      },
+      { name: 'Reset sheet', method: 'initialize' },
+    ];
+  }
+
+
+  /**
+   * Gets the OAuth token from deployed Cloud Functions and saves it as a secret
+   * in Secret Manage.
+   */
+  saveOauthTokenFromCloudFunctionsToSecretManager() {
+    const projectId = getDocumentProperty('projectId');
+    const locationId = getDocumentProperty('locationId');
+    const namespace = getDocumentProperty('namespace');
+    const cloudFunctions = new CloudFunctions(projectId, locationId);
+    const results = ['api', 'main'].map((functionSuffix) => {
+      const functionName = `${namespace}_${functionSuffix}`;
+      const blobs = cloudFunctions.getSourceCode(functionName);
+      if (blobs.error) {
+        console.log(blobs.error.message);
+        return false;
+      }
+      const blob = blobs.filter(
+        (blob) => blob.getName() === 'keys/oauth2.token.json')[0];
+      if (!blob) {
+        console.log('There is no OAuth token in Cloud Functions', functionName);
+        return false;
+      } else {
+        const secretName = `${functionName}_legacy_token`;
+        const token = blob.getDataAsString();
+        console.log(
+          `Found OAuth token in ${functionName}, will save it as ${secretName}.`);
+        const secretManager = new SecretManager(projectId);
+        secretManager.addSecretVersion(secretName, token);
+        return true;
+      }
+    });
+    if (results.indexOf(true) === -1) {
+      const ui = SpreadsheetApp.getUi();
+      ui.alert(`No existing OAuth token could be found.`);
+    } else {
+      this.listSecrets();
+    }
   }
 
   /** @override */

@@ -22,7 +22,9 @@ class DoubleclickBidManager extends ExternalApi {
 
   constructor(option) {
     super(option);
-    this.apiUrl = 'https://doubleclickbidmanager.googleapis.com';
+    this.name = 'DoubleClick Bid Manager API';
+    this.api = 'doubleclickbidmanager.googleapis.com';
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v2';
   }
 
@@ -38,12 +40,12 @@ class DoubleclickBidManager extends ExternalApi {
 
   /**
    * Verifies the existence of the query and the query is exported as CSV.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/get
+   * @see https://developers.google.com/bid-manager/reference/rest/v2/queries/get
    * @param {string} queryId
    * @return {VerifyResult}
    */
   verifyQuery(queryId) {
-    const { error, metadata } = this.get(`queries/${queryId}`);
+    const { error, metadata } = this.getQuery(queryId);
     if (error) {
       return {
         valid: false,
@@ -60,12 +62,33 @@ class DoubleclickBidManager extends ExternalApi {
   }
 
   /**
+   * Retrieves a query.
+   * @see https://developers.google.com/bid-manager/reference/rest/v2/queries/get
+   * @param {string} queryId
+   * @return {Query}
+   */
+  getQuery(queryId) {
+    return this.get(`queries/${queryId}`);
+  }
+
+
+  /**
    * Creates a query.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/insert
+   * @see https://developers.google.com/bid-manager/reference/rest/v2/queries/create
    * @param {string} query
-   * @return {Report}
+   * @return {Query}
    */
   createQuery(query) {
     return this.mutate('queries', query);
+  }
+
+  /**
+   * Deletes a query as well as the associated reports.
+   * @see https://developers.google.com/bid-manager/reference/rest/v2/queries/delete
+   * @param {string} queryId
+   * @return {object} Should be empty.
+   */
+  deleteQuery(queryId) {
+    return this.mutate(`queries/${queryId}`, undefined, 'DELETE');
   }
 }

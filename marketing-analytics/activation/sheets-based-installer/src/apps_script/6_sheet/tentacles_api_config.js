@@ -61,11 +61,8 @@ const GOOGLE_ADS_USERLIST_FN = (configName) => {
   return (option, config) => {
     const {
       developerToken,
-      [configName]: {
-        customer_id: customerId,
-        login_customer_id: loginCustomerId,
-        list_id: listId,
-      } } = config;
+      [configName]: { customerId, loginCustomerId, listId }
+    } = config;
     const googleAds = new GoogleAds(option, loginCustomerId, developerToken);
     if (listId) return googleAds.verifyUserList(listId, customerId);
     const result = googleAds.verifyReportAccess();
@@ -113,68 +110,77 @@ const TENTACLES_CONFIG_CHECK_FUNCTIONS = {
  */
 class TentaclesConfig extends PlainSheet {
 
-  constructor(initConfigs = {}) {
-    super();
-    this.sheetName = 'Tentacles Config';
-    this.columnName = [
-      'API',
-      'Config',
-      'Config Content',
-      'Test Data',
-      'API Access Check',
-    ];
-    this.fields = this.columnName.map(camelize);
-    this.columnWidth = {
-      'API': 50,
-      'Config Content': 500,
-      'Test Data': 500,
-      'API Access Check': 400,
-      default_: 100,
-    };
-    this.columnFormat = {
-      'API': COLUMN_STYLES.ALIGN_MIDDLE,
-      'Config': COLUMN_STYLES.ALIGN_MIDDLE,
-      'API Access Check': COLUMN_STYLES.ALIGN_MIDDLE,
-      default_: { fn: 'setFontFamily', format: 'Consolas' },
-    };
-    // this.columnDataRange = {
-    //   'API': TENTACLES_CONNECTORS.map(({ code }) => code),
-    // }
-    // Register columns contains a JSON string to `JSON_COLUMNS` for
-    // auto-checking.
-    JSON_COLUMNS.push(`${this.sheetName}.Config Content`);
-    this.defaultNoteColumn = 'Config Content';
-    // Menu items
-    this.menuItem = [
-      {
-        name: 'Check selected config for accessibility',
-        method: `${this.menuFunctionHolder}.showApiCheckResult`,
-      },
-      {
-        name: 'Update selected config to Firestore',
-        method: `${this.menuFunctionHolder}.operateSingleRow`,
-      },
-      {
-        name: 'Upload selected data to test Tentacles',
-        method: `${this.menuFunctionHolder}.uploadTestData`,
-      },
-      { seperateLine: true },
-      {
-        name: 'Update all configs to Firestore',
-        method: `${this.menuFunctionHolder}.operateAllRows`,
-      },
-      {
-        name: 'Reset sheet (will lose monification)',
-        method: `${this.menuFunctionHolder}.initialize`,
-      },
-    ];
-    // Initialize data
-    this.initialData = Object.keys(initConfigs).map((api) => {
+  /**
+   * In the parameter `options`, the property named 'configs' is for intial data.
+   */
+  get initialData() {
+    const { configs: initConfigs = {} } = this.options || {};
+    return Object.keys(initConfigs).map((api) => {
       const configs = initConfigs[api];
       return Object.keys(configs).map((config) => {
         return [api, config, JSON.stringify(configs[config], null, 2)];
       });
     }).flat();
+  }
+
+  get defaultSheetName() {
+    return 'Tentacles Config';
+  }
+
+  get columnConfiguration() {
+    return [
+      { name: 'API', width: 50, format: COLUMN_STYLES.ALIGN_MIDDLE },
+      { name: 'Config', format: COLUMN_STYLES.ALIGN_MIDDLE },
+      { name: 'Config Content', jsonColumn: true, defaultNote: true, width: 500 },
+      { name: 'Test Data', width: 500 },
+      { name: 'API Access Check', width: 400, format: COLUMN_STYLES.ALIGN_MIDDLE },
+      {
+        name: COLUMN_NAME_FOR_DEFAULT_CONFIG, width: 100,
+        format: COLUMN_STYLES.MONO_FONT,
+      },
+    ];
+  }
+
+  get downloadContent() {
+    const entities = this.getArrayOfRowEntity();
+    const result = {};
+    entities.forEach(({ api, config, configContent }) => {
+      if (!result[api]) result[api] = {};
+      result[api][config] = JSON.parse(configContent);
+    });
+    return JSON.stringify(result);
+  }
+
+  get downloadFilename() {
+    const tag = this.options.sheetName
+      ? `_${snakeize(this.options.sheetName)}` : '';
+    return `config_api${tag}.json`;
+  }
+
+  get inherentMenuItems() {
+    return [
+      {
+        name: 'Check selected config for accessibility',
+        method: 'showApiCheckResult',
+      },
+      {
+        name: 'Update selected config to Firestore',
+        method: 'operateSingleRow',
+      },
+      {
+        name: 'Upload selected data to test Tentacles',
+        method: 'uploadTestData',
+      },
+      { separator: true },
+      { name: 'Update all configs to Firestore', method: 'operateAllRows' },
+      {
+        name: 'Append all configs from Firestore to Sheets',
+        method: 'loadFromFirestore',
+      },
+      { name: 'Download current sheet as a JSON file', method: 'export' },
+      { separator: true },
+      { name: 'Reset sheet (will lose monification)', method: 'initialize' },
+    ];
   }
 
   /**
@@ -227,6 +233,14 @@ class TentaclesConfig extends PlainSheet {
     const response = storage.uploadFile(fileName, bucket, content);
     const note = `Uploaded as ${response.name}.`;
     this.showOperationResult(rowIndex, note, 'black', 'Test Data');
+  }
+
+  /** Loads Api Configs from Firestore database to this Google Sheets. */
+  loadFromFirestore() {
+    const results = gcloud.loadEntitiesToFirestore('ApiConfig');
+    const rows = results.map(
+      ({ id, json }) => id.split('.').concat(JSON.stringify(json, null, 2)));
+    this.getEnhancedSheet().append(rows);
   }
 
   /**

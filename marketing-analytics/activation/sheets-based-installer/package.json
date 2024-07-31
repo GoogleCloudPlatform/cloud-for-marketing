@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/sheets-based-installer",
-  "version": "1.2.2",
+  "version": "1.6.0",
   "description": "Google Sheets based installer",
   "type": "module",
   "author": "Google Inc.",
@@ -18,9 +18,9 @@
   },
   "homepage": "https://github.com/GoogleCloudPlatform/cloud-for-marketing/blob/master/marketing-analytics/activation/sheets-based-installer/README.md",
   "dependencies": {
-    "fs-extra": "^10.1.0",
-    "glob": "^10.3.3",
-    "open": "^9.1.0",
+    "fs-extra": "^11.2.0",
+    "glob": "^10.3.10",
+    "open": "^10.0.4",
     "uglify-js": "^3.17.4"
   },
   "cloud-repo-tools": {

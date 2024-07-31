@@ -33,6 +33,14 @@ const FIRESTORE_MODE = Object.freeze({
 });
 
 /**
+ * The type of the database for DataAccessObject objects in Cloud Functions.
+ */
+const FIRESTORE_MODE_FOR_DAO = Object.freeze({
+  FIRESTORE_NATIVE: 'FIRESTORE',
+  DATASTORE_MODE: 'DATASTORE',
+});
+
+/**
  * The type of App Engine integration mode.
  * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases#DatabaseType
  * @enum {string}
@@ -42,6 +50,89 @@ const APP_ENGINE_INTEGRATION_MODE = Object.freeze({
   ENABLED: 'ENABLED',
   DISABLED: 'DISABLED',
 });
+
+/**
+ * The ultility functions to convert data between Json and Firestore document.
+ */
+const FIRESTORE_TRANSFORM = {
+  /**
+   * Returns a JSON object.
+   * @param {object} obj A JSON object.
+   * @return {!Value} Firestore object.
+   */
+  toJson: (obj) => {
+    const json = {};
+    Object.keys(obj).forEach((key) => {
+      json[key] = FIRESTORE_TRANSFORM.toJsonValue_(obj[key]);
+    })
+    return json;
+  },
+  /**
+   * Returns a Firestore 'Value' for a Javascript object.
+   * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents#Document
+   * @param {object} obj A JSON object.
+   * @return {!Value} Firestore object.
+   */
+  toFirestoreObject: (obj) => {
+    const document = {};
+    Object.keys(obj).forEach((key) => {
+      document[key] = FIRESTORE_TRANSFORM.toFirestoreValue_(obj[key]);
+    })
+    return document;
+  },
+  toJsonValue_: (value) => {
+    if (typeof value.stringValue !== 'undefined') return value.stringValue;
+    if (typeof value.booleanValue !== 'undefined') return value.booleanValue;
+    if (typeof value.integerValue !== 'undefined') return Number(value.integerValue);
+    if (typeof value.doubleValue !== 'undefined') return Number(value.doubleValue);
+    const { arrayValue, mapValue } = value;
+    if (arrayValue) {
+      return arrayValue.values
+        ? arrayValue.values.map(FIRESTORE_TRANSFORM.toJsonValue_)
+        : arrayValue;
+    }
+    if (mapValue) {
+      return mapValue.fields
+        ? FIRESTORE_TRANSFORM.toJson(mapValue.fields)
+        : mapValue;
+    }
+    throw new Error(`Unrecognizable value ${value}`);
+  },
+  /**
+   * Returns a Firestore 'Value' for a Javascript value.
+   * @see https://cloud.google.com/firestore/docs/reference/rest/Shared.Types/ArrayValue#Value
+   * @param {string|number|boolean Array|Object} value A Javascript value.
+   * @return {!Value} Firestore object.
+   * @private
+   */
+  toFirestoreValue_(value) {
+    let propertyName;
+    let propertyValue = value;
+    switch (typeof value) {
+      case 'string':
+        propertyName = 'stringValue';
+        break;
+      case 'number':
+        propertyName = Number.isInteger(value) ? 'integerValue' : 'doubleValue';
+        break;
+      case 'boolean':
+        propertyName = 'booleanValue';
+        break;
+    }
+    if (value === null) propertyName = 'nullValue';
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) {
+        propertyName = 'arrayValue';
+        propertyValue = { values: value.map(FIRESTORE_TRANSFORM.toFirestoreValue_) };
+      } else {
+        propertyName = 'mapValue';
+        propertyValue = { fields: FIRESTORE_TRANSFORM.toFirestoreObject(value) };
+      }
+    }
+    if (!propertyName) throw new Error(`Unrecognizable value ${value}`);
+    return { [propertyName]: propertyValue };
+  }
+};
 
 class Firestore extends ApiBase {
 
@@ -153,7 +244,7 @@ class Firestore extends ApiBase {
       return {
         update: {
           name: `projects/${this.projectId}/${urlPath}/${path}/${kind}/${key}`,
-          fields: this.convertObject_(entities[key]),
+          fields: FIRESTORE_TRANSFORM.toFirestoreObject(entities[key]),
         },
       };
     });
@@ -169,53 +260,28 @@ class Firestore extends ApiBase {
   }
 
   /**
-   * Returns a Firestore 'Value' for a Javascript object.
-   * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents#Document
-   * @param {object} obj A JSON object.
-   * @return {!Value} Firestore object.
-   * @private
+   * Returns all documents under the collection.
+   * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/list
+   * @return {!Array<{
+   *    id:string,
+   *    json:object,
+   * }>}
    */
-  convertObject_(obj) {
-    const converted = {};
-    Object.keys(obj).forEach((key) => {
-      converted[key] = this.getFirestoreValue_(obj[key]);
-    })
-    return converted;
-  }
-
-  /**
-   * Returns a Firestore 'Value' for a Javascript value.
-   * @see https://cloud.google.com/firestore/docs/reference/rest/Shared.Types/ArrayValue#Value
-   * @param {string|number|boolean Array|Object} value A Javascript value.
-   * @return {!Value} Firestore object.
-   * @private
-   */
-  getFirestoreValue_(value) {
-    let propertyName;
-    let propertyValue = value;
-    switch (typeof value) {
-      case 'string':
-        propertyName = 'stringValue';
-        break;
-      case 'number':
-        propertyName = Number.isInteger(value) ? 'integerValue' : 'doubleValue';
-        break;
-      case 'boolean':
-        propertyName = 'booleanValue';
-        break;
-    }
-    if (value === null) propertyName = 'nullValue';
-    if (typeof value === 'object') {
-      if (Array.isArray(value)) {
-        propertyName = 'arrayValue';
-        propertyValue = { values: value.map(this.getFirestoreValue_.bind(this)) };
-      } else {
-        propertyName = 'mapValue';
-        propertyValue = { fields: this.convertObject_(value) };
-      }
-    }
-    if (!propertyName) throw new Error(`Unrecognizable value ${value}`);
-    return { [propertyName]: propertyValue };
+  list() {
+    const uri =
+      `databases/${this.databaseId}/documents/${this.path}/${this.kind}`;
+    const results = [];
+    const parameters = {};
+    do {
+      const { documents = [], nextPageToken } = super.get(uri, parameters);
+      results.push(...documents);
+      parameters.pageToken = nextPageToken;
+    } while (parameters.pageToken);
+    return results.map(({ name, fields }) => {
+      const id = name.substring(name.lastIndexOf('/') + 1);
+      const json = FIRESTORE_TRANSFORM.toJson(fields);
+      return { id, json };
+    });
   }
 
 }

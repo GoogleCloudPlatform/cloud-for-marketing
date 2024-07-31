@@ -46,6 +46,10 @@ class DoubleClickBidManagerReport extends Report {
   async isReady(parameters) {
     const { status } =
       await this.dbm.getQueryReport(this.queryId, parameters.reportId);
+    if (status && status.state === 'FAILED') {
+      throw new Error(
+        `Report run failed Query[${this.queryId}], report[${parameters.reportId}].`);
+    }
     return status && status.state === 'DONE';
   }
 
@@ -53,6 +57,10 @@ class DoubleClickBidManagerReport extends Report {
   async getContent(parameters) {
     const { googleCloudStoragePath: url } =
       await this.dbm.getQueryReport(this.queryId, parameters.reportId);
+    if (!url) {
+      throw new Error(
+        `Can't find url query[${this.queryId}], report[${parameters.reportId}]`);
+    }
     const response = await request({
       method: 'GET',
       url,

@@ -17,6 +17,7 @@
 /**
  * List of Google Cloud services' name and API. This list is used enable APIs
  * when related servcies are required.
+ * `gcloud services list --filter "NAME~^[^.]+.googleapis.com$"`
  */
 const GOOGLE_CLOUD_SERVICE_LIST = {
   'Cloud Firestore API': 'firestore.googleapis.com',
@@ -24,11 +25,16 @@ const GOOGLE_CLOUD_SERVICE_LIST = {
   'Cloud Pub/Sub API': 'pubsub.googleapis.com',
   'Cloud Scheduler API': 'cloudscheduler.googleapis.com',
   'Cloud Build API': 'cloudbuild.googleapis.com',
-  'Google Sheets API': 'sheets.googleapis.com',
   'Artifact Registry API': 'artifactregistry.googleapis.com',
-  'Secret Manager API': 'secretmanager.googleapis.com',
-  'IAM Service Account Credentials API': 'iamcredentials.googleapis.com',
+  'BigQuery API': 'bigquery.googleapis.com',
   'BigQuery Data Transfer API': 'bigquerydatatransfer.googleapis.com',
+  'Google Sheets API': 'sheets.googleapis.com',
+  'Google Drive API': 'drive.googleapis.com',
+  'IAM Service Account Credentials API': 'iamcredentials.googleapis.com',
+  'Secret Manager API': 'secretmanager.googleapis.com',
+  'Vertex AI API': 'aiplatform.googleapis.com',
+  'Generative Language API': 'generativelanguage.googleapis.com',
+  'API Keys API': 'apikeys.googleapis.com',
 };
 
 class ServiceUsage extends ApiBase {

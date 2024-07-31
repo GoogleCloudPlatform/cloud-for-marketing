@@ -14,6 +14,87 @@
 
 /** @fileoverview Cloud Datastore API handler class.*/
 
+/**
+ * The ultility functions to convert data between Json and Datastore entity.
+ */
+const DATASTORE_TRANSFORM = {
+
+  toJson: (obj) => {
+    const json = {};
+    Object.keys(obj).forEach((key) => {
+      json[key] = DATASTORE_TRANSFORM.toJsonValue_(obj[key]);
+    })
+    return json;
+  },
+  /**
+    * Returns a Datastore 'Value' for a Javascript object.
+    * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
+    * @param {object} obj A JSON object.
+    * @return {!Value} Datastore object.
+    * @private
+    */
+  toDatastoreObject: (obj) => {
+    const entity = {};
+    Object.keys(obj).forEach((key) => {
+      entity[key] = DATASTORE_TRANSFORM.toDatastoreValue_(obj[key]);
+    })
+    return entity;
+  },
+  toJsonValue_: (value) => {
+    if (typeof value.stringValue !== 'undefined') return value.stringValue;
+    if (typeof value.booleanValue !== 'undefined') return value.booleanValue;
+    if (typeof value.integerValue !== 'undefined') return Number(value.integerValue);
+    if (typeof value.doubleValue !== 'undefined') return Number(value.doubleValue);
+    const { arrayValue, entityValue } = value;
+    if (arrayValue) {
+      return arrayValue.values ?
+        arrayValue.values.map(DATASTORE_TRANSFORM.toJsonValue_)
+        : arrayValue;
+    }
+    if (entityValue) {
+      return entityValue.properties
+        ? DATASTORE_TRANSFORM.toJson(entityValue.properties)
+        : entityValue;
+    }
+    throw new Error(`Unrecognizable value ${value}`);
+  },
+
+  /**
+   * Returns a Datastore 'Value' for a Javascript value.
+   * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
+   * @param {string|number|boolean Array|Object} value A Javascript value.
+   * @return {!Value} Datastore object.
+   * @private
+   */
+  toDatastoreValue_: (value) => {
+    let propertyName;
+    let propertyValue = value;
+    switch (typeof value) {
+      case 'string':
+        propertyName = 'stringValue';
+        break;
+      case 'number':
+        propertyName = Number.isInteger(value) ? 'integerValue' : 'doubleValue';
+        break;
+      case 'boolean':
+        propertyName = 'booleanValue';
+        break;
+    }
+    if (value === null) propertyName = 'nullValue';
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) {
+        propertyName = 'arrayValue';
+        propertyValue = { values: value.map(DATASTORE_TRANSFORM.toDatastoreValue_) };
+      } else {
+        propertyName = 'entityValue';
+        propertyValue = { properties: DATASTORE_TRANSFORM.toDatastoreObject(value) };
+      }
+    }
+    if (!propertyName) throw new Error(`Unrecognizable value ${value}`);
+    return { [propertyName]: propertyValue };
+  }
+};
+
 class Datastore extends ApiBase {
 
   constructor(projectId, databaseId = DEFAULT_DATABASE, namespace, kind) {
@@ -69,7 +150,7 @@ class Datastore extends ApiBase {
             },
             path: [{ kind: kind, name: key, }]
           },
-          properties: this.convertObject_(entities[key]),
+          properties: DATASTORE_TRANSFORM.toDatastoreObject(entities[key]),
         },
       };
     });
@@ -87,53 +168,38 @@ class Datastore extends ApiBase {
   }
 
   /**
-   * Returns a Datastore 'Value' for a Javascript object.
-   * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
-   * @param {object} obj A JSON object.
-   * @return {!Value} Datastore object.
-   * @private
+   * Returns all documents under the collection.
+   * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/list
+   * @return {!Array<{
+   *    id:string,
+   *    json:object,
+   * }>}
    */
-  convertObject_(obj) {
-    const converted = {};
-    Object.keys(obj).forEach((key) => {
-      converted[key] = this.getDatastoreValue_(obj[key]);
-    })
-    return converted;
+  list() {
+    const payload = {
+      databaseId: this.databaseId,
+      partitionId: {
+        projectId: this.projectId,
+        databaseId: this.databaseId,
+        namespaceId: this.namespace,
+      },
+      query: {
+        kind: [{ name: this.kind }],
+      },
+    };
+    const results = [];
+    let hasMoreResult = false;
+    do {
+      const { batch } = super.mutate(':runQuery', payload);
+      const { entityResults = [], endCursor, moreResults } = batch;
+      results.push(...entityResults);
+      hasMoreResult = moreResults !== 'NO_MORE_RESULTS';
+      payload.query.startCursor = endCursor;
+    } while (hasMoreResult)
+    return results.map(({ entity: { key, properties } }) => {
+      const id = key.path[0].name;
+      const json = DATASTORE_TRANSFORM.toJson(properties);
+      return { id, json };
+    });
   }
-
-  /**
-   * Returns a Datastore 'Value' for a Javascript value.
-   * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
-   * @param {string|number|boolean Array|Object} value A Javascript value.
-   * @return {!Value} Datastore object.
-   * @private
-   */
-  getDatastoreValue_(value) {
-    let propertyName;
-    let propertyValue = value;
-    switch (typeof value) {
-      case 'string':
-        propertyName = 'stringValue';
-        break;
-      case 'number':
-        propertyName = Number.isInteger(value) ? 'integerValue' : 'doubleValue';
-        break;
-      case 'boolean':
-        propertyName = 'booleanValue';
-        break;
-    }
-    if (value === null) propertyName = 'nullValue';
-    if (typeof value === 'object') {
-      if (Array.isArray(value)) {
-        propertyName = 'arrayValue';
-        propertyValue = { values: value.map(this.getDatastoreValue_.bind(this)) };
-      } else {
-        propertyName = 'entityValue';
-        propertyValue = { properties: this.convertObject_(value) };
-      }
-    }
-    if (!propertyName) throw new Error(`Unrecognizable value ${value}`);
-    return { [propertyName]: propertyValue };
-  }
-
 }

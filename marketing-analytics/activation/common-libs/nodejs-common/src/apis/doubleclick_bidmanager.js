@@ -94,13 +94,13 @@ class DoubleClickBidManager extends GoogleApiClient {
    * Gets a query metadata.
    * See https://developers.google.com/bid-manager/reference/rest/v2/queries/get
    * @param {number} queryId Id of the query.
-   * @return {!Promise<!QueryMetadata>} Query metadata, see
-   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#QueryMetadata
+   * @return {!Promise<!Query>} Query, see
+   *     https://developers.google.com/bid-manager/reference/rest/v2/queries#Query
    */
   async getQuery(queryId) {
     const doubleclickbidmanager = await this.getApiClient();
     const response = await doubleclickbidmanager.queries.get({ queryId });
-    return response.data.metadata;
+    return response.data;
   }
 
   /**

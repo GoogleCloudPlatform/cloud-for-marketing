@@ -43,13 +43,16 @@ const SENTINEL_FEATURES = Object.freeze([
     code: 'CM',
   },
   {
-    desc: 'Download Display & Video 360 Reports',
-    api: 'doubleclickbidmanager.googleapis.com',
+    desc: 'Download Display & Video 360 Reports/Data',
+    api: [
+      'doubleclickbidmanager.googleapis.com',
+      'displayvideo.googleapis.com',
+    ],
     code: 'DV360',
   },
   {
     desc: 'Download Search Ads 360 Reports',
-    api: 'doubleclicksearch.googleapis.com',
+    api: 'searchads360.googleapis.com',
     code: 'SA360',
   },
   {
@@ -74,6 +77,11 @@ const SENTINEL_FEATURES = Object.freeze([
     desc: 'Run BigQuery Data Transfer queries',
     api: 'bigquerydatatransfer.googleapis.com',
     code: 'DataTransfer',
+  },
+  {
+    desc: '(Legacy) Download Doubleclick Search Reports',
+    api: 'doubleclicksearch.googleapis.com',
+    code: 'DS',
   },
 ]);
 
@@ -112,14 +120,10 @@ class Sentinel extends PrimeSolution {
 
   /** @override */
   deployCloudFunctions(name) {
-    switch (name) {
-      case `${this.namespace}_main`:
-        return this.deployMain(name);
-      case `${this.namespace}_gcs`:
-        return this.deployStorageMonitor(name);
-      default:
-        throw new Error(`Unknown Cloud Functions ${name}`);
-    }
+    if (name.endsWith('main')) return this.deployMain(name);
+    if (name.endsWith('gcs')) return this.deployStorageMonitor(name);
+    if (name.endsWith('report')) return this.deployReportWorkflow(name);
+    throw new Error(`Unknown Cloud Functions ${name}`);
   }
 
   /**
@@ -133,6 +137,7 @@ class Sentinel extends PrimeSolution {
     const eventTrigger = this.getPubSubEventTrigger(
       Sentinel.getMonitorTopicName(this.namespace)
     );
+    eventTrigger.failurePolicy = { retry: {} };
     return this.deploySingleCloudFunction(functionName,
       { entryPoint, eventTrigger }, this.getSecretEnv()
     );
@@ -152,6 +157,19 @@ class Sentinel extends PrimeSolution {
     );
   }
 
+  /**
+   * Deploy Sentinel `reportWorkflow` Cloud Functions.
+   *
+   * @param {string=} functionName
+   * @return {string} The name of operation.
+   */
+  deployReportWorkflow(functionName = `${this.namespace}_report`) {
+    const entryPoint = 'reportWorkflow';
+    const httpsTrigger = {};
+    return this.deploySingleCloudFunction(functionName,
+      { entryPoint, httpsTrigger }
+    );
+  }
 }
 
 /**

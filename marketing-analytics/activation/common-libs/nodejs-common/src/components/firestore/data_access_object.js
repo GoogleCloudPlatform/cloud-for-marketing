@@ -54,16 +54,16 @@ class DataAccessObject {
     /** @const {string} */ this.namespace = namespace;
     /** @const {!DataSource} */ this.dataSource =
       typeof database === 'string' ? database : database.source;
-    const databaseId = database.id || DEFAULT_DATABASE;
+    this.databaseId = database.id || DEFAULT_DATABASE;
     /** @type {!FirestoreAccessBase} */ this.accessObject = undefined;
     switch (this.dataSource) {
       case DataSource.FIRESTORE:
         this.accessObject = new NativeModeAccess(
-          `${this.namespace}/database/${kind}`, projectId, databaseId);
+          `${this.namespace}/database/${kind}`, projectId, this.databaseId);
         break;
       case DataSource.DATASTORE:
         this.accessObject = new DatastoreModeAccess(this.namespace, kind,
-          projectId, databaseId);
+          projectId, this.databaseId);
         break;
       default:
         throw new Error(`Unknown DataSource item: ${this.dataSource}.`);

@@ -233,6 +233,7 @@ deploy_cloud_functions_initiator(){
   cf_flag+=(--entry-point=initiate)
   cf_flag+=(--trigger-bucket="${GCS_BUCKET}")
   cf_flag+=(--set-env-vars=TENTACLES_OUTBOUND="${OUTBOUND}")
+  cf_flag+=(--retry)
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 1. '${PROJECT_NAMESPACE}_init' is triggered by new files \
 from Cloud Storage bucket [${GCS_BUCKET}]."

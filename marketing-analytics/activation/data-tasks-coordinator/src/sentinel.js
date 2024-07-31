@@ -54,6 +54,17 @@ const {
   TaskManagerOptions,
   TaskManager,
 } = require('./task_manager.js');
+const {
+  Node,
+  TaskLogNodeLoader,
+} = require('./utils/node_loader/task_log_node_loader.js');
+const { TaskConfigNodeLoader } =
+  require('./utils/node_loader/task_config_node_loader');
+const {
+  MermaidFlowChart,
+  OPTIONS_DEV,
+  OPTIONS_INK,
+} = require('./utils/adapter/mermaid_flowchart.js');
 
 /**
  * String value of BigQuery Data Transfer job status 'SUCCEEDED'
@@ -403,6 +414,9 @@ class Sentinel {
   async finishTask_(taskLogId) {
     this.logger.debug(`Start to finish task ${taskLogId}`);
     const taskLog = await this.taskLogDao.load(taskLogId);
+    if (taskLog.status === TaskLogStatus.RETRY) {
+      return this.startTask_(taskLogId, taskLog);
+    }
     const finished = await this.taskLogDao.finishTask(taskLogId);
     if (finished) return this.finishTaskJob_(taskLogId, taskLog);
     this.logger.warn(`Fail to finish the taskLog [${taskLogId}]. Quit.`);
@@ -438,6 +452,10 @@ class Sentinel {
       this.logger.error(`Task[${taskLogId}] error:`, error);
       const [errorHandledStatus, result] =
         await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
+      // Send the message to retry the task.
+      if (errorHandledStatus === ErrorHandledStatus.RETRIED) {
+        return this.taskManager.sendTaskMessage('', { taskLogId });
+      }
       if (errorHandledStatus !== ErrorHandledStatus.IGNORED) {
         return result;
       }
@@ -479,6 +497,117 @@ class Sentinel {
     }
     this.logger.debug(`BigQuery JobId[${jobId}] is not a Sentinel Job.`);
   }
+
+  /**
+   * A HTTP based Cloud Functions which returns Sentinel workflow information.
+   * @see getWorkflowNodesAndTitle_
+   * @param {object} request
+   * @param {object} response
+   */
+  async workflowReporter(request, response) {
+    const parameters = request.body;
+    this.logger.info('Http get:', parameters);
+    const {
+      taskLogId,
+      taskConfigId,
+      lastRun,
+      responseContent = 'json',
+    } = parameters;
+    // default output
+    const output =
+      Object.assign({ target: 'mermaid', format: 'dev' }, parameters.output);
+    const { nodes, title } =
+      await this.getWorkflowNodesAndTitle_(taskLogId, taskConfigId, lastRun);
+    const { target, format } = output;
+    let result;
+    if (target === 'mermaid') {
+      const style = format === 'link' ? OPTIONS_INK : OPTIONS_DEV;
+      const mermaid = new MermaidFlowChart(style);
+      const functionName =
+        format === 'link' ? 'getInkLinkFromNodes' : 'getChartFromNodes';
+      result = mermaid[functionName](nodes, title);
+    } else if (target === 'raw') {
+      result = nodes;
+    } else {
+      result = `Unknown target: ${target}`;
+    }
+    if (responseContent === 'text') {
+      response.send(typeof result === 'string' ? result : JSON.stringify(result));
+    } else {
+      response.send({ result });
+    }
+  }
+
+  /**
+   * Returns the array of nodes based on given TaksLog Id or TaskConfig Id.
+   * 1. If given a TaskLodId, it returns the workflow execution result;
+   * 2. If given a TaskConfigId and with a 'lastRun' as 'true', it returns the
+   *    latest execution result; if there is no execution data or no 'lastRun'
+   *    is set, it returns the defintion of this workflow.
+   * @param {string|number|undefined} taskLogId
+   * @param {string|number|undefined} taskConfigId
+   * @param {string|undefined} lastRun
+   * @return {{nodes:Array<Node>, title: string|undefined}} The empty (undefined)
+   *     nodes is allowed as the chart will be blank with the title visiable.
+   * @private
+   */
+  async getWorkflowNodesAndTitle_(taskLogId, taskConfigId, lastRun) {
+    let nodes, title, targetLogId;
+    if (taskLogId) {
+      const taskLog = await this.taskLogDao.load(taskLogId);
+      if (!taskLog) {
+        title = `Error_Not_found_TaskLogId ${taskLogId}`;
+      } else {
+        const startTime = taskLog.createTime.toDate();
+        title = `${taskLog.taskId}' execution ${taskLogId},`
+          + ` started at ${startTime.toUTCString()}`;
+        targetLogId = taskLogId;
+      }
+    } else if (taskConfigId) {
+      if (lastRun) {// get the last run task log id of the given task config
+        const taskLog = await this.getLastRunTaskLog_(taskConfigId);
+        if (!taskLog) {// Not run yet.
+          title = `No ${taskConfigId}'s logs found. Show the workflow instead`;
+        } else {
+          targetLogId = taskLog.id;
+          const startTime = taskLog.entity.createTime.toDate();
+          title = `${taskConfigId}' latest execution,`
+            + ` started at ${startTime.toUTCString()}`;
+        }
+      } else {
+        title = `${taskConfigId} workflow`;
+      }
+    }
+    if (targetLogId) {
+      const logNodeLoader =
+        new TaskLogNodeLoader(this.taskLogDao, this.taskConfigDao);
+      nodes = await logNodeLoader.getWorkFlow(targetLogId);
+    } else if (taskConfigId) {
+      const configNodeLoader = new TaskConfigNodeLoader(this.taskConfigDao);
+      nodes = await configNodeLoader.getWorkFlow(taskConfigId);
+    } else {
+      if (!title) {
+        title = `Error_No_TaskLog_or_TaskConfig`;
+      }
+    }
+    return { nodes, title };
+  }
+
+  /**
+   * Returns the latest execution (TaskLog) of the given TaskConfigId.
+   * @param {string} taskConfigId
+   * @return {!TaskLog|undefined}
+   */
+  async getLastRunTaskLog_(taskConfigId) {
+    const taskLogs =
+      await this.taskLogDao.list([{ property: 'taskId', value: taskConfigId }]);
+    if (taskLogs.length > 0) {
+      taskLogs.sort(
+        ({ entity: a }, { entity: b }) => b.createTime - a.createTime);
+      return taskLogs[0];
+    }
+  }
+
 }
 
 /**

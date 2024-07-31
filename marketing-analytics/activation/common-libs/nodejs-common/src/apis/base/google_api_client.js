@@ -16,7 +16,7 @@
  * @fileoverview A base class for Google Api client library class.
  */
 const { google } = require('googleapis');
-const { getLogger, getObjectByPath } = require('../../components/utils.js');
+const { getLogger } = require('../../components/utils.js');
 const { AuthRestfulApi } = require('./auth_restful_api.js');
 
 /**
