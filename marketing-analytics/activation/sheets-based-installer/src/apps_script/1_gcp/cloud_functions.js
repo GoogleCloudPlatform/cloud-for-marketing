@@ -146,6 +146,55 @@ class CloudFunctions extends ApiBase {
   }
 
   /**
+   * Uploads Cloud Functions source code and returns the url for creating or
+   * updating the Cloud Function.
+   * @param {!Array<string,string>} files A map of file name and content.
+   * @return {string}
+   */
+  uploadSourceAndReturnUrl(files) {
+    const { uploadUrl, error } = this.generateUploadUrl();
+    if (error) {
+      console.log(error);
+      throw error;
+    }
+    const blobs = files.map(({ file, content }) => {
+      const data = content.split('').map((c) => c.charCodeAt(0));
+      const blob = Utilities.newBlob(data);
+      blob.setName(file);
+      return blob;
+    });
+    UrlFetchApp.fetch(uploadUrl, {
+      method: 'put',
+      payload: Utilities.zip(blobs),
+      contentType: 'application/zip',
+      headers: { 'x-goog-content-length-range': '0,104857600' },
+    });
+    return uploadUrl;
+  }
+
+  /**
+   * Returns a signed URL for downloading deployed function source code.
+   * @see https://cloud.google.com/functions/docs/reference/rest/v1/projects.locations.functions/generateDownloadUrl
+   * @return {{downloadUrl: string}}
+   */
+  generateDownloadUrl(functionName) {
+    return this.mutate(
+      `projects/${this.projectId}/locations/${this.locationId}/functions/${functionName}:generateDownloadUrl`);
+  }
+
+  /**
+   * Returns the array of source code files of the specified Cloud Function.
+   * @param {string} functionName
+   * @return {!Array<Blob>}
+   */
+  getSourceCode(functionName) {
+    const { downloadUrl, error } = this.generateDownloadUrl(functionName);
+    if (error) return { error };
+    const blob = UrlFetchApp.fetch(downloadUrl).getBlob();
+    return Utilities.unzip(blob);
+  }
+
+  /**
    * Gets the result of an operation.
    * @see https://cloud.google.com/functions/docs/reference/rest/v1/operations/get
    * @param {string} operationName
@@ -153,6 +202,24 @@ class CloudFunctions extends ApiBase {
    */
   getOperation(operationName) {
     return super.get(operationName);
+  }
+
+  /**
+   * Synchronously invokes a deployed Cloud Function. To be used for testing
+   * purposes as very limited traffic is allowed.
+   * @see https://cloud.google.com/functions/docs/reference/rest/v1/projects.locations.functions/call
+   * @param {string} functionName
+   * @param {string} data Input to be passed to the function.
+   * @return {{
+   *   executionId: string,
+   *   result: object|undefined,
+   *   error: object|undefined,
+   * }}
+   */
+  call(functionName, data = "{}") {
+    return super.mutate(
+      `projects/${this.projectId}/locations/${this.locationId}/functions/${functionName}:call`,
+      { data });
   }
 
 }

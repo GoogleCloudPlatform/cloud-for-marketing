@@ -632,7 +632,7 @@ class Tentacles {
         topic,
         lockToken,
       } = attributes || {};
-      /** @type {BatchResult} */ let result;
+      /** @type {BatchResult} */ let batchResult;
       let needContinue = true;
       try {
         const canStartTask = await this.tentaclesTaskDao.start(taskId);
@@ -659,18 +659,23 @@ class Tentacles {
         if (dryRun === 'true') {
           this.logger.info(`[DryRun] API[${api}] and config[${config}]: `,
             finalConfig);
-          result = /** @type {!BatchResult} */ { result: true }; // A dry-run task always succeeds.
+          batchResult = { result: true }; // A dry-run task always succeeds.
           if (!getApiOnGcs().includes(api)) {
-            result.numberOfLines = records.split('\n').length;
+            batchResult.numberOfLines = records.split('\n').length;
           }
         } else {
-          result = await apiHandler.sendData(records, messageId, finalConfig);
+          batchResult =
+            await apiHandler.sendData(records, messageId, finalConfig);
         }
-        const { numberOfLines = 0, failedLines, groupedFailed } = result;
+        const { numberOfLines = 0, failedLines, groupedFailed } = batchResult;
         await this.tentaclesTaskDao.updateTask(taskId, {
           numberOfLines,
           numberOfFailed: failedLines ? failedLines.length : 0,
         });
+        //If the record is empty, wait extra time to keep logs sequential.
+        if (numberOfLines === 0) {
+          await wait(1000);
+        }
         if (groupedFailed) {
           const errorLogger = getLogger('TentaclesFailedRecord');
           Object.keys(groupedFailed).forEach((error) => {
@@ -679,10 +684,10 @@ class Tentacles {
                 { taskId, error, records: groupedFailed[error] }));
           });
         }
-        if (result.result) {
-          await this.tentaclesTaskDao.finish(taskId, result.result);
+        if (batchResult.result) {
+          await this.tentaclesTaskDao.finish(taskId, batchResult.result);
         } else {
-          await this.tentaclesTaskDao.logError(taskId, result.errors);
+          await this.tentaclesTaskDao.logError(taskId, batchResult.errors);
         }
       } catch (error) {
         this.logger.error(`Error in API[${api}], config[${config}]: `, error);

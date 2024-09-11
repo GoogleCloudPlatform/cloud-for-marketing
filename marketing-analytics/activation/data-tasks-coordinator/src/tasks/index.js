@@ -25,7 +25,7 @@ const { LoadTask } = require('./bigquery/load_task.js');
 const { ExportTask } = require('./bigquery/export_task.js');
 const { QueryTask } = require('./bigquery/query_task.js');
 const { ExportSchemaTask } = require('./bigquery/export_schema_task.js');
-const { DeleteDatasetTask } = require('./bigquery/delete_dataset_task.js');
+const { DeleteBigQueryTask } = require('./bigquery/delete_bigquery_task.js');
 const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
 const { CreateExternalTableTask } = require('./bigquery/create_external_table.js');
 const { CopyGcsTask } = require('./copy_gcs_task.js');
@@ -38,6 +38,7 @@ const { ReportTask } = require('./report_task.js');
 const { KnotTask } = require('./knot_task.js');
 const { SpeedControlledTask } = require('./internal/speed_controlled_task.js');
 const { MultipleTask } = require('./multiple_task.js');
+const { NotifyTask } = require('./external/notify_task.js');
 
 /**
  * All tasks Sentinel supports.
@@ -48,7 +49,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.EXPORT]: ExportTask,
   [TaskType.QUERY]: QueryTask,
   [TaskType.EXPORT_SCHEMA]: ExportSchemaTask,
-  [TaskType.DELETE_DATASET]: DeleteDatasetTask,
+  [TaskType.DELETE_BIGQUERY]: DeleteBigQueryTask,
   [TaskType.DATA_TRANSFER]: DataTransferTask,
   [TaskType.CREATE_EXTERNAL]: CreateExternalTableTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
@@ -61,6 +62,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.KNOT]: KnotTask,
   [TaskType.MULTIPLE]: MultipleTask,
   [TaskType.SPEED_CONTROLLED]: SpeedControlledTask,
+  [TaskType.NOTIFY]: NotifyTask,
 });
 
 /**

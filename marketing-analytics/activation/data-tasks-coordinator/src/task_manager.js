@@ -179,15 +179,16 @@ class TaskManager {
     if (error instanceof RetryableError) {
       const retriedTimes = taskLog[FIELD_NAMES.RETRIED_TIMES] || 0;
       if (retriedTimes < errorOptions.retryTimes) {
-        // Roll back task status from 'FINISHING' to 'STARTED' and set task
-        // needs regular status check (to trigger next retry).
-        // TODO(lushu) If there are tasks other than report task needs retry,
-        //  consider move this part into the detailed tasks.;
+        // Change TaskLog status to 'RETRY'.
+        // The two invokers of this function ('StatusCheckTask' and Sentinel)
+        // will send a 'finish' task message when they receive
+        // 'ErrorHandledStatus.RETRIED'.
+        // The 'finish' message will then trigger next Sentinel execution, which
+        // will restart (not finish) the task with the 'RETRY' status.
         return [
           ErrorHandledStatus.RETRIED,
           this.taskLogDao.merge({
-            status: TaskLogStatus.STARTED,
-            [FIELD_NAMES.REGULAR_CHECK]: true,
+            status: TaskLogStatus.RETRY,
             [FIELD_NAMES.RETRIED_TIMES]: retriedTimes + 1,
           }, taskLogId),
         ];

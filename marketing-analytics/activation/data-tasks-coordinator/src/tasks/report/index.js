@@ -25,9 +25,7 @@ const { SearchAdsReport } = require('./search_ads_report.js');
 const {DoubleClickBidManagerReport} =
     require('./doubleclick_bidmanager_report.js');
 const { GeneralApiResult } = require('./general_api_result.js');
-const { GoogleAdsReport: GoogleAdsReportLegacy } = require('./googleads_report.js');
 const { GoogleAdsReport } = require('./googleads_report_api.js');
-const {YouTubeReport} = require('./youtube_report.js');
 
 /**
  * All reports supported by ReportTask.
@@ -40,9 +38,7 @@ const REPORTING_FACTORY = Object.freeze({
   'SA360': SearchAdsReport,
   'DV360': DoubleClickBidManagerReport,
   'API': GeneralApiResult,
-  'ADSL': GoogleAdsReportLegacy,
   'ADS': GoogleAdsReport,
-  'YT': YouTubeReport,
 });
 
 /**

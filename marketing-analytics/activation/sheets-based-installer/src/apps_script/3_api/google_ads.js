@@ -25,7 +25,7 @@ class GoogleAds extends ExternalApi {
   constructor(option, mccCid, developerToken) {
     super(option);
     this.apiUrl = 'https://googleads.googleapis.com';
-    this.version = 'v13';
+    this.version = 'v16';
     this.mccCid = GoogleAds.getCleanedId(mccCid);
     this.developerToken = developerToken;
   }

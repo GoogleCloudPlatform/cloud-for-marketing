@@ -6,6 +6,10 @@
     "utils.js",
     "trigger_functions.js"
   ],
+  "colab_solution_sheet.js": [
+    "plain_sheet.js",
+    "colab_solution.js"
+  ],
   "api_access_checker.js": [
     "plain_sheet.js",
     "gcloud.js",
@@ -51,9 +55,9 @@
     "storage.js"
   ],
   "plain_sheet.js": [
-    "enhanced_sheet.js"
+    "data_table_sheet.js"
   ],
-  "external_table_sheet.js": [
+  "data_table_sheet.js": [
     "enhanced_sheet.js"
   ],
   "oauth.js": [
@@ -76,6 +80,10 @@
   ],
   "gcloud.js": [
     "1_gcp"
+  ],
+  "colab_solution.js": [
+    "cloud_functions.js",
+    "service_usage.js"
   ],
   "prime_solution.js": [
     "cloud_functions.js",

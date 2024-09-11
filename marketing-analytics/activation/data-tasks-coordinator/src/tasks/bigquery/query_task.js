@@ -59,7 +59,8 @@ class QueryTask extends BigQueryAbstractTask {
   /** @override */
   getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
-    const destinationTable = this.config.destination.table;
+    const destinationTable = this.config.destination
+      ? this.config.destination.table : {};
     const {external} = this.config.source;
     return this.getBigQuery(destinationTable, external);
   }
@@ -71,19 +72,21 @@ class QueryTask extends BigQueryAbstractTask {
    */
   async doTask() {
     const sql = await this.getSql_();
-    /** @const {BigQueryTableConfig} */
-    const destinationTable = this.config.destination.table;
     const options = {
       query: sql,
       params: {},
-      destinationTable,
-      writeDisposition: this.config.destination.writeDisposition,
     };
-    if (destinationTable.tableId.includes('$')) {
-      options.timePartitioning = {
-        type: 'DAY',
-        requirePartitionFilter: false,
-      };
+    if (this.config.destination) {
+      const { table, writeDisposition } = this.config.destination;
+      /** @const {BigQueryTableConfig} */
+      options.destinationTable = table;
+      options.writeDisposition = writeDisposition;
+      if (table.tableId.includes('$')) {
+        options.timePartitioning = {
+          type: 'DAY',
+          requirePartitionFilter: false,
+        };
+      }
     }
     try {
       const [job] = await this.getBigQueryForTask().createQueryJob(options);
@@ -92,9 +95,13 @@ class QueryTask extends BigQueryAbstractTask {
       const status = job.metadata.status.state;
       const sqlInfo = this.getSqlInfo_();
       this.logger.info(`Job[${jobId}] status ${status} on query [${sqlInfo}]`);
+      const appendedParameters = { jobReference };
+      if (options.destinationTable) {
+        appendedParameters.destinationTable = options.destinationTable;
+      }
       return {
         jobId,
-        parameters: this.appendParameter({ destinationTable, jobReference }),
+        parameters: this.appendParameter(appendedParameters),
       };
     } catch (error) {
       this.logger.error(`Error in query to BigQuery:`, error);

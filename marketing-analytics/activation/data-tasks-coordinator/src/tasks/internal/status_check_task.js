@@ -190,7 +190,8 @@ class StatusCheckTask extends BaseTask {
         await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
       switch (errorHandledStatus) {
         case ErrorHandledStatus.RETRIED:
-          return { taskLogId, status: CHECKED_TASK_STATUS.RETRIED, };
+          const { messageId } = await this.sendFinishTaskMessage_(taskLogId);
+          return { taskLogId, messageId, status: CHECKED_TASK_STATUS.RETRIED, };
         case ErrorHandledStatus.FAILED:
           return { taskLogId, status: CHECKED_TASK_STATUS.ERROR, };
         case ErrorHandledStatus.IGNORED:

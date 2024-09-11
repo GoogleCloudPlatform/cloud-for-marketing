@@ -39,6 +39,7 @@ const TaskLogStatus = {
   FINISHING: 'FINISHING',
   FINISHED: 'FINISHED',
   ERROR: 'ERROR',
+  RETRY: 'RETRY',
 };
 
 /**
@@ -236,7 +237,13 @@ class TaskLogDao extends DataAccessObject {
         transaction.create(documentReference, taskLogEntity);
         return true;
       }
-      this.logger.info(`The TaskLog for [${taskLogId}] exist. Quit.`);
+      this.logger.info(`The TaskLog for [${taskLogId}] exist. Quit?`);
+      const status = documentSnapshot.get('status');
+      if (status === TaskLogStatus.RETRY) {
+        this.logger.info(`The TaskLog status: ${status}.`);
+        transaction.update(documentReference, taskLogEntity);
+        return true;
+      }
       return false;
     };
   }

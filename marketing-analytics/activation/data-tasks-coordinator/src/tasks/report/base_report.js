@@ -22,8 +22,7 @@ const {
   api: {
     doubleclicksearch: { ReportRequest: Sa360LegacyReportConfig },
     googleads: ReportQueryConfig,
-    doubleclickbidmanager: {RequestBody: Dv360RequestBody},
-    youtube: {ListChannelsConfig, ListVideosConfig},
+    doubleclickbidmanager: { RequestBody: Dv360RequestBody },
   }
 } = require('@google-cloud/nodejs-common');
 const { StorageFileConfig } = require('../../task_config/task_config_dao.js');
@@ -95,18 +94,6 @@ let ApiResultConfig;
 let AdsReportConfig;
 
 /**
- * YouTube report configuration
- * @typedef {{
- *   secretName: (string|undefined),
- *   target: string,
- *   resultLimit: number|undefined,
- *   reportQuery: ListChannelsConfig|ListVideosConfig|ListCommentThreadsConfig
- *     |ListPlaylistConfig|ListSearchConfig,
- * }}
- */
-let YouTubeReportConfig;
-
-/**
  * Options for extracts BigQuery Table to Cloud Storage file(s).
  * @typedef {{
  *   target: 'CM',
@@ -126,12 +113,6 @@ let YouTubeReportConfig;
  * } | {
  *   target: 'ADS',
  *   config: AdsReportConfig,
- * } | {
- *   target: 'ADSL',
- *   config: AdsReportConfig,
- * } | {
- *   target: 'YT',
- *   config: YouTubeReportConfig,
  * }}
  */
 let ReportConfig;

@@ -42,6 +42,14 @@ const gcloud = {};
  * @return {!CheckResult}
  */
 gcloud.checkProject = (projectId) => {
+  const projectNumber = /^[0-9]+$/;
+  const result = projectNumber.test(projectId);
+  if (result) {
+    return {
+      status: RESOURCE_STATUS.ERROR,
+      message: 'Input a project Id not a project number.',
+    };
+  }
   const resourceManager = new CloudResourceManager(projectId);
   const { error, lifecycleState } = resourceManager.getProject();
   if (error) {
@@ -182,6 +190,65 @@ gcloud.enableApi = (api, explicitProjectId) => {
   };
 };
 
+
+/**
+ * Checks the status of a Api key.
+ * @param {string} name The name of a API key.
+ * @return {!CheckResult}
+ */
+gcloud.checkApiKey = (key, resource) => {
+  const projectId = getDocumentProperty('projectId');
+  const { attributeValue: name } = resource;
+  const apiKeys = new ApiKeys(projectId);
+  const response = apiKeys.getKeyString(name);
+  const { error, keyString } = response;
+  if (error) {
+    if (error.status === 'NOT_FOUND') {
+      return {
+        status: RESOURCE_STATUS.READY_TO_INSTALL,
+        value: '',
+        message: `Not created yet.`,
+      };
+    }
+    return {
+      status: RESOURCE_STATUS.ERROR,
+      value: '',
+      message: error.message,
+    };
+  }
+  return {
+    status: RESOURCE_STATUS.OK,
+    value: keyString,
+    message: 'Loaded existing API key.',
+  };
+}
+
+/**
+ * Checks the status of a Api key.
+ * @param {string} name The name of a API key.
+ * @return {!CheckResult}
+ */
+gcloud.createApiKey = (name, restrictions, propertyName) => {
+  const projectId = getDocumentProperty('projectId');
+  const apiKeys = new ApiKeys(projectId);
+  const rawResponse = apiKeys.createKeyAndReturnResult(name, restrictions);
+  const { response, error } = rawResponse;
+  if (error) {
+    return {
+      status: RESOURCE_STATUS.ERROR,
+      value: '',
+      message: error.message,
+    };
+  }
+  if (propertyName)
+    updateDcoumentPropertyValue(propertyName, response.keyString);
+  return {
+    status: RESOURCE_STATUS.OK,
+    value: response.keyString,
+    message: 'API key was created successfully',
+  };
+}
+
 /**
  * Returns a default location for Firestore based on the property 'locationId'.
  * The property 'locationId' is selected by users for Cloud Functions/Storage.
@@ -231,17 +298,20 @@ gcloud.checkFirestore = (name, resource) => {
   const firestore = new Firestore(projectId, databaseId);
 
   const { locations = [], error: listLocationError } = firestore.listLocations();
-  locationAttr.attributeValue_datarange = locations.map(getLocationListName);
-  if (listLocationError) {
-    return {
-      status: RESOURCE_STATUS.ERROR,
-      message: listLocationError.message,
-      attributes,
-    };
-  }
+  if (!listLocationError)
+    locationAttr.attributeValue_datarange = locations.map(getLocationListName);
+
   const { error, type, locationId } = firestore.getDatabase();
   if (error) {
     if (error.status === 'NOT_FOUND') {
+  //Only show error for list location when need to create a datastore
+      if (listLocationError) {
+        return {
+          status: RESOURCE_STATUS.ERROR,
+          message: listLocationError.message,
+          attributes,
+        };
+      }
       const locationId = getDocumentProperty('locationId');
       const targetMode = selectedMode || FIRESTORE_MODE.FIRESTORE_NATIVE;
       const targetLocation = selectedLocation ||
@@ -261,7 +331,7 @@ gcloud.checkFirestore = (name, resource) => {
       attributes,
     };
   }
-  const currentLocation =
+  const currentLocation = listLocationError ? locationId :
     getLocationListName(getLocationObject(locations, locationId));
   modeAttr.attributeValue = FIRESTORE_MODE[type];
   locationAttr.attributeValue = currentLocation;
@@ -323,6 +393,35 @@ gcloud.saveEntitiesToFirestore = (kind, entities) => {
       new Firestore(projectId, databaseId, `${namespace}/database`, kind);
     const response = firestore.txSave(entities);
     return response.writeResults;
+  }
+};
+
+/**
+ * Returns doucments/entities from Firestore for the specified kind.
+ * @param {string} kind Entity name.
+ * @return {!Array<{
+ *   id: string,
+ *   json: object,
+ * }>}
+ */
+gcloud.loadEntitiesToFirestore = (kind) => {
+  const projectId = getDocumentProperty('projectId');
+  const databaseId = getDocumentProperty('databaseId');
+  const firestore = new Firestore(projectId, databaseId);
+  const { error, type } = firestore.getDatabase();
+  if (error) {
+    throw new Error(error.message);
+  }
+  const namespace = getDocumentProperty('namespace');
+  if (type === 'DATASTORE_MODE') {
+    const datastore = new Datastore(projectId, databaseId, namespace, kind);
+    const response = datastore.list();
+    return response;
+  } else {
+    const firestore =
+      new Firestore(projectId, databaseId, `${namespace}/database`, kind);
+    const response = firestore.list();
+    return response;
   }
 };
 
@@ -545,12 +644,11 @@ gcloud.checkDataset = (datasetId, resource) => {
     = attributesMap[attrrbuteNames.partitionExpiration];
   const locationAttr = attributesMap[attrrbuteNames.location];
 
-  const partitionExpirationMs =
-    ((partitionExpirationDay - 0) * 24 * 3600 * 1000).toString();
+  const partitionExpirationMs = (partitionExpirationDay - 0) * 24 * 3600 * 1000;
   const selectedLocation = locationAttr.attributeValue;
 
-  if (partitionExpirationMs <= 0) {
-    const message = 'Parition Expiration should be a positive number.';
+  if (partitionExpirationMs < 0) {
+    const message = 'Parition Expiration should be a non-negative number.';
     return { status: RESOURCE_STATUS.ERROR, message };
   }
 
@@ -591,17 +689,24 @@ gcloud.checkDataset = (datasetId, resource) => {
     message: currentLocation !== selectedLocation ?
       'Updated location to the existing dataset.\n' : '',
   };
-  if (partitionExpirationMs !== dataset['defaultPartitionExpirationMs']) {
-    result.status = RESOURCE_STATUS.READY_TO_INSTALL;
-    result.message +=
-      `Apply to update partition expiration time (only affects for new time-partitioned tables).`;
-    const currentMs = dataset['defaultPartitionExpirationMs'];
-    if (!currentMs) {
-      result.message += ' There is not partition expiration setting now.';
-    } else {
+
+  const currentExpirationMs = dataset['defaultPartitionExpirationMs'] || 0;
+  const currentExpirationDays = currentExpirationMs / 1000 / 3600 / 24;
+  if (partitionExpirationMs > 0) {
+    if (partitionExpirationMs !== (currentExpirationMs - 0)) {
+      result.status = RESOURCE_STATUS.READY_TO_INSTALL;
       result.message +=
-        ` Currently it is ${(currentMs - 0) / 1000 / 3600 / 24} days.`;
+        `Apply to update partition expiration time (only affects for new time-partitioned tables).`;
+      if (currentExpirationDays === 0) {
+        result.message += ' There is no partition expiration setting now.';
+      } else {
+        result.message += ` Currently it is ${currentExpirationDays} days.`;
+      }
     }
+  } else if (currentExpirationMs > 0) {
+    result.status = RESOURCE_STATUS.READY_TO_INSTALL;
+    result.message += 'Will remove partition expiration setting.';
+    result.message += ` Currently it is ${currentExpirationDays} days.`;
   }
   return result;
 }
@@ -627,7 +732,6 @@ gcloud.createOrUpdateDataset = (datasetId, resource) => {
   const partitionExpirationMs =
     (partitionExpirationDayAttr.attributeValue - 0) * 24 * 3600 * 1000;
   const selectedLocation = locationAttr.attributeValue;
-
   const locationId = getLocationId(selectedLocation);
   if (!locationId) {
     return {
@@ -635,11 +739,12 @@ gcloud.createOrUpdateDataset = (datasetId, resource) => {
       message: 'Select location of the dataset before continue.',
     };
   }
+  const config = { location: locationId };
+  if (partitionExpirationMs > 0) {
+    config.defaultPartitionExpirationMs = partitionExpirationMs;
+  }
   const bigquery = new BigQuery(projectId, datasetId);
-  const response = bigquery.createOrUpdateDataset({
-    location: locationId,
-    defaultPartitionExpirationMs: partitionExpirationMs,
-  });
+  const response = bigquery.createOrUpdateDataset(config);
   const { error, id } = response;
   if (error) {
     return {
@@ -657,16 +762,15 @@ gcloud.createOrUpdateDataset = (datasetId, resource) => {
 /**
  * Returns the status of a Cloud Functions.
  * @param {*} response Response of get or deploy the Cloud Functions.
- * @param {*} expectedVersion Expected version of the Cloud Functions. The value
- *   is from the Cloud Functions enviroment variable 'VERSION'.
  * @return {!CheckResult}
  * @private
  */
-gcloud.getCloudFunctionsResult_ = (response, expectedVersion) => {
-  const { status, updateTime, environmentVariables, serviceAccountEmail: sa }
-    = response;
+gcloud.getCloudFunctionsResult_ = (response) => {
+  const { status, updateTime, environmentVariables } = response;
   const { VERSION: currentVersion = '' } = environmentVariables;
-  const message = `v${currentVersion} was deployed at ${updateTime}.`;
+  const message = currentVersion ?
+    `v${currentVersion} was deployed at ${updateTime}.`
+    : `Deployed at ${updateTime}.`;
   if (status !== 'ACTIVE') {
     return {
       status: RESOURCE_STATUS.READY_TO_INSTALL,
@@ -674,18 +778,10 @@ gcloud.getCloudFunctionsResult_ = (response, expectedVersion) => {
       message: `Wrong status: ${status}. ${message}`,
     };
   }
-  if (typeof expectedVersion === 'undefined'
-    || expectedVersion === currentVersion) {
-    return {
-      status: RESOURCE_STATUS.OK,
-      attributeValue: currentVersion,
-      message: `${message}`,
-    };
-  }
   return {
-    status: RESOURCE_STATUS.READY_TO_INSTALL,
+    status: RESOURCE_STATUS.OK,
     attributeValue: currentVersion,
-    message: `${message} Will deploy v${expectedVersion}`,
+    message: `${message}`,
   };
 }
 
@@ -695,7 +791,8 @@ gcloud.getCloudFunctionsResult_ = (response, expectedVersion) => {
  * the expected version can not get by default. This is used in 'Tentacles' and
  * 'Sentinel' Mojo sheet.
  * @param {string} name The name of a Cloud Functions.
- * @param {string} expectedVersion The extpected version.
+ * @param {string} expectedVersion The extpected version of the Cloud Functions.
+ *   The value is from the Cloud Functions enviroment variable 'VERSION'.
  * @return {!CheckResult}
  */
 gcloud.checkCloudFunctions = (name, expectedVersion) => {
@@ -718,7 +815,29 @@ gcloud.checkCloudFunctions = (name, expectedVersion) => {
       message: error.message,
     };
   }
-  return gcloud.getCloudFunctionsResult_(response, expectedVersion);
+  const databaseId = getDocumentProperty('databaseId');
+  const { updateTime, environmentVariables:
+    { VERSION: currentVersion = '', DATABASE_ID: currentDatabaseId }
+  } = response;
+  const message = currentVersion ?
+    `v${currentVersion} was deployed at ${updateTime}.`
+    : `Deployed at ${updateTime}.`;
+  if (expectedVersion !== currentVersion) {
+    return {
+      status: RESOURCE_STATUS.READY_TO_INSTALL,
+      attributeValue: currentVersion,
+      message: `${message} Will deploy v${expectedVersion}`,
+    };
+  }
+  if (currentDatabaseId !== databaseId) {
+    return {
+      status: RESOURCE_STATUS.READY_TO_INSTALL,
+      attributeValue: currentVersion,
+      message: `${message} Will deploy v${expectedVersion}` +
+        ` and replace Firstore ${currentDatabaseId} -> ${databaseId}.`,
+    };
+  }
+  return gcloud.getCloudFunctionsResult_(response);
 }
 
 /**
@@ -750,7 +869,7 @@ gcloud.getCloudFunctionDeployStatus = (operationName, locationId, projectId) => 
   }
   return {
     status: '',
-    message: `Deploying `,
+    message: 'Deploying ',
     refreshFn: () => {
       return gcloud.getCloudFunctionDeployStatus(
         operationName, locationId, projectId
@@ -1249,10 +1368,13 @@ gcloud.getAccessCheckResult = (secretName, getCheckResult) => {
 /**
  * Checks the access to the specified Google Sheets for the given service
  * account. Returns CheckResult if there was an error.
- *
+ * This method needs a special permission 'iam.serviceAccounts.getAccessToken',
+ * so it is not convenient. Use Drive API to create permission for service
+ * account directly.
  * @param {string} serviceAccount
  * @param {string} spreadsheetUrl
  * @return {!CheckResult}
+ * @deprecated
  */
 gcloud.checkSaAccessToSheet = (serviceAccount, spreadsheetUrl) => {
   const spreadsheetId = getSpreadsheetIdFromUrl(spreadsheetUrl);
@@ -1281,29 +1403,34 @@ gcloud.checkSaAccessToSheet = (serviceAccount, spreadsheetUrl) => {
  * It will use the default property 'projectId' and 'dataset'.
  *
  * @param {string} sheetsUrl
- * @param {string} sheetName
- * @param {!Array<{name:string, type:string}>} schema BigQuery table schema.
- * @param {string} tableName
+ * @param {!DataTableSheet} externalTableSheet
  * @return {!CheckResult}
  */
-gcloud.updateExternalTable = (sheetsUrl, sheetName, schema, tableName) => {
+gcloud.updateExternalTable = (sheetsUrl, externalTableSheet) => {
+  const { sheetName, datasetProprtyName, fields, tableName, mappedTypes }
+    = externalTableSheet;
   const projectId = getDocumentProperty('projectId');
-  const datasetId = getDocumentProperty('dataset');
+  const datasetId = getDocumentProperty(datasetProprtyName);
   const bigquery = new BigQuery(projectId, datasetId);
-  const tableId = tableName || snakeize(sheetName);
+  const tableId = tableName;
   const tableConfig = {
     type: 'EXTERNAL',
     tableReference: { tableId },
     externalDataConfiguration: {
       sourceUris: [sheetsUrl],
       sourceFormat: 'GOOGLE_SHEETS',
-      schema: { fields: schema },
       googleSheetsOptions: {
         skipLeadingRows: '1',
         range: sheetName,
       },
     },
   };
+  if (mappedTypes) {
+    const schema = getBigQuerySchema(fields, mappedTypess);
+    tableConfig.externalDataConfiguration.schema = { fields: schema };
+  } else {
+    tableConfig.externalDataConfiguration.autodetect = true;
+  }
   const { error: bigQueryError } = bigquery.createOrUpdateTable(tableConfig);
   if (bigQueryError) {
     return {
@@ -1313,6 +1440,8 @@ gcloud.updateExternalTable = (sheetsUrl, sheetName, schema, tableName) => {
   }
   return {
     status: RESOURCE_STATUS.OK,
+    message:
+      `External table '${datasetId}.${tableName}' has been created/updated.`,
   };
 };
 
@@ -1321,11 +1450,30 @@ gcloud.updateExternalTable = (sheetsUrl, sheetName, schema, tableName) => {
  * if it doesn't exist. Then creates or updates the definition of external table
  * in BigQuery.
  *
- * @param {!ExternalTableSheet} externalTableSheet
+ * @param {!DataTableSheet} externalTableSheet
  * @param {string} sheetsUrl
+ * @param {string} role Possilbe values are 'Viewer', 'Commenter' or 'Editor'.
  * @return {!CheckResult}
  */
-gcloud.checkOrInitializeExternalTable = (externalTableSheet, sheetsUrl) => {
+gcloud.checkOrInitializeExternalTable = (externalTableSheet, sheetsUrl, role) => {
+  let result = checkSheetsUrl(sheetsUrl);
+  if (result) return result;
+  const serviceAccount = getDocumentProperty('serviceAccount');
+  if (!serviceAccount) {
+    return {
+      status: RESOURCE_STATUS.ERROR,
+      message: 'The service account will be ready after Cloud Functions is installed',
+    };
+  }
+  const fileId = getSpreadsheetIdFromUrl(sheetsUrl);
+  const drive = new Drive();
+  const { error } = drive.addUser(fileId, serviceAccount, role);
+  if (error) {
+    return {
+      status: RESOURCE_STATUS.ERROR,
+      message: error.message,
+    };
+  }
   const { sheetName } = externalTableSheet;
   const targetSheet =
     SpreadsheetApp.openByUrl(sheetsUrl).getSheetByName(sheetName);
@@ -1336,8 +1484,7 @@ gcloud.checkOrInitializeExternalTable = (externalTableSheet, sheetsUrl) => {
   } else {
     message = `Target sheet: ${sheetName} exists.`;
   }
-  const schema = getBigQuerySchema(externalTableSheet.fields);
   const externalTableResult = gcloud.updateExternalTable(
-    sheetsUrl, sheetName, schema, externalTableSheet.getTableName());
+    sheetsUrl, externalTableSheet);
   return Object.assign({ message }, externalTableResult);
 };

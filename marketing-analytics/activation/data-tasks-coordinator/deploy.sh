@@ -211,6 +211,7 @@ deploy_cloud_functions_task_coordinator(){
   local cf_flag=()
   cf_flag+=(--entry-point=coordinateTask)
   cf_flag+=(--trigger-topic="${PROJECT_NAMESPACE}"-monitor)
+  cf_flag+=(--retry)
   set_authentication_env_for_cloud_functions cf_flag
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 1. '${PROJECT_NAMESPACE}_main' is triggered by messages from \
@@ -237,6 +238,25 @@ deploy_cloud_functions_storage_monitor(){
   printf '%s\n' " 2. '${PROJECT_NAMESPACE}_gcs' is triggered by new files from \
 Cloud Storage bucket [${GCS_BUCKET}]."
   gcloud functions deploy "${PROJECT_NAMESPACE}"_gcs "${cf_flag[@]}"
+  quit_if_failed $?
+}
+
+#######################################
+# Deploy Cloud Functions 'Report'.
+# Globals:
+#   PROJECT_NAMESPACE
+# Arguments:
+#   None
+#######################################
+deploy_cloud_functions_workflow_reportor(){
+  local cf_flag=()
+  cf_flag+=(--entry-point=reportWorkflow)
+  cf_flag+=(--trigger-http)
+  cf_flag+=(--no-gen2)
+  set_cloud_functions_default_settings cf_flag
+  printf '%s\n' "  . '${PROJECT_NAMESPACE}_report' support HTTP request to \
+report a Sentinel workflow."
+  gcloud functions deploy "${PROJECT_NAMESPACE}"_report "${cf_flag[@]}"
   quit_if_failed $?
 }
 

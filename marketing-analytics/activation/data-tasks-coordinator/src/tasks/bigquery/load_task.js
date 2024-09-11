@@ -160,7 +160,7 @@ class LoadTask extends BigQueryAbstractTask {
     // @see the typedef of LoadTaskDestination
     if (!metadata.autodetect && !destination.tableSchema.schema) {
       destination.tableSchema.schema = await this.getSchemaForExternal_(
-          destination);
+        destination, metadata, sourceFile);
       this.logger.debug('External schema: ', destination.tableSchema.schema);
     }
     const storeTable = await this.getTableForLoading_(destination.table,
@@ -234,10 +234,12 @@ class LoadTask extends BigQueryAbstractTask {
   /**
    * Get the schema definition from external tasks or resources.
    * @param destination
+   * @param {LoadOptions} metadata
+   * @param {StorageFileConfig} sourceFile
    * @return {!Promise<!BqTableSchema>}
    * @private
    */
-  async getSchemaForExternal_(destination) {
+  async getSchemaForExternal_(destination, metadata, sourceFile) {
     if (destination.schemaSource) {
       this.logger.debug('External schema from report: ',
           destination.schemaSource);
@@ -253,6 +255,34 @@ class LoadTask extends BigQueryAbstractTask {
           destination.schemaFile.bucket, destination.schemaFile.name,
           {projectId: this.getCloudProject(destination.schemaFile)});
       return JSON.parse(await schemaFile.loadContent());
+    }
+    if (destination.csvSafeColumnNames) {
+      if (metadata.compression
+        || metadata.sourceFormat.toUpperCase() !== 'CSV') {
+        this.logger.error('Can not figure column names for', metadata);
+      } else {
+        /** @const {StorageFile} */
+        const storageFile = StorageFile.getInstance(
+          sourceFile.bucket, sourceFile.name,
+          { projectId: this.getCloudProject(sourceFile) });
+        // Get first 100k bytes. This should be enough to cover the first line.
+        const partialContent = await storageFile.loadContent(0, 100_000);
+        const headers = partialContent.split('\n')[0]
+          .split(metadata.fieldDelimiter || ',');
+        const fields = headers.map((header) => {
+          // replace all characters (expect digits, letters and underscore) with
+          // an underscore; add a leading underscore if it starts with a digit.
+          const name = header.trim().replace(/[^a-zA-Z0-9_]/g, '_')
+            .replace(/^([0-9])/, '_$1');
+          return {
+            name,
+            type: 'STRING',
+            mode: 'NULLABLE',
+          }
+
+        })
+        return { fields };
+      }
     }
     throw new Error('Not schema defined in config or externally');
   }

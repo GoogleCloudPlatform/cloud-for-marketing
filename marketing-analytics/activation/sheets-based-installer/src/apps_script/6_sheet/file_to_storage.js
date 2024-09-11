@@ -31,51 +31,43 @@ let FileToStorageRowEntity;
 class FileToStorage extends PlainSheet {
 
   /**
-   * @constructor
-   * @param {Object<string,string>} files A map of files, the 'key' is the file
-   *   name, the 'value' is the file content or a Url link.
-   * @param {string=} filePath Prefix of the file. It starts with the Cloud
-   *   Storage bucket name and an optional folder name, e.g. '#bucket#/sql/'.
+   * In the parameter `options`, there are two properties for intial data.
+   * @param {Object<string,string>} options.files A map of files, the 'key' is
+   *   the file name, the 'value' is the file content or a Url link.
+   * @param {string=} options.filePath Prefix of the file. It starts with the
+   *   Cloud Storage bucket name and an optional folder name, e.g.
+   *   '#bucket#/sql/'.
    */
-  constructor(files = {}, filePath = '') {
-    super();
-    this.sheetName = 'File to Storage';
-    this.columnName = [
-      'Cloud Storage Path',
-      'File',
+  get initialData() {
+    const { files = {}, filePath } = this.options || {};
+    return Object.keys(files).map((key) => [`${filePath}${key}`, files[key]]);
+  }
+
+  get defaultSheetName() {
+    return 'File to Storage';
+  }
+
+  get columnConfiguration() {
+    return [
+      {
+        name: 'Cloud Storage Path', width: 400,
+        format: COLUMN_STYLES.ALIGN_MIDDLE,
+      },
+      {
+        name: 'File', width: 700, defaultNote: true,
+        format: { fn: 'setWrapStrategy', format: SpreadsheetApp.WrapStrategy.CLIP },
+      },
+      { name: COLUMN_NAME_FOR_DEFAULT_CONFIG, format: COLUMN_STYLES.MONO_FONT },
     ];
-    this.fields = this.columnName.map(camelize);
-    this.columnWidth = {
-      'Cloud Storage Path': 400,
-      'File': 700,
-      default_: 100,
-    };
-    this.columnFormat = {
-      'Cloud Storage Path': COLUMN_STYLES.ALIGN_MIDDLE,
-      'File': { fn: 'setWrapStrategy', format: SpreadsheetApp.WrapStrategy.CLIP },
-      default_: { fn: 'setFontFamily', format: 'Consolas' },
-    };
-    this.defaultNoteColumn = 'File';
-    // Menu items
-    this.menuItem = [
-      {
-        name: 'Upload selected file',
-        method: `${this.menuFunctionHolder}.operateSingleRow`,
-      },
-      { seperateLine: true },
-      {
-        name: 'Upload all files',
-        method: `${this.menuFunctionHolder}.operateAllRows`,
-      },
-      {
-        name: 'Reset sheet (will lose modification)',
-        method: `${this.menuFunctionHolder}.initialize`,
-      },
+  }
+
+  get inherentMenuItems() {
+    return [
+      { name: 'Upload selected file', method: 'operateSingleRow' },
+      { separator: true },
+      { name: 'Upload all files', method: 'operateAllRows' },
+      { name: 'Reset sheet (will lose modification)', method: 'initialize' },
     ];
-    // Initialize data
-    this.initialData = Object.keys(files).map((key) => {
-      return [`${filePath}${key}`, files[key]];
-    });
   }
 
   /**

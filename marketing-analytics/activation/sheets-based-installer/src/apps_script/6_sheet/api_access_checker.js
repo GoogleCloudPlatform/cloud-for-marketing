@@ -54,49 +54,37 @@ let ApiAccessCheckerRowEntity;
  */
 class ApiAccessChecker extends PlainSheet {
 
-  constructor() {
-    super();
-    this.sheetName = 'Api Access Checker';
-    this.columnName = [
-      'Secret Name',
-      'API',
-      'Resource Id',
-      'Extra Info',
-      'API Access Check',
-    ];
-    this.fields = this.columnName.map(camelize);
-    this.columnWidth = {
-      'Secret Name': 200,
-      'API': 200,
-      'Resource Id': 300,
-      'API Access Check': 400,
-      default_: 200,
-    };
-    this.columnFormat = {
-      default_: { fn: 'setFontFamily', format: 'Consolas' },
-    };
-    this.columnDataRange = {
-      'API': Object.keys(API_CHECK_FUNCTIONS),
-    }
-    this.headlineStyle = {
+  get defaultSheetName() {
+    return 'Api Access Checker';
+  }
+
+  get defaultHeadlineStyle() {
+    return {
       backgroundColor: '#FBBC04',
       fontColor: 'white',
     };
-    // Menu items
-    this.menuItem = [
+  }
+
+  get columnConfiguration() {
+    return [
+      { name: 'Secret Name', width: 200 },
+      { name: 'API', width: 200, dataRange: Object.keys(API_CHECK_FUNCTIONS) },
+      { name: 'Resource Id', width: 300 },
+      { name: 'Extra Info' },
+      { name: 'API Access Check', width: 400 },
       {
-        name: 'Check selected API',
-        method: `${this.menuFunctionHolder}.operateSingleRow`,
+        name: COLUMN_NAME_FOR_DEFAULT_CONFIG, width: 200,
+        format: COLUMN_STYLES.MONO_FONT,
       },
-      { seperateLine: true },
-      {
-        name: 'Check all APIs',
-        method: `${this.menuFunctionHolder}.operateAllRows`,
-      },
-      {
-        name: 'Reset sheet (will lose monification)',
-        method: `${this.menuFunctionHolder}.initialize`,
-      },
+    ];
+  }
+
+  get inherentMenuItems() {
+    return [
+      { name: 'Check selected API', method: 'operateSingleRow' },
+      { separator: true },
+      { name: 'Check all APIs', method: 'operateAllRows' },
+      { name: 'Reset sheet (will lose monification)', method: 'initialize' }
     ];
   }
 

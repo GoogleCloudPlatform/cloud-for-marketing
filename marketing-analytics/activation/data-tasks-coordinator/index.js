@@ -77,9 +77,20 @@ const coordinateTask = async (eventData, context) => {
   return coordinateTask(eventData, context);
 };
 
+/**
+ * A HTTP based Cloud Functions which returns Sentinel workflow information.
+ * @param {Object} request Cloud Function request context.
+ * @param {Object} response Cloud Function response context.
+ */
+const reportWorkflow = async (request, response) => {
+  const sentinel = await guessSentinel();
+  sentinel.workflowReporter(request, response);
+}
+
 module.exports = {
   monitorStorage,
   coordinateTask,
+  reportWorkflow,
   uploadTaskConfig,
   checkGoogleAdsReports,
   startTaskFromLocal,

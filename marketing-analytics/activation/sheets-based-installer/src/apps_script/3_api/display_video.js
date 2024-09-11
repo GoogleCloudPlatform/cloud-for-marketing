@@ -18,8 +18,10 @@ class DisplayVideo extends ExternalApi {
 
   constructor(option) {
     super(option);
-    this.apiUrl = 'https://displayvideo.googleapis.com';
-    this.version = 'v2';
+    this.name = 'Display & Video 360 API';
+    this.api = 'displayvideo.googleapis.com';
+    this.apiUrl = `https://${this.api}`;
+    this.version = 'v3';
   }
 
   /** @override */
@@ -57,9 +59,14 @@ class DisplayVideo extends ExternalApi {
     return result;
   }
 
+  listPartners(parameters = {}) {
+    const response = super.get('partners', parameters);
+    return response;
+  }
+
   /**
    * Lists the advertisers of the given partner.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers/list
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers/list
    * @param {string} partnerId
    * @param {Object=} parameters
    * @return {Array<Advertiser>}
@@ -73,7 +80,7 @@ class DisplayVideo extends ExternalApi {
 
   /**
    * Gets the advertiser.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers/get
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers/get
    * @param {string} advertiserId
    * @return {Advertiser}
    */
@@ -83,7 +90,7 @@ class DisplayVideo extends ExternalApi {
 
   /**
    * Lists the campaigns of the given advertiser.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.campaigns/list
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.campaigns/list
    * @param {string} advertiserId
    * @param {Object=} parameters
    * @return {Array<Campaign>}
@@ -96,7 +103,7 @@ class DisplayVideo extends ExternalApi {
 
   /**
    * Lists the insertion orders of the given advertiser.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.insertionOrders/list
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.insertionOrders/list
    * @param {string} advertiserId
    * @param {Object=} parameters
    * @return {Array<InsertionOrder>}
@@ -109,7 +116,7 @@ class DisplayVideo extends ExternalApi {
 
   /**
    * Gets the insertion order.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.insertionOrders/get
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.insertionOrders/get
    * @param {string} advertiserId
    * @param {string} insertionOrderId
    * @return {InsertionOrder}
@@ -121,7 +128,7 @@ class DisplayVideo extends ExternalApi {
 
   /**
    * Lists the line items of the given advertiser.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.lineItems/list
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.lineItems/list
    * @param {string} advertiserId
    * @param {Object=} parameters
    * @return {Array<LineItem>}
@@ -135,7 +142,7 @@ class DisplayVideo extends ExternalApi {
   /**
    * Lists assigned targeting options for multiple line items across targeting
    * types.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.lineItems/bulkListAssignedTargetingOptions
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.lineItems/bulkListAssignedTargetingOptions
    * @param {string} advertiserId
    * @param {Array<string>} lineItemIds
    * @return {Array<LineItemAssignedTargetingOption>}
@@ -148,32 +155,32 @@ class DisplayVideo extends ExternalApi {
   }
 
   /**
-   * Lists YouTube ad groups for multiple line items.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.youtubeAdGroups/list
+   * Lists Ad groups for multiple line items.
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.adGroups/list
    * @param {string} advertiserId
    * @param {Array<string>} lineItemIds
-   * @return {Array<YoutubeAdGroup>}
+   * @return {Array<AdGroup>}
    */
-  listYoutubeAdGroups(advertiserId, lineItemIds) {
-    const youtubeAdGroups = this.getEntities(
-      `advertisers/${advertiserId}/youtubeAdGroups`,
+  listAdGroups(advertiserId, lineItemIds) {
+    const adGroups = this.getEntities(
+      `advertisers/${advertiserId}/adGroups`,
       { filter: lineItemIds.map((lineItemId) => `lineItemId=${lineItemId}`) },
-      'youtubeAdGroups');
-    return youtubeAdGroups;
+      'adGroups');
+    return adGroups;
   }
 
   /**
-   * Lists assigned targeting options for multiple YouTube ad groups across
+   * Lists assigned targeting options for multiple Ad groups across
    * targeting types.
-   * @see https://developers.google.com/display-video/api/reference/rest/v2/advertisers.youtubeAdGroups/bulkListAdGroupAssignedTargetingOptions#YoutubeAdGroupAssignedTargetingOption
+   * @see https://developers.google.com/display-video/api/reference/rest/v3/advertisers.adGroups/bulkListAdGroupAssignedTargetingOptions#AdGroupAssignedTargetingOption
    * @param {string} advertiserId
-   * @param {Array<string>} youtubeAdGroupIds
-   * @return {Array<YoutubeAdGroupAssignedTargetingOption>}
+   * @param {Array<string>} adGroupIds
+   * @return {Array<AdGroupAssignedTargetingOption>}
    */
-  listAdGroupAssignedTargetingOptions(advertiserId, youtubeAdGroupIds) {
-    const youtubeAdGroupAssignedTargetingOptions = this.getEntities(
-      `advertisers/${advertiserId}/youtubeAdGroups:bulkListAdGroupAssignedTargetingOptions`,
-      { youtubeAdGroupIds }, 'youtubeAdGroupAssignedTargetingOptions');
-    return youtubeAdGroupAssignedTargetingOptions;
+  listAdGroupAssignedTargetingOptions(advertiserId, adGroupIds) {
+    const adGroupAssignedTargetingOptions = this.getEntities(
+      `advertisers/${advertiserId}/adGroups:bulkListAdGroupAssignedTargetingOptions`,
+      { adGroupIds }, 'adGroupAssignedTargetingOptions');
+    return adGroupAssignedTargetingOptions;
   }
 }

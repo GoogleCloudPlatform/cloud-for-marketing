@@ -35,7 +35,7 @@ const TaskType = {
   CREATE_EXTERNAL: 'create_external',
   DATA_TRANSFER: 'data_transfer',
   EXPORT_SCHEMA: 'export_schema',
-  DELETE_DATASET: 'delete_dataset',
+  DELETE_BIGQUERY: 'delete_bigquery',
   // GMC Feed convertor tasks
   DOWNLOAD: 'download',
   GMC_XML_FEED_TO_JSONL: 'gmc_xml_feed_to_jsonl',

@@ -34,68 +34,53 @@ let SentinelCronJobRowEntity;
 class SentinelCronJob extends PlainSheet {
 
   /**
-   * @constructor
-   * @param {!Object<string,!Object>} jobs A map of jobs, the 'key' is the job
-   *   Id, the 'value' is the job definition JSON object.
+   * In the parameter `options`, the property named 'jobs' is for intial data.
+   * @param {!Array<Object<string,!Object>>} jobs An array of jobs. Each job
+   *   is an object with column fields as the properties.
    */
-  constructor(jobs = {}) {
-    super();
-    this.sheetName = 'Sentinel CronJob';
-    this.columnName = [
-      'Job Id',
-      'Description',
-      'Schedule',
-      'Task Id',
-      'Message',
-    ];
-    this.fields = this.columnName.map(camelize);
-    this.columnWidth = {
-      'Description': 300,
-      'Message': 400,
-      default_: 200,
-    };
-    this.columnFormat = {
-      'Job Id': COLUMN_STYLES.ALIGN_MIDDLE,
-      'Description': [
-        COLUMN_STYLES.ALIGN_MIDDLE,
-        { fn: 'setWrap', format: true },
-      ],
-      'Schedule': COLUMN_STYLES.ALIGN_MIDDLE,
-      'Task Id': COLUMN_STYLES.ALIGN_MIDDLE,
-      default_: { fn: 'setFontFamily', format: 'Consolas' },
-    };
-    // Register columns contains a JSON string to `JSON_COLUMNS` for
-    // auto-checking.
-    JSON_COLUMNS.push(`${this.sheetName}.Message`);
-    this.defaultNoteColumn = 'Job Id';
-    // Menu items
-    this.menuItem = [
-      {
-        name: 'Update selected job to Cloud Scheduler',
-        method: `${this.menuFunctionHolder}.operateSingleRow`,
-      },
-      {
-        name: 'Force run selected selected job',
-        method: `${this.menuFunctionHolder}.runJob`,
-      },
-      { seperateLine: true },
-      {
-        name: 'Update all jobs to Cloud Scheduler',
-        method: `${this.menuFunctionHolder}.operateAllRows`,
-      },
-      {
-        name: 'Reset sheet (will lose monification)',
-        method: `${this.menuFunctionHolder}.initialize`,
-      },
-    ];
-    // Initialize data
-    this.initialData = jobs.map((job) => {
+  get initialData() {
+    const { jobs = [] } = this.options || {};
+    return jobs.map((job) => {
       return this.fields.map((key) => {
         const value = job[key];
         return typeof value === 'object' ?
           JSON.stringify(value, null, 2) : value;
       });
     });
+  }
+
+  get defaultSheetName() {
+    return 'Sentinel CronJob';
+  }
+
+  get columnConfiguration() {
+    return [
+      { name: 'Job Id', defaultNote: true, format: COLUMN_STYLES.ALIGN_MIDDLE },
+      {
+        name: 'Description', width: 300,
+        format: [COLUMN_STYLES.ALIGN_MIDDLE, { fn: 'setWrap', format: true }],
+      },
+      { name: 'Schedule', format: COLUMN_STYLES.ALIGN_MIDDLE },
+      { name: 'Task Id', format: COLUMN_STYLES.ALIGN_MIDDLE },
+      { name: 'Message', width: 400, jsonColumn: true },
+      {
+        name: COLUMN_NAME_FOR_DEFAULT_CONFIG, width: 200,
+        format: COLUMN_STYLES.MONO_FONT,
+      },
+    ];
+  }
+
+  get inherentMenuItems() {
+    return [
+      {
+        name: 'Update selected job to Cloud Scheduler',
+        method: 'operateSingleRow',
+      },
+      { name: 'Force run selected selected job', method: 'runJob' },
+      { separator: true },
+      { name: 'Update all jobs to Cloud Scheduler', method: 'operateAllRows' },
+      { name: 'Reset sheet (will lose monification)', method: 'initialize' },
+    ];
   }
 
   /**

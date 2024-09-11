@@ -338,6 +338,7 @@ const getNodePackageInfo = (packageName, version = 'latest') => {
  * @return {!Array<{name:string, type:string}>}
  */
 const getBigQuerySchema = (fields, mappedTypes = {}) => {
+  if (!fields) return;
   return fields.map((field) => {
     const suffix = field.substring(field.lastIndexOf('_') + 1);
     return {

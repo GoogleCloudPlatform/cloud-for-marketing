@@ -125,7 +125,7 @@ const showOAuthSidebar = () => {
  */
 const OAUTH_MENUITEM = {
   menuItem: [
-    { seperateLine: true },
+    { separator: true },
     {
       name: 'Generate an OAuth token',
       method: 'showOAuthSidebar',

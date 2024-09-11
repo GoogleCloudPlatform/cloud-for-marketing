@@ -100,18 +100,6 @@ exports.doubleclickbidmanager = require('./doubleclick_bidmanager.js');
 exports.bigquery = require('./bigquery.js');
 
 /**
- * APIs integration class for Google Ads.
- * @const {{
- *   GoogleAds:!GoogleAds,
- *   ConversionConfig:!ConversionConfig,
- *   CustomerMatchConfig: !CustomerMatchConfig,
- *   CustomerMatchRecord: !CustomerMatchRecord,
- *   ReportQueryConfig:!ReportQueryConfig,
- * }}
- */
-exports.googleads = require('./google_ads.js');
-
-/**
  * APIs integration class for Google Ads with Google API library.
  * @const {{
 *   GoogleAdsApi:!GoogleAdsApi,
@@ -146,9 +134,7 @@ exports.measurementprotocolga4 = require('./measurement_protocol_ga4.js');
 /**
  * APIs integration class for YouTube.
  * @const {{
- *   YouTube:!YouTube,
- *   ListChannelsConfig: !ListChannelsConfig,
- *   ListVideosConfig: !ListVideosConfig,
+ *   YouTube:!YouTube
  * }}
  */
 exports.youtube = require('./youtube.js');
@@ -162,3 +148,12 @@ exports.youtube = require('./youtube.js');
 * }}
 */
 exports.sendgrid = require('./sendgrid.js');
+
+/**
+ * APIs integration class for Gmail.
+ * @const {{
+*   Gmail:!Gmail,
+*   API_VERSION: string,
+* }}
+*/
+exports.gmail = require('./gmail.js');

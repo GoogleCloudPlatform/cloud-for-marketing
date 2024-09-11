@@ -18,8 +18,8 @@
 
 'use strict';
 
-const {Dataset} = require('@google-cloud/bigquery');
-const {BigQueryAbstractTask} = require('./bigquery_abstract_task.js');
+const { Dataset } = require('@google-cloud/bigquery');
+const { BigQueryAbstractTask } = require('./bigquery_abstract_task.js');
 const {
   TaskType,
   BigQueryTableConfig
@@ -27,16 +27,16 @@ const {
 
 /**
  * @typedef {{
- *   type:TaskType.EXPORT_SCHEMA,
+ *   type:TaskType.DELETE_BIGQUERY,
  *   source:!BigQueryTableConfig,
  *   appendedParameters:(Object<string,string>|undefined),
  *   next:(string|!Array<string>|undefined),
  * }}
  */
-let DeleteDatasetTaskConfig;
+let DeleteBigQueryTaskConfig;
 
-/** BigQuery delete dataset task. */
-class DeleteDatasetTask extends BigQueryAbstractTask {
+/** BigQuery delete dataset/table task. */
+class DeleteBigQueryTask extends BigQueryAbstractTask {
 
   /** @override */
   getBigQueryForTask() {
@@ -53,18 +53,34 @@ class DeleteDatasetTask extends BigQueryAbstractTask {
     /** @const {BigQueryTableConfig} */ const source = this.config.source;
     /** @const {Dataset} */
     const dataset = this.getBigQueryForTask().dataset(source.datasetId);
-    await dataset.delete({force: true});
-    this.logger.info(`Deleted ${source.datasetId}`);
-    return {};
+    if (source.tableId) {
+      const table = dataset.table(source.tableId);
+      const [tableExists] = await table.exists();
+      if (tableExists) {
+        await table.delete({ ignoreNotFound: true });
+        this.logger.info(`Deleted table ${source.tableId}`);
+      } else {
+        this.logger.info(
+          `Table [${source.tableId}] to be deleted doesn't exist.`);
+      }
+    } else {
+      await dataset.delete({ force: true });
+      this.logger.info(`Deleted dataset ${source.datasetId}`);
+    }
   }
 
   /** @override */
   async isDone() {
     return true;
   }
+
+  /** @override */
+  completeTask() {
+    return {};
+  }
 }
 
 module.exports = {
-  DeleteDatasetTaskConfig,
-  DeleteDatasetTask,
+  DeleteBigQueryTaskConfig,
+  DeleteBigQueryTask,
 };

@@ -22,7 +22,7 @@
 const fs = require('fs');
 const {join} = require('path');
 const {
-  api: {googleads: {GoogleAds}},
+  api: { googleadsapi: { GoogleAdsApi: GoogleAds } },
   firestore: { getFirestoreDatabase },
 } = require('@google-cloud/nodejs-common');
 const {getSchemaFields} = require('./tasks/report/googleads_report_helper.js');
@@ -68,6 +68,8 @@ exports.uploadTaskConfig = async (taskConfig, parameters = {},
   };
   return Object.keys(tasks).reduce(reduceFn, Promise.resolve([]));
 };
+
+//TODO: Offer this function in Cyborg?
 /**
  * Checks whether Sentinel can generate BigQuery schema for the report data
  * based on the Google Ads report definition. There could be 3 kinds of error:
@@ -112,7 +114,7 @@ exports.checkGoogleAdsReports = async (developerToken, folder = './') => {
   });
   //2. Get GoogleAdsFields
   const ads = new GoogleAds(developerToken);
-  const adsFields = await ads.searchMetaData(0, fields);
+  const adsFields = await ads.searchReportField(fields);
   //3. if there are missing fields
   if (adsFields.length < fields.length) {
     const existentFields = adsFields.map((field) => field.name);
@@ -150,7 +152,7 @@ exports.checkGoogleAdsReports = async (developerToken, folder = './') => {
           }
         }
       });
-      const adsFields = await ads.searchMetaData(0, trimmedFields);
+      const adsFields = await ads.searchReportField(trimmedFields);
       /** Map of Google Ads Type to field names. */
       const mappedAdsFields = {};
       adsFields.forEach((adsField) => {
@@ -218,6 +220,7 @@ exports.startTaskFromLocal = async (taskConfigId, parameters = "{}",
         await sentinel.prepareTask(taskConfigId, JSON.parse(newParameters));
     const output = await taskToFinish.finish();
     console.log('After finish: ', output);
+    process.exit();
   } else {
     console.log('Task is done yet.');
   }

@@ -84,8 +84,8 @@ class GeneralApiResult extends Report {
     let pageToken;
     do {
       const response = await functionObject[functionName](updatedArgs);
-      result =
-        result.concat(getObjectByPath(response, entityPath).map(transformFn));
+      const entities = getObjectByPath(response, entityPath);
+      if (entities) result = result.concat(entities.map(transformFn));
       if (pageTokenPath) {
         pageToken = getObjectByPath(response, pageTokenPath);
         if (pageToken) updatedArgs =
