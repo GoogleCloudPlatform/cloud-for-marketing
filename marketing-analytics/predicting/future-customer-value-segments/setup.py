@@ -15,11 +15,11 @@
 import setuptools
 
 setuptools.setup(
-    name='Future-Customer-Value-Segments',
-    version='1.0.0',
+    name="Future-Customer-Value-Segments",
+    version="1.0.0",
     install_requires=[
-        'Lifetimes==0.11.3',
-        'matplotlib==3.3.4',
+        "Lifetimes==0.11.3",
+        "matplotlib==3.9.2",
     ],
     packages=setuptools.find_packages(),
 )
