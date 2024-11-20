@@ -53,7 +53,7 @@ HELP
 
 temp_install_py38_virtualenv() {
   BASE_DIR="${HOME}/.pyenv"
-  PY38_VERSION="3.12.3"
+  PY38_VERSION="3.8.12"
   PY38_DIR="${BASE_DIR}/versions/${PY38_VERSION}/bin"
 
   if [ ! -d "${PY38_DIR}" ]; then
@@ -66,7 +66,7 @@ temp_install_py38_virtualenv() {
     pyenv install "${PY38_VERSION}"
   fi
 
-  virtualenv -p "${PY38_DIR}/python3.12" focvs-env
+  virtualenv -p "${PY38_DIR}/python3.8" focvs-env
 }
 
 install_dependencies() {

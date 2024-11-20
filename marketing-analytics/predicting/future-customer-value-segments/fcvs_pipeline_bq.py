@@ -110,7 +110,7 @@ def run(argv=None):
                 query=getattr(runtime_options, c._OPTION_INPUT_BQ_QUERY),
                 gcs_location=getattr(runtime_options, c._OPTION_TEMP_GCS_LOCATION),
                 use_standard_sql=True,
-                priority="BATCH",  # adding priority parameter
+                priority="BATCH",
             )
             | beam.FlatMap(
                 c.bq_row_to_list, pvalue.AsSingleton(options)
