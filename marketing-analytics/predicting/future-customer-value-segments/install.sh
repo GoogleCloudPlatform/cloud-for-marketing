@@ -51,22 +51,22 @@ HELP
   exit 1
 }
 
-temp_install_py38_virtualenv() {
+temp_install_py_virtualenv() {
   BASE_DIR="${HOME}/.pyenv"
-  PY38_VERSION="3.8.12"
-  PY38_DIR="${BASE_DIR}/versions/${PY38_VERSION}/bin"
+  PY_VERSION="3.10.14"
+  PY_DIR="${BASE_DIR}/versions/${PY_VERSION}/bin"
 
-  if [ ! -d "${PY38_DIR}" ]; then
+  if [ ! -d "${PY_DIR}" ]; then
     rm -rf "${BASE_DIR}"
     bash pyenv-installer.sh
     echo 'export PATH="${HOME}/.pyenv/bin:${PATH}"' >> "${HOME}/.bashrc"
     echo 'eval "$(pyenv init -)"' >> "${HOME}/.bashrc"
     echo 'eval "$(pyenv virtualenv-init -)"' >> "${HOME}/.bashrc"
     source "${HOME}/.bashrc"
-    pyenv install "${PY38_VERSION}"
+    pyenv install "${PY_VERSION}"
   fi
 
-  virtualenv -p "${PY38_DIR}/python3.8" focvs-env
+  virtualenv -p "${PY_DIR}/python3.10" focvs-env
 }
 
 install_dependencies() {
@@ -76,9 +76,9 @@ install_dependencies() {
   else
     printf "\nINFO - Installing Python dependencies...\n\n"
     rm -rf focvs-env
-    temp_install_py38_virtualenv # virtualenv focvs-env
+    temp_install_py_virtualenv # virtualenv focvs-env
     source focvs-env/bin/activate
-    pip install -r requirements.txt --require-hashes --no-deps
+    pip install --use-pep517 -r requirements.txt --require-hashes --no-deps
     printf "\nINFO - Python dependencies installed successfully!\n"
   fi
 }
