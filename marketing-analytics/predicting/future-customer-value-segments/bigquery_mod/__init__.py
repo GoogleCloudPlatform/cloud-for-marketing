@@ -34,11 +34,11 @@ from apache_beam.options.value_provider import StaticValueProvider
 from apache_beam.options.value_provider import ValueProvider
 from apache_beam.options.value_provider import check_accessible
 
-FieldSchema = collections.namedtuple("FieldSchema", "fields mode name type")
+FieldSchema = collections.namedtuple('FieldSchema', 'fields mode name type')
 
 
 def _to_bool(value):
-    return value == "true"
+    return value == 'true'
 
 
 def _to_decimal(value):
@@ -46,19 +46,19 @@ def _to_decimal(value):
 
 
 def _to_bytes(value):
-    return value.encode("utf-8")
+    return value.encode('utf-8')
 
 
 class _JsonToDictCoder(coders.Coder):
     def __init__(self, table_schema):
         self.fields = self._convert_to_tuple(table_schema.fields)
         self._converters = {
-            "INTEGER": int,
-            "INT64": int,
-            "FLOAT": float,
-            "BOOLEAN": _to_bool,
-            "NUMERIC": _to_decimal,
-            "BYTES": _to_bytes,
+            'INTEGER': int,
+            'INT64': int,
+            'FLOAT': float,
+            'BOOLEAN': _to_bool,
+            'NUMERIC': _to_decimal,
+            'BYTES': _to_bytes,
         }
 
     @classmethod
@@ -72,7 +72,7 @@ class _JsonToDictCoder(coders.Coder):
         ]
 
     def decode(self, value):
-        value = json.loads(value.decode("utf-8"))
+        value = json.loads(value.decode('utf-8'))
         return self._decode_with_schema(value, self.fields)
 
     def _decode_with_schema(self, value, schema_fields):
@@ -81,10 +81,9 @@ class _JsonToDictCoder(coders.Coder):
                 value[field.name] = None
                 continue
 
-            if field.type == "RECORD":
+            if field.type == 'RECORD':
                 value[field.name] = self._decode_with_schema(
-                    value[field.name], field.fields
-                )
+                    value[field.name], field.fields)
             else:
                 try:
                     converter = self._converters[field.type]
@@ -102,31 +101,28 @@ class _JsonToDictCoder(coders.Coder):
 
 class _CustomBigQuerySource(BoundedSource):
     def __init__(
-        self,
-        # gcs_location=None,
-        get_destination_uri=None,
-        table=None,
-        dataset=None,
-        project=None,
-        query=None,
-        validate=False,
-        coder=None,
-        use_standard_sql=False,
-        flatten_results=True,
-        kms_key=None,
-        priority=None,
-    ):
+            self,
+            # gcs_location=None,
+            get_destination_uri=None,
+            table=None,
+            dataset=None,
+            project=None,
+            query=None,
+            validate=False,
+            coder=None,
+            use_standard_sql=False,
+            flatten_results=True,
+            kms_key=None,
+            priority=None):
         if table is not None and query is not None:
             raise ValueError(
-                "Both a BigQuery table and a query were specified."
-                " Please specify only one of these."
-            )
+                'Both a BigQuery table and a query were specified.'
+                ' Please specify only one of these.')
         elif table is None and query is None:
-            raise ValueError("A BigQuery table or a query must be specified")
+            raise ValueError('A BigQuery table or a query must be specified')
         elif table is not None:
             self.table_reference = bigquery_tools.parse_table_reference(
-                table, dataset, project
-            )
+                table, dataset, project)
             self.query = None
             self.use_legacy_sql = True
         else:
@@ -149,15 +145,14 @@ class _CustomBigQuerySource(BoundedSource):
         self.kms_key = kms_key
         self.split_result = None
 
-    @check_accessible(["query"])
+    @check_accessible(['query'])
     def estimate_size(self):
         bq = bigquery_tools.BigQueryWrapper()
         if self.table_reference is not None:
             table = bq.get_table(
                 self.table_reference.projectId,
                 self.table_reference.datasetId,
-                self.table_reference.tableId,
-            )
+                self.table_reference.tableId)
             return int(table.numBytes)
         else:
             job = bq._start_query_job(
@@ -168,8 +163,7 @@ class _CustomBigQuerySource(BoundedSource):
                 job_id=uuid.uuid4().hex,
                 dry_run=True,
                 kms_key=self.kms_key,
-                priority=self.priority,
-            )
+                priority=self.priority)
             size = int(job.statistics.totalBytesProcessed)
             return size
 
@@ -188,9 +182,7 @@ class _CustomBigQuerySource(BoundedSource):
                     0,
                     CompressionTypes.UNCOMPRESSED,
                     True,
-                    self.coder(schema),
-                )
-                for metadata in metadata_list
+                    self.coder(schema)) for metadata in metadata_list
             ]
             if self.query is not None:
                 bq.clean_up_temporary_dataset(self.project.get())
@@ -211,16 +203,15 @@ class _CustomBigQuerySource(BoundedSource):
         return CustomBigQuerySourceRangeTracker()
 
     def read(self, range_tracker):
-        raise NotImplementedError("BigQuery source must be split before being read")
+        raise NotImplementedError('BigQuery source must be split before being read')
 
-    @check_accessible(["query"])
+    @check_accessible(['query'])
     def _setup_temporary_dataset(self, bq):
         location = bq.get_query_location(
-            self.project.get(), self.query.get(), self.use_legacy_sql
-        )
+            self.project.get(), self.query.get(), self.use_legacy_sql)
         bq.create_temporary_dataset(self.project.get(), location)
 
-    @check_accessible(["query"])
+    @check_accessible(['query'])
     def _execute_query(self, bq):
         job = bq._start_query_job(
             self.project.get(),
@@ -229,8 +220,7 @@ class _CustomBigQuerySource(BoundedSource):
             self.flatten_results,
             job_id=uuid.uuid4().hex,
             kms_key=self.kms_key,
-            priority=self.priority,
-        )
+            priority=self.priority)
         job_ref = job.jobReference
         bq.wait_for_bq_job(job_ref)
         return bq._get_temp_table(self.project.get())
@@ -243,21 +233,18 @@ class _CustomBigQuerySource(BoundedSource):
         """
         job_id = uuid.uuid4().hex
         gcs_location = self.get_destination_uri()
-        job_ref = bq.perform_extract_job(
-            [gcs_location],
-            job_id,
-            self.table_reference,
-            bigquery_tools.FileFormat.JSON,
-            include_header=False,
-        )
+        job_ref = bq.perform_extract_job([gcs_location],
+                                         job_id,
+                                         self.table_reference,
+                                         bigquery_tools.FileFormat.JSON,
+                                         include_header=False)
         bq.wait_for_bq_job(job_ref)
         metadata_list = FileSystems.match([gcs_location])[0].metadata_list
 
         table = bq.get_table(
             self.table_reference.projectId,
             self.table_reference.datasetId,
-            self.table_reference.tableId,
-        )
+            self.table_reference.tableId)
 
         return table.schema, metadata_list
 
@@ -272,16 +259,15 @@ class _PassThroughThenCleanup(PTransform):
                 yield element
 
         output = input | beam.ParDo(PassThrough()).with_outputs(
-            "cleanup_signal", main="main"
-        )
-        main_output = output["main"]
-        cleanup_signal = output["cleanup_signal"]
+            'cleanup_signal', main='main')
+        main_output = output['main']
+        cleanup_signal = output['cleanup_signal']
 
         _ = (
             input.pipeline
             | beam.Create([None])
-            | beam.ParDo(self.cleanup_dofn, beam.pvalue.AsSingleton(cleanup_signal))
-        )
+            | beam.ParDo(
+                self.cleanup_dofn, beam.pvalue.AsSingleton(cleanup_signal)))
 
         return main_output
 
@@ -291,10 +277,9 @@ class ReadFromBigQuery(PTransform):
         if gcs_location:
             if not isinstance(gcs_location, (str, unicode, ValueProvider)):
                 raise TypeError(
-                    "%s: gcs_location must be of type string"
-                    " or ValueProvider; got %r instead"
-                    % (self.__class__.__name__, type(gcs_location))
-                )
+                    '%s: gcs_location must be of type string'
+                    ' or ValueProvider; got %r instead' %
+                    (self.__class__.__name__, type(gcs_location)))
 
             if isinstance(gcs_location, (str, unicode)):
                 gcs_location = StaticValueProvider(str, gcs_location)
@@ -310,18 +295,16 @@ class ReadFromBigQuery(PTransform):
         """Returns the fully qualified Google Cloud Storage URI where the
         extracted table should be written.
         """
-        file_pattern = "bigquery-table-dump-*.json"
-        gcs_base = ""
+        file_pattern = 'bigquery-table-dump-*.json'
+        gcs_base = ''
 
         if self.gcs_location is not None:
             if self.gcs_location.is_accessible():
                 gcs_base = self.gcs_location.get()
         else:
             raise ValueError(
-                "{} requires a GCS location to be provided".format(
-                    self.__class__.__name__
-                )
-            )
+                '{} requires a GCS location to be provided'.format(
+                    self.__class__.__name__))
         if self.validate:
             self._validate_gcs_location(gcs_base)
 
@@ -329,8 +312,8 @@ class ReadFromBigQuery(PTransform):
 
     @staticmethod
     def _validate_gcs_location(gcs_location):
-        if not gcs_location.startswith("gs://"):
-            raise ValueError("Invalid GCS location: {}".format(gcs_location))
+        if not gcs_location.startswith('gs://'):
+            raise ValueError('Invalid GCS location: {}'.format(gcs_location))
 
     def expand(self, pcoll):
         class RemoveJsonFiles(beam.DoFn):
@@ -341,8 +324,7 @@ class ReadFromBigQuery(PTransform):
                 gcs_location = self.get_destination_uri()
                 match_result = FileSystems.match([gcs_location])[0].metadata_list
                 logging.debug(
-                    "%s: matched %s files", self.__class__.__name__, len(match_result)
-                )
+                    "%s: matched %s files", self.__class__.__name__, len(match_result))
                 paths = [x.path for x in match_result]
                 FileSystems.delete(paths)
 
@@ -354,8 +336,5 @@ class ReadFromBigQuery(PTransform):
                     get_destination_uri=self._get_destination_uri,
                     validate=self.validate,
                     *self._args,
-                    **self._kwargs
-                )
-            )
-            | _PassThroughThenCleanup(RemoveJsonFiles(self._get_destination_uri))
-        )
+                    **self._kwargs))
+            | _PassThroughThenCleanup(RemoveJsonFiles(self._get_destination_uri)))
