@@ -112,7 +112,8 @@ class _CustomBigQuerySource(BoundedSource):
             coder=None,
             use_standard_sql=False,
             flatten_results=True,
-            kms_key=None):
+            kms_key=None,
+            priority=None):
         if table is not None and query is not None:
             raise ValueError(
                 'Both a BigQuery table and a query were specified.'
@@ -133,6 +134,7 @@ class _CustomBigQuerySource(BoundedSource):
             self.table_reference = None
 
         self.get_destination_uri = get_destination_uri
+        self.priority = priority
         # self.gcs_location = gcs_location
         if isinstance(project, (str, unicode)):
             project = StaticValueProvider(str, query)
@@ -160,7 +162,8 @@ class _CustomBigQuerySource(BoundedSource):
                 self.flatten_results,
                 job_id=uuid.uuid4().hex,
                 dry_run=True,
-                kms_key=self.kms_key)
+                kms_key=self.kms_key,
+                priority=self.priority)
             size = int(job.statistics.totalBytesProcessed)
             return size
 
@@ -216,7 +219,8 @@ class _CustomBigQuerySource(BoundedSource):
             self.use_legacy_sql,
             self.flatten_results,
             job_id=uuid.uuid4().hex,
-            kms_key=self.kms_key)
+            kms_key=self.kms_key,
+            priority=self.priority)
         job_ref = job.jobReference
         bq.wait_for_bq_job(job_ref)
         return bq._get_temp_table(self.project.get())
