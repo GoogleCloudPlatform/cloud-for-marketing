@@ -72,7 +72,7 @@ load_scaleup.sh which loads progressively
 - Increase pod size progressively up to 100K qps
 
 vegeta-deployment.yaml which creates a Deployment file
-- Use a grc.io file
+- Use a gcr.io file
 - command will call load.sh NB_URLS YOUR_LB_IP_OR_DOMAIN_NAME DURATION RATE
 - Set the pod CPU limit to 0.4
 
