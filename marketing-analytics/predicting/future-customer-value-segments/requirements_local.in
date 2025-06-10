@@ -75,7 +75,7 @@ pytz==2024.2
 redis==5.2.0
 referencing==0.35.1
 regex==2024.11.6
-requests==2.32.3
+requests==2.32.4
 rpds-py==0.21.0
 rsa==4.9
 scipy==1.14.1
