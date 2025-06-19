@@ -85,7 +85,7 @@ six==1.16.0
 sqlparse==0.5.2
 typing_extensions==4.12.2
 tzdata==2024.2
-urllib3==2.2.3
+urllib3==2.5.0
 wheel==0.45.0
 wrapt==1.16.0
 zipp==3.21.0
