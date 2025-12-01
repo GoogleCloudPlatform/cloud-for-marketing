@@ -20,7 +20,7 @@ docopt==0.6.2
 docstring_parser==0.16
 fastavro==1.9.7
 fasteners==0.19
-fonttools==4.55.0
+fonttools==4.61.0
 future==1.0.0
 grpc-interceptor==0.15.4
 grpcio==1.65.5
