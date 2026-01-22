@@ -977,6 +977,7 @@ packaging==24.2 \
     #   apache-beam
     #   build
     #   matplotlib
+    #   wheel
 pandas==2.2.3 \
     --hash=sha256:062309c1b9ea12a50e8ce661145c6aab431b1e99530d3cd60640e255778bd43a \
     --hash=sha256:15c0e1e02e93116177d29ff83e8b1619c93ddc9c49083f237d4312337a61165d \
@@ -1750,9 +1751,9 @@ urllib3==2.2.3 \
     # via
     #   -r requirements_local.in
     #   requests
-wheel==0.45.0 \
-    --hash=sha256:52f0baa5e6522155090a09c6bd95718cc46956d1b51d537ea5454249edb671c7 \
-    --hash=sha256:a57353941a3183b3d5365346b567a260a0602a0f8a635926a7dede41b94c674a
+wheel==0.46.2 \
+    --hash=sha256:33ae60725d69eaa249bc1982e739943c23b34b58d51f1cb6253453773aca6e65 \
+    --hash=sha256:3d79e48fde9847618a5a181f3cc35764c349c752e2fe911e65fa17faab9809b0
     # via
     #   -r requirements_local.in
     #   pip-tools
@@ -1937,4 +1938,3 @@ zstandard==0.23.0 \
     # via
     #   -r requirements_local.in
     #   apache-beam
-
