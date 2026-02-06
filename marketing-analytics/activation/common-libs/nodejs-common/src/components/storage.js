@@ -116,7 +116,7 @@ class StorageFile {
    */
   async getLastLineBreaker(start, end, checkPoint = -1) {
     /**
-     * How many characters to look back to find a possbile line breaker. If no
+     * How many characters to look back to find a possible line breaker. If no
      * link break in this range, it will extend to find the last one.
      */
     const possibleLineBreakRange = 1000;

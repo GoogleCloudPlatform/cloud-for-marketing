@@ -1,5 +1,28 @@
 # Release Notes
 
+## 4.9.0 (2026-01-20)
+
+### Integrated APIs
+- Updated to the v22 of the Google Ads API.
+- Updated to the v5 of the Campaign Manager 360 API.
+
+## 4.8.0 (2025-08-22)
+
+### Enhancements
+- Optimize Tentacles transporter Cloud Functions for the `pull` message
+implementation.
+
+## 4.7.0 (2025-06-20)
+
+### Integrated APIs
+- Updated to the v20 of the Google Ads API.
+- Deprecated Measurement Protocol connector `MP`.
+
+## 4.6.0 (2024-12-05)
+
+### Integrated APIs
+- Updated to the v18 of the Google Ads API.
+
 ## 4.5.0 (2024-07-31)
 
 ### Enhancements
@@ -23,7 +46,7 @@ consent for ad user data.
 
 ### Enhancements
 
-- API classes were refactored for easy maintainance.
+- API classes were refactored for easy maintenance.
 - Dependencies version upgraded.
 
 ### Bug fix
@@ -36,7 +59,7 @@ snake_case.
 ### Integrated APIs
 - Updated to the v16 of the Google Ads API.<br>
   Due to the change of underlying Google Ads API library, the naming
-  convention of Google Ads related conectors (`ACLA`, `ACM`, `ACA` and `AOUD`)
+  convention of Google Ads related connectors (`ACLA`, `ACM`, `ACA` and `AOUD`)
   are suggested to be changed from the previous `snake_case` to
   `lowerCamelCase`, including both config items and data fields. Tentacles will
   support both of them at this stage, but users are encouraged to do the transit
@@ -85,9 +108,9 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 - Auto-sizing: when there is no `size` configuration in the file name, Tentacles
   will automatically decide a size based on QPS and average length of lines.
 - Auto-retry: when unexpected errors or timeout happen, Cloud Functions
-  **apirequester** will auto retry upto 3 times.
+  **apirequester** will auto retry up to 3 times.
 - Speed up: for some connectors, e.g. `MP_GA4`, `MP`, `ACLC`, `ACA` and `ACM`,
-  multiple instances of Cloud Functions **apirequester** are availabe now.
+  multiple instances of Cloud Functions **apirequester** are available now.
   The sending rate can be increased 5 to 10 times.
 
 
@@ -110,7 +133,7 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 `RESTATEMENT` conversion adjustment
 - Google Ads conversion upload service (code `ACLC`) supports `gbraid` and
 `wbraid` as click identifier
-- Google Ads offline user data job service (code `AOUD`) suports new types of job:
+- Google Ads offline user data job service (code `AOUD`) supports new types of job:
   - `STORE_SALES_UPLOAD_FIRST_PARTY` with [`TransactionAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/TransactionAttribute)
   - `CUSTOMER_MATCH_WITH_ATTRIBUTES` with [`UserAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserAttribute)
 
@@ -195,7 +218,7 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 ### Updated OAuth flow
 
 - With the [deprecation of oob flow](https://developers.googleblog.com/2022/02/making-oauth-flows-safer.html#disallowed-oob), Tentacles OAuth flow now uses loopback address to replace oob.
-- Usually, users don't have a web server to host on the lookback address and this will make the browser to land on a 'non existing' page.
+- Usually, users don't have a web server to host on the loopback address and this will make the browser to land on a 'non existing' page.
 - This looks like 'something went wrong' but it is actually expected behavior.
 - Users should follow the instructions and copy/paste the whole URL to continue.
 

@@ -281,7 +281,7 @@ from Pub/Sub topic [${PROJECT_NAMESPACE}-push]."
 }
 
 #######################################
-# Deploy Cloud Functions 'Transporter'.
+# Deploy Cloud Functions 'Http'.
 # Globals:
 #   PROJECT_NAMESPACE
 # Arguments:
@@ -291,6 +291,7 @@ deploy_cloud_functions_file_job_manager(){
   local cf_flag=()
   cf_flag+=(--entry-point=manageFile)
   cf_flag+=(--trigger-http)
+  cf_flag+=(--no-gen2)
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' " 4. '${PROJECT_NAMESPACE}_http' support HTTP request to create\
  or return status of a TentaclesFile."
@@ -354,6 +355,44 @@ reselect_api() {
 #######################################
 get_default_sink_name() {
   printf '%s' "${PROJECT_NAMESPACE}_log"
+}
+
+#######################################
+# Checks whether the BigQuery object (table or view) exists.
+# Globals:
+#  GCP_PROJECT
+#  DATASET
+#  BIGQUERY_LOG_TABLE
+# Arguments:
+#  None
+#######################################
+check_existence_in_bigquery() {
+  bq show "${1}" >/dev/null 2>&1
+  printf '%d' $?
+}
+
+#######################################
+# Creates or updates the BigQuery view.
+# Globals:
+#  GCP_PROJECT
+#  DATASET
+# Arguments:
+#  The name of view.
+#  The query of view.
+#######################################
+create_or_update_view() {
+  local viewName viewQuery
+  viewName="${1}"
+  viewQuery=${2}
+  local action="mk"
+  if [[ $(check_existence_in_bigquery "${DATASET}.${viewName}") -eq 0 ]]; then
+    action="update"
+  fi
+  bq "${action}" \
+    --use_legacy_sql=false \
+    --view "${viewQuery}" \
+    --project_id ${GCP_PROJECT} \
+    "${DATASET}.${viewName}"
 }
 
 #######################################
@@ -836,11 +875,11 @@ trigger_transport(){
 # Invoke the Cloud Function 'API requester' directly based on a local file.
 # Note: The API configuration is still expected to be on Google Cloud. The API
 # configuration needs to be updated to Firestore for any modification.
-# Exampales:
+# Examples:
 # 1. Test based on a GCS file:
 #    ./deploy.sh run_test_locally 'file_path_in_gcs' 'bucket_name'
 # 2. Test based on a local file (only works for Pub/sub based APIs):
-#    ./deploy.sh run_test_locally './loacl_file_path'
+#    ./deploy.sh run_test_locally './local_file_path'
 # Globals:
 #   SA_KEY_FILE
 # Arguments:

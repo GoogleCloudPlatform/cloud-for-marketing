@@ -67,15 +67,19 @@ let DimensionRange;
 class Spreadsheets extends GoogleApiClient {
   /**
    * Init Spreadsheets API client.
-   * @param {string} spreadsheetId
+   * @param {string} spreadsheetIdOrUrl
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
    */
-  constructor(spreadsheetId, env = process.env) {
+  constructor(spreadsheetIdOrUrl, env = process.env) {
     super(env);
     this.googleApi = 'sheets';
     /** @const {string} */
-    this.spreadsheetId = spreadsheetId;
+    if (spreadsheetIdOrUrl.startsWith('https://')) {
+      this.spreadsheetId = /spreadsheets\/d\/([^/]*)/.exec(spreadsheetIdOrUrl)[1];
+    } else {
+      this.spreadsheetId = spreadsheetIdOrUrl;
+    }
     this.logger = getLogger('API.GS');
   }
 
@@ -109,7 +113,7 @@ class Spreadsheets extends GoogleApiClient {
   }
 
   /**
-   * Returns whether the sheet with speicified name exists.
+   * Returns whether the sheet with specified name exists.
    * @param {string} sheetName
    * @return {boolean}
    */
@@ -122,7 +126,7 @@ class Spreadsheets extends GoogleApiClient {
   }
 
   /**
-   * Creates a sheet with the gvien name.
+   * Creates a sheet with the given name.
    *
    * @param {string} sheetName
    */
@@ -137,7 +141,7 @@ class Spreadsheets extends GoogleApiClient {
   }
 
   /**
-   * Deletes a sheet with the gvien name.
+   * Deletes a sheet with the given name.
    *
    * @param {string} sheetName
    */
@@ -288,6 +292,24 @@ class Spreadsheets extends GoogleApiClient {
       batchResult.errors = [error.toString()];
     }
     return batchResult;
+  }
+
+  /**
+   * Gets values of first row of the specified sheet.
+   * @param {string} sheetName
+   * @param {number} skipLeadingRows
+   * @return {!Array<string>}
+   */
+  async getHeadline(sheetName, skipLeadingRows = 1) {
+    const request = {
+      spreadsheetId: this.spreadsheetId,
+      range: `'${sheetName}'!${skipLeadingRows}:${skipLeadingRows}`,
+    };
+    const sheets = await this.getApiClient();
+    const response = await sheets.spreadsheets.values.get(request);
+    const data = response.data;
+    this.logger.debug(`Get: `, data);
+    return data.values[0];
   }
 }
 

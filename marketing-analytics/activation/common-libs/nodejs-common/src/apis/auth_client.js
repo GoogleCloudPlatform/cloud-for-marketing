@@ -48,23 +48,23 @@ const DEFAULT_ENV_KEYFILE = 'API_SERVICE_ACCOUNT';
  *
  * There are two use cases for this authentication helper class:
  * 1. The user only has OAuth access due to some reasons, so ADC can't be used;
- * 2. User-managed service account is requried for external APIs for some
+ * 2. User-managed service account is required for external APIs for some
  * specific considerations, e.g. security. In this case, a file based key file
  * can be used to generate a JWT auth client.
  *
  * To solve these challenges, this class tries to probe the settings from
- * enviroment variables, starts from the name of secret (Secret Manager), OAuth
+ * environment variables, starts from the name of secret (Secret Manager), OAuth
  * token file (deprecated), then service account key file (deprecated). It will
  * fallback to ADC if those probing failed.
- * Note, Secret Manager is the recommanded way to store tokens because it is a
+ * Note, Secret Manager is the recommended way to store tokens because it is a
  * secure and convenient central storage system to manage access across Google
  * Cloud.
  *
  * The recommended environment variable is:
  * SECRET_NAME: the name of secret. The secret can be a oauth token file or a
  * service account key file. This env var is used to offer a global auth for a
- * solution. If different auths are required, the value of passed `env` can be
- * set
+ * solution. If different authentications are required, the value of passed
+ * `env` can be set by the runtime.
  *
  * Alternative environment variable but not recommended for prod environment:
  * OAUTH2_TOKEN_JSON : the oauth token key files, refresh token and proper API
@@ -88,7 +88,7 @@ class AuthClient {
 
   /**
    * Prepares the `oauthToken` object and/or `serviceAccountKey` based on the
-   * settings in enviroment object.
+   * settings in environment object.
    * A secret name is preferred to offer the token of the OAuth or key of a
    * service account.
    * To be compatible, this function also checks the env for oauth token file
@@ -100,10 +100,10 @@ class AuthClient {
       return;
     }
     if (this.env[DEFAULT_ENV_SECRET]) {
-      const secretmanager = new SecretManager({
+      const secretManager = new SecretManager({
         projectId: this.env.GCP_PROJECT,
       });
-      const secret = await secretmanager.access(this.env[DEFAULT_ENV_SECRET]);
+      const secret = await secretManager.access(this.env[DEFAULT_ENV_SECRET]);
       if (secret) {
         const secretObj = JSON.parse(secret);
         if (secretObj.token) this.oauthToken = secretObj;
@@ -127,7 +127,7 @@ class AuthClient {
   }
 
   /**
-   * Factory method to offer a prepared AuthClient intance in an async way.
+   * Factory method to offer a prepared AuthClient instance in an async way.
    * @param {string|!Array<string>|!ReadonlyArray<string>} scopes
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
@@ -163,7 +163,7 @@ class AuthClient {
    * steps:
    * 1. Checks environment variable GOOGLE_APPLICATION_CREDENTIALS to get
    * service account. Returns a JWT if it exists;
-   * 2. Uses default service account of Computer Engine/AppEngige/Cloud
+   * 2. Uses default service account of Computer Engine/AppEngine/Cloud
    * Functions
    * 3. Otherwise, an error occurs.
    * @see https://cloud.google.com/docs/authentication/production#obtaining_and_providing_service_account_credentials_manually

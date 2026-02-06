@@ -38,21 +38,26 @@ const END_TAG = '"requestId"';
 
 /**
  * A stream.Transform that can extract properties and convert naming of the
- * reponse of Google/Search Ads report from REST interface.
+ * response of Google/Search Ads report from REST interface.
  */
 class RestSearchStreamTransform extends Transform {
 
   /**
    * @constructor
    * @param {boolean=} snakeCase Whether or not output JSON in snake naming.
+   * @param {function|undefined} postProcessFn An optional function to process
+   *     the data after the default process. The default process includes
+   *     filtering out fields based on `fieldMask` and adjusting the naming
+   *     convention.
    */
-  constructor(snakeCase = false) {
+  constructor(snakeCase = false, postProcessFn) {
     super({ objectMode: true });
     this.snakeCase = snakeCase;
     this.chunks = [Buffer.from('')];
     this.processFn; // The function to process a row of the report.
     this.logger = getLogger('ADS.STREAM.T');
     this.stopwatch = Date.now();
+    this.postProcessFn = postProcessFn;
   }
 
   _transform(chunk, encoding, callback) {
@@ -61,20 +66,33 @@ class RestSearchStreamTransform extends Transform {
     if (endIndex > -1) {
       this.chunks.push(chunk);
       const rawString = Buffer.concat(this.chunks).toString();
-      const startIndex = rawString.indexOf(START_TAG) + START_TAG.length;
       const maskIndex = rawString.lastIndexOf(FIELD_MASK_TAG);
       if (!this.processFn) {
         const fieldMask = rawString
           .substring(maskIndex + FIELD_MASK_TAG.length, rawString.indexOf(END_TAG))
           .split('"')[1];
         this.logger.debug(`Got fieldMask: ${fieldMask}`);
-        this.processFn = getFilterAndStringifyFn(fieldMask, this.snakeCase);
+        const processFn = getFilterAndStringifyFn(fieldMask, this.snakeCase);
+        if (this.postProcessFn) {
+          this.processFn = (obj) => {
+            return this.postProcessFn(processFn(obj));
+          }
+        } else {
+          this.processFn = processFn;
+        }
       }
-      const resultsWithTailing = rawString.substring(startIndex, maskIndex);
-      const results = resultsWithTailing.substring(
-        0, resultsWithTailing.lastIndexOf(','));
-      const rows = JSON.parse(results);
-      const data = rows.map(this.processFn).join('\n') + '\n';
+      let rows, data;
+      if (rawString.indexOf(START_TAG) === -1) { // no 'results'
+        rows = [];
+        data = '';
+      } else {
+        const startIndex = rawString.indexOf(START_TAG) + START_TAG.length;
+        const resultsWithTailing = rawString.substring(startIndex, maskIndex);
+        const results = resultsWithTailing.substring(
+          0, resultsWithTailing.lastIndexOf(','));
+        rows = JSON.parse(results);
+        data = rows.map(this.processFn).join('\n') + '\n';
+      }
       // Clear cached chunks.
       this.chunks = [latest.subarray(latest.indexOf(END_TAG) + END_TAG.length)];
 

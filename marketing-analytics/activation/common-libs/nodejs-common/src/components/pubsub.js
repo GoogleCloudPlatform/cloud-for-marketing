@@ -34,7 +34,15 @@ const {
  * 1. gets or creates a topic.
  * 2. gets or creates a subscription.
  * 3. publishes a message after confirms the topic exists.
- * 4. acknowledge message(s).
+ * 4. pull message(s).
+ * 5. acknowledge message(s).
+ *
+ * The 'pull' and 'acknowledge' are built on 'v1.SubscriberClient` which is
+ * considered as 'low-level', auto-generated gRPC API class. This class offers
+ * more direct control over the request-response cycle. Tentacles' queuing
+ * mechanism is built on this kind of precise control.
+ * There is also a high-level 'Pubsub' client, which automatically handles
+ * message streaming and flow control.
  */
 class EnhancedPubSub {
   /**
@@ -128,20 +136,50 @@ class EnhancedPubSub {
   };
 
   /**
-   * Using `SubscriberClient` to acknowledge messages.
-   * 2022.11.02 The methon `ack()` in Message doesn't work properly due to a
-   * unknown reason. Use this function to acknowledge a message for now.
+   * Pulls and returns message(s) from a pull subscription.
    *
-   * @param {string} subscription Subscription name.
+   * @param {string} subscriptionName Subscription name.
+   * @param {number=} maxMessages
+   * @return {!Array<ReceivedMessage>}
+   */
+  async pull(subscriptionName, maxMessages = 1) {
+    const subscriptionPath = await this.getSubscriptionPath_(subscriptionName);
+    const [response] = await this.subClient.pull({
+      subscription: subscriptionPath,
+      maxMessages,
+    });
+    return response.receivedMessages ? response.receivedMessages : [];
+  }
+
+  /**
+   * Using `SubscriberClient` to acknowledge messages.
+   * 2022.11.02 The method `ack()` in Message doesn't work properly due to a
+   * unknown reason. Use this function to acknowledge a message for now.
+   * 2025.08.20 This function can't properly acknowledge messages pulled through
+   * 'Pubsub' object. Use a new 'pull' method to get the message and ack.
+   *
+   * @param {string} subscriptionName Subscription name.
    * @param {(string|!Array<string>)} ackIds Message ackIds.
    */
-  async acknowledge(subscription, ackIds) {
-    const projectId = await this.subClient.getProjectId();
+  async acknowledge(subscriptionName, ackIds) {
+    const subscriptionPath = await this.getSubscriptionPath_(subscriptionName);
     const ackRequest = {
-      subscription: this.subClient.subscriptionPath(projectId, subscription),
+      subscription: subscriptionPath,
       ackIds: Array.isArray(ackIds) ? ackIds : [ackIds],
     };
     await this.subClient.acknowledge(ackRequest);
+  }
+
+  /**
+   * Returns the complete subscription path for the `SubscriberClient` object.
+   * @see https://cloud.google.com/nodejs/docs/reference/pubsub/latest/pubsub/v1.subscriberclient
+   * @param {string} subscriptionName Subscription name.
+   * @return {string}
+   * @private
+   */
+  async getSubscriptionPath_(subscriptionName) {
+    const projectId = await this.subClient.getProjectId();
+    return this.subClient.subscriptionPath(projectId, subscriptionName);
   }
 
   /**
@@ -163,7 +201,7 @@ class EnhancedPubSub {
  * @return {string} The decoded message.
  */
 const getMessage = (message) => {
-  return Buffer.from(message.data, 'base64').toString();
+  return Buffer.from(message.data || '', 'base64').toString();
 };
 
 module.exports = {

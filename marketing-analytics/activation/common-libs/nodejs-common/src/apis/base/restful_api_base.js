@@ -53,10 +53,10 @@ class RestfulApiBase {
 
   /**
    * Returns default HTTP headers.
-   * @return {object} HTTP headers.
+   * @return {!Headers} HTTP headers.
    */
   async getDefaultHeaders() {
-    return {};
+    return new Headers();
   }
 
   /**

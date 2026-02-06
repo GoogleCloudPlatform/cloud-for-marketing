@@ -48,18 +48,6 @@ exports.displayvideo = require('./display_video.js');
 exports.analytics = require('./analytics.js');
 
 /**
- * APIs integration class for Google Analytics Measurement Protocol.
- * @const {{MeasurementProtocol:!MeasurementProtocol}}
- */
-exports.measurementprotocol = require('./measurement_protocol.js');
-
-/**
- * Cloud Resource Manager for checking the permissions.
- * @const {{CloudPlatformApis:!CloudPlatformApis}}
- */
-exports.cloudplatform = require('./cloud_platform_apis.js');
-
-/**
  * APIs integration class for Google Spreadsheets.
  * @const {{
  *   Spreadsheets:!Spreadsheets,

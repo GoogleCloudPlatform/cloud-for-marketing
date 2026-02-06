@@ -20,7 +20,7 @@
 const {
   api: { searchads: { SearchAds } },
   storage: { StorageFile },
-  utils: { replaceParameters, changeNamingFromSnakeToLowerCamel },
+  utils: { replaceParameters },
 } = require('@google-cloud/nodejs-common');
 const { Report } = require('./base_report.js');
 const { getSchemaFields } = require('./googleads_report_helper.js');
@@ -63,13 +63,59 @@ class SearchAdsReport extends Report {
   /** @override */
   async generateSchema() {
     const query = await this.getFinalQuery(this.parameters);
-    const { snakeCase = false } = this.config;
-    /** @type {Array<string>} */ const adsFieldNames =
+    const {
+      customerId,
+      loginCustomerId,
+      snakeCase = false,
+      customColumnOutput = 'json',
+    } = this.config;
+    /** @type {Array<string>} */ const allFieldNames =
       query.replaceAll('\n', '').replace(/select(.*)from.*/gi, '$1')
         .split(',').map((field) => field.trim());
+    const adsFieldNames =
+      allFieldNames.filter((name) => !name.startsWith('custom_columns.id['));
     const adsFields =
       await this.getApiInstance().searchReportField(adsFieldNames);
     const fields = getSchemaFields(adsFieldNames, adsFields, snakeCase);
+    if (adsFieldNames.length < allFieldNames.length) {
+      if (customColumnOutput === 'json') {
+        fields.push({
+          name: 'customColumns',
+          type: 'JSON',
+          mode: 'NULLABLE',
+        });
+      } else if (customColumnOutput === 'raw') {
+        fields.push({
+          name: 'customColumns',
+          type: 'JSON',
+          mode: 'REPEATED',
+        });
+      } else {
+        const customerColumns =
+          await this.getApiInstance().getCustomColumnsFromQuery(
+            customerId, loginCustomerId, query);
+        fields.push({
+          name: 'customColumns',
+          type: 'RECORD',
+          fields: customerColumns.map(({ safeName, valueType }) => {
+            let type = 'STRING';
+            switch (valueType) {
+              case 'INT64':
+              case 'STRING':
+              case 'BOOLEAN':
+                type = valueType;
+                break;
+              case 'DOUBLE':
+                type = 'FLOAT64';
+                break;
+              default: //include type 'DATE':
+                type = 'STRING';
+            }
+            return { name: safeName, type };
+          }),
+        });
+      }
+    }
     return { fields };
   }
 
@@ -78,9 +124,15 @@ class SearchAdsReport extends Report {
    */
   async getContent(parameters) {
     const query = await this.getFinalQuery(parameters);
-    const { customerId, loginCustomerId, snakeCase = false } = this.config;
+    const {
+      customerId,
+      loginCustomerId,
+      snakeCase = false,
+      customColumnOutput = 'json',
+    } = this.config;
+    const rawCustomColumns = customColumnOutput === 'raw';
     const stream = await this.getApiInstance().cleanedRestStreamReport(
-      customerId, loginCustomerId, query, snakeCase);
+      customerId, loginCustomerId, query, snakeCase, rawCustomColumns);
     return stream;
   }
 

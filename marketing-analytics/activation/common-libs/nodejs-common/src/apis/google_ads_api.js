@@ -33,6 +33,7 @@ const {
   UserListServiceClient,
   protos: { google: { ads: { googleads } } },
 } = require('google-ads-nodejs-client');
+const { AuthRestfulApi } = require('./base/auth_restful_api.js');
 
 const API_VERSION = Object.keys(googleads)[0];
 const {
@@ -143,6 +144,9 @@ CONVERSION_FIELDS.CLICK = [
   'conversionValue',
   'currencyCode',
   'orderId',
+  'userIpAddress',
+  'sessionAttributesEncoded',
+  'sessionAttributesKeyValuePairs',
 ];
 /**
  * @see ConversionAdjustment
@@ -211,7 +215,7 @@ const MAX_IDENTIFIERS = {
 };
 
 /**
- * Configuration for uploading click conversions, call converions or conversion
+ * Configuration for uploading click conversions, call conversions or conversion
  * adjustments for Google Ads, includes:
  * gclid, conversionAction, conversionDateTime, conversionValue,
  * currencyCode, orderId, externalAttributionData,
@@ -234,6 +238,7 @@ const MAX_IDENTIFIERS = {
  *
  * @see https://developers.google.com/google-ads/api/reference/rpc/latest/ClickConversion
  * @typedef {{
+ *   jobId: (number|undefined),
  *   externalAttributionData: (GoogleAdsApi.ExternalAttributionData|undefined),
  *   cartData: (object|undefined),
  *   gclid: (string|undefined),
@@ -335,22 +340,28 @@ let CustomerMatchRecord;
 /**
  * Google Ads API class based on Google Ads API library.
  */
-class GoogleAdsApi {
+class GoogleAdsApi extends AuthRestfulApi {
   /**
    * Note: Rate limits is set by the access level of Developer token.
-   * @param {string} developerToken Developer token to access the API.
-   * @param {boolean=} debugMode This is used to set ONLY validate conversions
-   *     but not real uploading.
    * @param {!Object<string,string>=} env The environment object to hold env
    *     variables.
+   * @param {object} options
+   * @param {string} options.developerToken Developer token to access the API.
+   * @param {boolean} options.debugMode This is used to set ONLY validate
+   *     conversions but not real uploading.
    */
-  constructor(developerToken, debugMode = false, env = process.env) {
-    this.developerToken = developerToken;
-    this.debugMode = debugMode;
-    this.authClient = new AuthClient(API_SCOPES, env);
+  constructor(env = process.env, options = {}) {
+    super(env, options);
+    this.developerToken = options.developerToken;
+    this.debugMode = options.debugMode || false;
     this.logger = getLogger('API.ADS.N');
     this.logger.info(
       `Init ${this.constructor.name} with Debug Mode?`, this.debugMode);
+  }
+
+  /** @override */
+  getScope() {
+    return API_SCOPES;
   }
 
   /**
@@ -486,11 +497,9 @@ class GoogleAdsApi {
    * @return {!Promise<stream>}
    */
   async restStreamReport(customerId, loginCustomerId, query) {
-    await this.authClient.prepareCredentials();
-    const headers = Object.assign(
-      await this.authClient.getDefaultAuth().getRequestHeaders(),
-      this.getGoogleAdsHeaders_(loginCustomerId)
-    );
+    const headers = await this.getDefaultHeaders();
+    const extra = new Headers(this.getGoogleAdsHeaders_(loginCustomerId));
+    extra.forEach((value, key) => void headers.set(key, value));
     const options = {
       baseURL: `${API_ENDPOINT}/${API_VERSION}/`,
       url: `customers/${getCleanCid(customerId)}/googleAds:searchStream`,
@@ -598,7 +607,7 @@ class GoogleAdsApi {
    * e.g. wrong conversion Id, wrong gclid, etc.
    * `Status` has a property `message` that has the general information of the
    * error, however, the detailed information (e.g. the failed conversions and
-   * their reasons) lies in the property named `datails` (an array of
+   * their reasons) lies in the property named `details` (an array of
    * `GoogleAdsFailure`). Each `GoogleAdsFailure` is related to a failed
    * conversion. The function `extraFailedLines_` is used to extract the
    * details.
@@ -612,8 +621,8 @@ class GoogleAdsApi {
    * @param {string} customerId
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @param {!ConversionConfig} conversionConfig Default conversion parameters.
-   * @param {string} functionName The name of sending converions function, could
-   *   be `uploadClickConversions`, `uploadCallConversions` or
+   * @param {string} functionName The name of sending conversions function,
+   *   could be `uploadClickConversions`, `uploadCallConversions` or
    *   `uploadConversionAdjustments`.
    * @param {string} propertyForDebug The name of property for debug info.
    * @return {!SendSingleBatch} Function which can send a batch of hits to
@@ -859,7 +868,7 @@ class GoogleAdsApi {
    * @return {!Promise<!UploadClickConversionsResponse>}
    */
   async uploadClickConversions(lines, config) {
-    const { customerId, loginCustomerId } = config;
+    const { customerId, loginCustomerId, jobId } = config;
     this.logger.debug('Upload click conversions for:', config);
     const conversions = buildConversionJsonList(lines, config,
       CONVERSION_FIELDS.CLICK, IDENTIFIERS.CLICK_CONVERSION, MAX_IDENTIFIERS.CONVERSION);
@@ -869,6 +878,7 @@ class GoogleAdsApi {
     const request = new UploadClickConversionsRequest({
       conversions: clickConversions,
       customerId,
+      jobId,
       validateOnly: this.debugMode, // when true makes no changes
       partialFailure: true, // Will still create the non-failed entities
     });
@@ -945,8 +955,8 @@ class GoogleAdsApi {
         AND user_list.membership_status = OPEN
         AND user_list.crm_based_user_list.upload_key_type = ${uploadKeyType}
     `;
-    const userlists = await this.getReport(customerId, loginCustomerId, query);
-    return userlists.length === 0 ? undefined : userlists[0].userList.id;
+    const userLists = await this.getReport(customerId, loginCustomerId, query);
+    return userLists.length === 0 ? undefined : userLists[0].userList.id;
   }
 
   /**
@@ -954,8 +964,8 @@ class GoogleAdsApi {
    * Id. The user list would be a CRM_BASED type.
    * Trying to create a list with an used name will fail.
    * The Google Ads service behind this function (UserListService) supports
-   * `partial_failure`. Here, we only create one userlist at one time, so
-   * `partial_failure` is disabled to simplified the error handleing process.
+   * `partial_failure`. Here, we only create one user list at one time, so
+   * `partial_failure` is disabled to simplified the error handling process.
    * @see getUploadConversionFnBase_ for more details of error handling.
    * @param {!CustomerMatchConfig} customerMatchConfig
    * @return {number} The created user list id. Note this is not the resource
@@ -973,7 +983,7 @@ class GoogleAdsApi {
       customerId: getCleanCid(customerId),
       operations: [{ create: userList }],
       validateOnly: this.debugMode, // when true makes no changes
-      partialFailure: false, // Simplify error handling in creating userlist
+      partialFailure: false, // Simplify error handling in creating user list
     });
     const client = await this.getUserListServiceClient_();
     const options = this.getCallOptions_(loginCustomerId);
@@ -984,7 +994,7 @@ class GoogleAdsApi {
        */
       const [response] = await client.mutateUserLists(request, options);
       const { results } = response; // No `partialFailureError` here.
-      this.logger.debug(`Created crm userlist from`, customerMatchConfig);
+      this.logger.debug(`Created crm user list from`, customerMatchConfig);
       if (!results[0]) {
         if (this.debugMode) {
           throw new Error('No UserList was created in DEBUG mode.');
@@ -1139,7 +1149,7 @@ class GoogleAdsApi {
   /**
    * Creates a OfflineUserDataJob and returns resource name.
    * @param {OfflineUserDataJobConfig} offlineUserDataJobConfig
-   * @return {string} The resouce name of the creaed job.
+   * @return {string} The resource name of the created job.
    */
   async createOfflineUserDataJob(offlineUserDataJobConfig) {
     const config = this.getCamelConfig_(offlineUserDataJobConfig);
@@ -1231,7 +1241,7 @@ class GoogleAdsApi {
         this.logger.debug(`Add operation to job batch[${batchId}]`, response);
         const { partialFailureError: failed } = response;
         if (failed) {
-          this.logger.info(`Job[${jobResourceName}] faile:`, failed.message);
+          this.logger.info(`Job[${jobResourceName}] fail:`, failed.message);
           const failures = failed.details.map(
             ({ value }) => GoogleAdsFailure.decode(value));
           this.extraFailedLines_(batchResult, failures, lines, 0);
@@ -1331,13 +1341,18 @@ class GoogleAdsApi {
 
   /**
    * Returns a HTTP header object contains the authentication information for
-   * Google Ads API, include: `developer-token` and `ogin-customer-id`.
+   * Google Ads API, include: `developer-token` and `login-customer-id`.
+   * `grpc` only takes plain objects as valid values of the object `otherArgs`,
+   * so here can not use 'Headers' type yet.
    * @param {string} loginCustomerId
    * @return {object} The HTTP header object.
    * @private
    */
   getGoogleAdsHeaders_(loginCustomerId) {
-    const headers = { 'developer-token': this.developerToken };
+    const headers = {};
+    if (this.developerToken) {
+      headers['developer-token'] = this.developerToken;
+    }
     if (loginCustomerId) {
       headers['login-customer-id'] = getCleanCid(loginCustomerId);
     }
@@ -1360,15 +1375,14 @@ class GoogleAdsApi {
   }
 
   /**
-   * Prepares the feach data service client instance.
+   * Prepares the fetch data service client instance.
    * @return {!GoogleAdsServiceClient}
    * @private
    */
   async getGoogleAdsServiceClient_() {
     if (this.googleAdsClient) return this.googleAdsClient;
-    await this.authClient.prepareCredentials();
     this.googleAdsClient = new GoogleAdsServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
     return this.googleAdsClient;
   }
@@ -1379,9 +1393,8 @@ class GoogleAdsApi {
    * @private
    */
   async getGoogleAdsFieldServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new GoogleAdsFieldServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 
@@ -1391,9 +1404,8 @@ class GoogleAdsApi {
    * @private
    */
   async getConversionUploadServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new ConversionUploadServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 
@@ -1403,9 +1415,8 @@ class GoogleAdsApi {
    * @private
    */
   async getConversionAdjustmentUploadServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new ConversionAdjustmentUploadServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 
@@ -1415,9 +1426,8 @@ class GoogleAdsApi {
    * @private
    */
   async getUserListServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new UserListServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 
@@ -1427,9 +1437,8 @@ class GoogleAdsApi {
    * @private
    */
   async getUserDataServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new UserDataServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 
@@ -1439,16 +1448,15 @@ class GoogleAdsApi {
    * @private
    */
   async getOfflineUserDataJobServiceClient_() {
-    await this.authClient.prepareCredentials();
     return new OfflineUserDataJobServiceClient({
-      authClient: this.authClient.getDefaultAuth(),
+      authClient: await this.getAuth(),
     });
   }
 }
 
 /**
- * Returns an arrary of UserIdentifier object based the given JSON object.
- * @param {Object} record An object contains user indentifier information.
+ * Returns an array of UserIdentifier object based the given JSON object.
+ * @param {Object} record An object contains user identifier information.
  * @param {!Array<string>} identifierTypes An list of user identifier types that
  *   are supported by the target service.
  * @param {number} maximumNumOfIdentifiers The maximum number of user
@@ -1541,7 +1549,7 @@ const buildConversionJsonList = (lines, config, conversionFields,
     })
 }
 /**
- * Returns an arrary of UserData object based on the given arran of JSON strings.
+ * Returns an array of UserData object based on the given arran of JSON strings.
  * @param {!Array<string>} lines An array of JSON strings of UserData.
  * @param {{
  *   additionalAttributes: (!UserIdentifierSource|undefined)

@@ -17,7 +17,6 @@
 
 'use strict';
 
-const { buildQuery } = require('google-ads-api/build/src/query.js');
 const { api: { googleadsapi: { GoogleAdsApi } } }
   = require('@google-cloud/nodejs-common');
 const { SearchAdsReport } = require('./search_ads_report.js');
@@ -46,18 +45,12 @@ class GoogleAdsReport extends SearchAdsReport {
   getApiInstance() {
     if (!this.apiInstance) {
       this.apiInstance =
-        new GoogleAdsApi(this.config.developerToken, false, super.getOption());
+        new GoogleAdsApi(super.getOption(),
+          { developerToken: this.config.developerToken });
     }
     return this.apiInstance;
   }
 
-  /** @override */
-  async getQuery(parameters) {
-    if (this.config.reportQuery) {
-      return buildQuery(this.config.reportQuery).gaqlQuery;
-    }
-    return super.getQuery(parameters);
-  }
 }
 
 module.exports = { GoogleAdsReport };

@@ -20,6 +20,7 @@
 'use strict';
 
 const { join } = require('path');
+const lodash = require('lodash');
 const {
   cloudfunctions: { getIdTokenForFunction },
   utils: { requestWithRetry, replaceParameters },
@@ -41,7 +42,7 @@ const { BaseTask } = require('../base_task.js');
  * `attributes` are attributes that Tentacles will figure out from the file
  * name, e.g. `api`, `config`(name), `size`, etc.
  * `config` is the object for Tentacles config. If this object is present, then
- * in the `attribute`, the `config` will be ingored; otherwise, Tentacles will
+ * in the `attribute`, the `config` will be ignored; otherwise, Tentacles will
  * try to load config from Tentacles Firestore with the `api` and `config` in
  * the `attributes` object.
  *
@@ -81,7 +82,7 @@ let SpeedControlledTaskConfig;
  * This task is used to send a massive number of requests to a target service
  * with a managed pacing speed, including QPS, records per request, etc.
  * It is built based on the Tentacles:
- * 1. This tast starts by submitting the information of a GCS file and
+ * 1. This task starts by submitting the information of a GCS file and
  *    configuration to the TentaclesFile management Cloud Function to create a
  *    new Tentacles File and related Tentacles Tasks;
  * 2. Tentacles sends the requests with the specified speed setting;
@@ -117,11 +118,14 @@ class SpeedControlledTask extends BaseTask {
     const options = await getRequestOption(source);
     const file = getFileUrl(source);
     const { attributes, config } = source;
-    options.data = {
+    const defaultConfig = {
+      attributes: { api: 'CF' },
+    };
+    options.data = lodash.merge(defaultConfig, {
       file,
       attributes,
       config,
-    };
+    });
     const result = await requestWithRetry(options, this.logger);
     const { fileId } = result;
     this.logger.info(`Start tentacles tasks with fileId: ${fileId}`);

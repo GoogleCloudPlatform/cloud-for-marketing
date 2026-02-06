@@ -65,7 +65,7 @@ let Filter;
  */
 class DatastoreDocumentFacade {
   /**
-   * Initializes DocumentFacade for Datasotre.
+   * Initializes DocumentFacade for Datastore.
    * @param {!DatastoreModeEntity} entity
    */
   constructor(entity) {
@@ -87,7 +87,7 @@ class DatastoreDocumentFacade {
  */
 class DatastoreTransactionFacade {
   /**
-   * Initializes Firstore TransactionFacade for Datasotre Transaction.
+   * Initializes Firestore TransactionFacade for Datastore Transaction.
    * @param {!DatastoreModeTransaction} transaction
    * @param {!DatastoreModeEntity} entity
    */
@@ -145,7 +145,7 @@ let Database;
  * interface offers unified operations on the data objects in both of these two
  * modes.
  *
- * Firestore Native mode ('Firestore') and Firestore Datastore mode ('Datatore')
+ * Firestore Native mode ('Firestore') and Firestore Datastore mode ('Datastore')
  * have different interfaces:
  * 1. 'Firestore' has two kinds objects: 'document' stands for an object (data
  * entity) and 'collection' stands for a group of 'documents'. The

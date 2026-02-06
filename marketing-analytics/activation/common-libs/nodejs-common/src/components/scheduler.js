@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /**
- * @fileoverview Cloud Scheduler wrapper class, including: pause/resuem a job.
+ * @fileoverview Cloud Scheduler wrapper class, including: pause/resume a job.
  */
 
 'use strict';
@@ -137,9 +137,9 @@ class CloudScheduler {
    * @private
    */
   async getJobs_(name, targetLocations = undefined) {
-    const regex = new RegExp(`/jobs/${name}$`);
+    const jobName = `/jobs/${name}`;
     const allJobs = await this.listJobs_(targetLocations);
-    const jobs = allJobs.filter((job) => regex.test(job));
+    const jobs = allJobs.filter((job) => job.endsWith(jobName));
     if (jobs.length === 0) console.error(`Can not find job: ${name}`);
     return jobs;
   }
@@ -160,9 +160,15 @@ class CloudScheduler {
     const requestPrefix = `projects/${projectId}/locations`;
     const jobs = locations.map(async (location) => {
       const request = { parent: `${requestPrefix}/${location}` };
-      const response = await this.instance.projects.locations.jobs.list(request);
-      if (!response.data.jobs) return [];
-      return response.data.jobs.map((job) => job.name);
+      try {
+        const response =
+          await this.instance.projects.locations.jobs.list(request);
+        if (!response.data.jobs) return [];
+        return response.data.jobs.map((job) => job.name);
+      } catch (error) {
+        console.warn(`Failed to list jobs for ${location}`, error);
+        return [];
+      }
     });
     // Waits for all jobs names and flattens nested job name arrays, however
     // there is no 'flat' available in current Cloud Functions runtime.

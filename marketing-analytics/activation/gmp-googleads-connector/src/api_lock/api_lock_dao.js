@@ -35,7 +35,7 @@ const {
  * 'max' is the maximum available instances for this lock. It depends on the
  * API specification.
  * 'tokens' stands for different instances of the lock.
- * Getting a lock will registed the given 'token' to 'tokens' and reduce the
+ * Getting a lock will register the given 'token' to 'tokens' and reduce the
  * the property 'available' for 1, while unlocking a 'token' will remove that
  * element from the array 'tokens' and increases 'available' 1.
  *
@@ -72,7 +72,7 @@ class ApiLockDao extends DataAccessObject {
     super('Lock', namespace, database);
     /**
      * Maximum time (milliseconds) for a process to hold an ApiLock.
-     * By default, it is 10 mintues.
+     * By default, it is 10 minutes.
      * @type {number}
      */
     this.maxTimeForLocks = 10 * 60 * 1000;
@@ -126,7 +126,7 @@ class ApiLockDao extends DataAccessObject {
   }
 
   /**
-   * Returns whethere there is available locks. This is a direct check and does
+   * Returns where there is available locks. This is a direct check and does
    * not guarantee the lock will be available when try to get it. It is used
    * to ramp up sending instance when tasks are just started.
    *
@@ -220,9 +220,9 @@ class ApiLockDao extends DataAccessObject {
     const sortFn = (a, b) => Math.sign(a.updatedAt - b.updatedAt);
     if (available <= 0) {
       const cutoffTime = Date.now() - this.maxTimeForLocks;
-      const timeoutedTokens =
+      const timeoutTokens =
         tokens.filter(({ updatedAt }) => updatedAt < cutoffTime);
-      if (available + timeoutedTokens.length <= 0) {
+      if (available + timeoutTokens.length <= 0) {
         return;
       }
       const sortedTokens = tokens.sort(sortFn);
@@ -261,7 +261,7 @@ class ApiLockDao extends DataAccessObject {
    * Returns the new Lock entity to be created for the specified lock Id.
    * @param {string} lockId
    * @param {string|undefined} token If token presents, the new Lock will
-   *   regeister the token when it is created.
+   *   register the token when it is created.
    * @return {!ApiLock} Api Lock entity.
    * @private
    */
@@ -272,7 +272,7 @@ class ApiLockDao extends DataAccessObject {
 
   /**
    * Returns the updated Lock entity. If there is a `token`, it will be
-   * registered; if there is no `tokens`, it would be intialized as an empty
+   * registered; if there is no `tokens`, it would be initialized as an empty
    * Array which means all instances of the lock are available.
    * @param {number} max
    * @param {string|undefined} token

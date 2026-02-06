@@ -17,19 +17,19 @@
  */
 
 'use strict';
-const {nanoid} = require('nanoid');
+const { nanoid } = require('nanoid');
 const {
   FIELD_NAMES,
   TaskLogStatus,
   TaskLogDao,
-} = require('../task_log/task_log_dao.js');
+} = require('../../task_log/task_log_dao.js');
 const {
   TaskType,
   TaskGroup,
   ErrorOptions,
-} = require('../task_config/task_config_dao.js');
-const {BaseTask} = require('./base_task.js');
-const {getTaskArray} = require('../task_manager.js');
+} = require('../../task_config/task_config_dao.js');
+const { BaseTask } = require('../base_task.js');
+const { getTaskArray } = require('../../task_manager.js');
 
 /**
  * `embedded` stands for the embedded tasks.
@@ -56,15 +56,15 @@ let KnotTaskConfig;
 const MILLISECONDS_IN_A_MINUTE = 60000;
 
 /** Helper function to tell whether this TaskLog has error occurred. */
-const taskHasError = ({entity}) => {
+const taskHasError = ({ entity }) => {
   return entity.status === TaskLogStatus.ERROR
-      && entity[FIELD_NAMES.IGNORED_FAILURE] !== true;
+    && entity[FIELD_NAMES.IGNORED_FAILURE] !== true;
 };
 
 /** Helper function to tell whether this TaskLog hasn't finished. */
-const taskIsNotFinished = ({entity}) => {
+const taskIsNotFinished = ({ entity }) => {
   const haveIgnoredError = entity.status === TaskLogStatus.ERROR &&
-      entity[FIELD_NAMES.IGNORED_FAILURE] === true;
+    entity[FIELD_NAMES.IGNORED_FAILURE] === true;
   return entity.status !== TaskLogStatus.FINISHED && !haveIgnoredError;
 };
 
@@ -97,11 +97,11 @@ class KnotTask extends BaseTask {
   shouldCheckTaskStatus(config) {
     const pastTime = Date.now() - this.parameters.startTime;
     if (config.estimateRunningTime &&
-        pastTime < config.estimateRunningTime * MILLISECONDS_IN_A_MINUTE) {
+      pastTime < config.estimateRunningTime * MILLISECONDS_IN_A_MINUTE) {
       return false;
     }
     if (config.dueTime &&
-        pastTime > config.dueTime * MILLISECONDS_IN_A_MINUTE) {
+      pastTime > config.dueTime * MILLISECONDS_IN_A_MINUTE) {
       throw new Error('Timeout');
     }
     return true;
@@ -124,8 +124,8 @@ class KnotTask extends BaseTask {
       value: this.parameters[FIELD_NAMES.EMBEDDED_TAG],
     }];
     return shouldCheck ?
-        this.areTasksFinished(filter, getTaskArray(embeddedConfig.tasks).length)
-        : false;
+      this.areTasksFinished(filter, getTaskArray(embeddedConfig.tasks).length)
+      : false;
   }
 
   /**
@@ -138,9 +138,9 @@ class KnotTask extends BaseTask {
     if (!this.config.embedded) return {};
     const embeddedTag = nanoid();
     const messageIds = await this.taskManager.startTasks(
-        this.config.embedded.tasks,
-        {[FIELD_NAMES.EMBEDDED_TAG]: embeddedTag},
-        this.appendParameter(this.config.appendedParameters));
+      this.config.embedded.tasks,
+      { [FIELD_NAMES.EMBEDDED_TAG]: embeddedTag },
+      this.appendParameter(this.config.appendedParameters));
     this.logger.info(`Start embedded ${messageIds.length} tasks`);
     return {
       parameters: this.appendParameter({
@@ -169,16 +169,16 @@ class KnotTask extends BaseTask {
       throw new Error('Failed embedded task(s).');
     }
     if (targetTasks.length < expectedNumber ||
-        targetTasks.some(taskIsNotFinished)) {
+      targetTasks.some(taskIsNotFinished)) {
       return false;
     }
     const nextTaskStatus = await Promise.all(
-        targetTasks.filter(({entity}) => entity.next).map(({id, entity}) => {
-          const nextExpectedNumber = getTaskArray(entity.next).length;
-          return this.areTasksFinished(
-              [{property: FIELD_NAMES.PARENT_ID, value: id}],
-              nextExpectedNumber);
-        }));
+      targetTasks.filter(({ entity }) => entity.next).map(({ id, entity }) => {
+        const nextExpectedNumber = getTaskArray(entity.next).length;
+        return this.areTasksFinished(
+          [{ property: FIELD_NAMES.PARENT_ID, value: id }],
+          nextExpectedNumber);
+      }));
     return nextTaskStatus.indexOf(false) === -1;
   }
 

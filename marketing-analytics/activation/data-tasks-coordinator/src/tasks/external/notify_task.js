@@ -55,7 +55,7 @@ const {
 let NotifyTaskConfig;
 
 /** @const{string} A link to a flow chart rendered by Mermaid ink. */
-const TEMPLATE_IMGAE_LINK = '{WORKFLOW_MERMAID_INK_LINK}';
+const TEMPLATE_IMAGE_LINK = '{WORKFLOW_MERMAID_INK_LINK}';
 
 /** @const{string} A text for a Mermaid flow chart code. */
 const TEMPLATE_MERMAID_CODE = '{WORKFLOW_MERMAID_DEV_CODE}';
@@ -98,17 +98,17 @@ class NotifyTask extends BaseTask {
    */
   async getContent_(content) {
     let result = content;
-    if (content.indexOf(TEMPLATE_IMGAE_LINK) > -1
+    if (content.indexOf(TEMPLATE_IMAGE_LINK) > -1
       || content.indexOf(TEMPLATE_MERMAID_CODE) > -1) {
       const { taskLogId } = this.parameters;
       const { taskLogDao, taskConfigDao } = this.options;
       const loader =
         new TaskLogNodeLoader(taskLogDao, taskConfigDao, this.getCloudProject());
       const nodes = await loader.getWorkFlow(taskLogId);
-      if (content.indexOf(TEMPLATE_IMGAE_LINK) > -1) {
+      if (content.indexOf(TEMPLATE_IMAGE_LINK) > -1) {
         const mermaid = new MermaidFlowChart(OPTIONS_INK);
         const ink = mermaid.getInkLinkFromNodes(nodes);
-        result = result.replace(TEMPLATE_IMGAE_LINK, ink);
+        result = result.replace(TEMPLATE_IMAGE_LINK, ink);
       }
       if (content.indexOf(TEMPLATE_MERMAID_CODE) > -1) {
         const mermaid = new MermaidFlowChart(OPTIONS_DEV);

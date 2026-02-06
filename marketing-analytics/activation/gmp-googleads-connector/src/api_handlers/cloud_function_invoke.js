@@ -46,7 +46,7 @@ const RETRY_TIMES = 3;
  *   `functionName`, the name of Python function that will be invoked if there
  *      are more than one functions;
  *   `args`, an array of arguments for the target Python function;
- *   `vars`, an object of gloabl variables for the Python function.
+ *   `vars`, an object of global variables for the Python function.
  * @typedef {{
  *   url:string,
  *   functionName:string|undefined,
@@ -70,7 +70,7 @@ let CloudFunctionEndpoint;
 let CloudFunctionInvokeConfig;
 
 /**
- * Inovke a Cloud Function and output the result into the target GCS file(s).
+ * Invoke a Cloud Function and output the result into the target GCS file(s).
  */
 class CloudFunctionInvoke extends ApiHandler {
 
@@ -85,10 +85,10 @@ class CloudFunctionInvoke extends ApiHandler {
   }
 
   /**
-   * Returns whether the arguements need to be merged.
+   * Returns whether the arguments need to be merged.
    * By default, each line (of input data) contains the arguments for one
    * invocation to the target service. However, there are some services that can
-   * support mulitple lines for better performance. To leverage this kind of
+   * support multiple lines for better performance. To leverage this kind of
    * services, multiple lines will be merged into one before the invocation.
    * @see getMergedData_ for the details of how data is merged.
    *

@@ -23,8 +23,8 @@ const { utils: { apiSpeedControl, BatchResult, getLogger } } =
 
 /**
  * Configurations to control the API pacing speed.
- * Some configurations have a hard limit which can't be larager than
- * a default value (required by the speicic API).
+ * Some configurations have a hard limit which can't be larger than
+ * a default value (required by the specific API).
  * `recordsPerRequest`, the number of records for each request.
  * `qps`, queries per second, the number of requests n a second of time.
  * `numberOfThreads`, the number of concurrent threads to send requests.
@@ -57,8 +57,8 @@ class ApiHandler {
 
   /**
    * Returns the configurations of speed control for this API.
-   * Note: Some configurations have a hard limit which can't be over laraged than
-   * a default value (required by the speicic API).
+   * Note: Some configurations have a hard limit which can't be over large than
+   * a default value (required by the specific API).
    * @param {object} config
    * @return {!SpeedOptions}
    * @abstract
@@ -97,7 +97,7 @@ class ApiHandler {
 
   /**
    * Gets the boolean value of 'debug' in config.
-   * When 'debug' is set with a non-boolean value, it returns ture only if it is
+   * When 'debug' is set with a non-boolean value, it returns true only if it is
    * a string 'true'.
    * @param {(boolean|string|undefined)} debug The 'debug' value in 'config'.
    * @return {boolean}

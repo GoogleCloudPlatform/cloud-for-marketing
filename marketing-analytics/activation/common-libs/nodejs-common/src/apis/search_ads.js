@@ -19,9 +19,9 @@
 'use strict';
 
 const { request: gaxiosRequest } = require('gaxios');
-const { google } = require('googleapis');
 const { GoogleApiClient } = require('./base/google_api_client.js');
-const { getLogger } = require('../components/utils.js');
+const { changeStringToBigQuerySafe, getLogger }
+  = require('../components/utils.js');
 const { getCleanCid, RestSearchStreamTransform }
   = require('./base/ads_api_common.js');
 
@@ -59,7 +59,7 @@ class SearchAds extends GoogleApiClient {
   }
 
   /**
-   * Prepares the Search Ads 360 Reporting API instance.
+   * Returns the options to initialize Search Ads 360 Reporting API instance.
    * OAuth 2.0 application credentials is required for calling this API.
    * For Search Ads Reporting API calls made by a manager to a client account,
    * a HTTP header named `login-customer-id` is required in the request. This
@@ -67,19 +67,17 @@ class SearchAds extends GoogleApiClient {
    * API call. Be sure to remove any hyphens (—), for example: 1234567890, not
    * 123-456-7890.
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/auth
-   * @return {!google.searchads360}
-   * @private
+   * @return {!Object}
+   * @override
    */
-  async getApiClient(loginCustomerId) {
-    this.logger.debug(`Initialized SA reporting for ${loginCustomerId}`);
-    const options = {
-      version: this.getVersion(),
-      auth: await this.getAuth(),
-    };
+  async getApiClientInitOptions(initOptions) {
+    const options = await super.getApiClientInitOptions(initOptions);
+    const { loginCustomerId } = initOptions;
     if (loginCustomerId) {
+      this.logger.debug(`initialized with loginCustomerId: ${loginCustomerId}`);
       options.headers = { 'login-customer-id': getCleanCid(loginCustomerId) };
     }
-    return google.searchads360(options);
+    return options;
   }
 
   /**
@@ -92,11 +90,11 @@ class SearchAds extends GoogleApiClient {
    * @param {string} query
    * @param {object=} options Options for `SearchSearchAds360Request`.
    * @see https://developers.google.com/search-ads/reporting/api/reference/rpc/google.ads.searchads360.v0.services#searchsearchads360request
-   * @return {!SearchAds360Field}
+   * @return {!SearchSearchAds360Response}
    * @see https://developers.google.com/search-ads/reporting/api/reference/rpc/google.ads.searchads360.v0.services#searchsearchads360response
    */
   async getPaginatedReport(customerId, loginCustomerId, query, options = {}) {
-    const searchads = await this.getApiClient(loginCustomerId);
+    const searchads = await this.getApiClient({ loginCustomerId });
     const requestBody = Object.assign({
       query,
       pageSize: 10000,
@@ -120,11 +118,8 @@ class SearchAds extends GoogleApiClient {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/search
    */
   async restStreamReport(customerId, loginCustomerId, query) {
-    const auth = await this.getAuth();
-    const headers = Object.assign(
-      await auth.getRequestHeaders(), {
-      'login-customer-id': getCleanCid(loginCustomerId),
-    });
+    const headers = await this.getDefaultHeaders();
+    headers.set('login-customer-id', getCleanCid(loginCustomerId));
     const options = {
       baseURL: `${API_ENDPOINT}/${API_VERSION}/`,
       url: `customers/${getCleanCid(customerId)}/searchAds360:searchStream`,
@@ -146,15 +141,87 @@ class SearchAds extends GoogleApiClient {
    * @param {string} loginCustomerId Login customer account ID (Mcc Account id).
    * @param {string} query A Google Ads Query string.
    * @param {boolean=} snakeCase Output JSON objects in snake_case.
+   * @param {boolean=} rawCustomColumns Keeps the raw custom column values as
+   *     an array.
    * @return {!Promise<stream>}
    */
   async cleanedRestStreamReport(customerId, loginCustomerId, query,
-    snakeCase = false) {
-    const transform = new RestSearchStreamTransform(snakeCase);
+    snakeCase = false, rawCustomColumns = false) {
+    let postProcessFn;
+    if (!rawCustomColumns && query.indexOf('custom_columns.id[') > -1) {
+      const convertor = await this.getCustomColumnsConvertor(
+        customerId, loginCustomerId, query);
+      postProcessFn = (str) => {
+        const source = JSON.parse(str);
+        source.customColumns = convertor(source.customColumns);
+        return JSON.stringify(source);
+      }
+    }
+    const transform = new RestSearchStreamTransform(snakeCase, postProcessFn);
     const stream =
       await this.restStreamReport(customerId, loginCustomerId, query);
     return stream.on('error', (error) => transform.emit('error', error))
       .pipe(transform);
+  }
+
+  /**
+   * Gets all custom columns information from the report query. By default, it
+   * will load columns for the manager account. If there are some columns
+   * missed, it will load columns for the customerId.
+   * @param {string} customerId - The ID of the customer.
+   * @param {string} loginCustomerId - The ID of the manager.
+   * @param {string} query - The report query.
+   * @return {!Array<object>}
+   */
+  async getCustomColumnsFromQuery(customerId, loginCustomerId, query) {
+    const pattern = /custom_columns\.id\[(\d+)\]/g;
+    const columnIds = Array.from(query.matchAll(pattern), m => m[1]);
+    const selectedColumns = {};
+    const getSelectedColumn = (column) => {
+      if (columnIds.indexOf(column.id) > -1) {
+        column.safeName = changeStringToBigQuerySafe(column.name);
+        selectedColumns[column.id] = column;
+      }
+    }
+    (await this.listCustomColumns(loginCustomerId, loginCustomerId))
+      .forEach(getSelectedColumn);
+    if (Object.keys(selectedColumns).length < columnIds.length) {
+      this.logger.warn('Missing custom columns in MCC, try CID now');
+      (await this.listCustomColumns(customerId, loginCustomerId))
+        .forEach(getSelectedColumn);
+    }
+    if (Object.keys(selectedColumns).length < columnIds.length) {
+      const missing = columnIds.filter(
+        (id) => Object.keys(selectedColumns).indexOf(id) === -1
+      );
+      throw new Error(`Fail to find custom column(s): ${missing.join()}.`);
+    }
+    return columnIds.map((columnId) => selectedColumns[columnId]);
+  }
+
+  /**
+   * Returns the function to convert the array values of custom columns to
+   * an object with the column names as the property keys. The column names will
+   * be proceeded to be BigQuery naming safe.
+   * @param {string} customerId - The ID of the customer.
+   * @param {string} loginCustomerId - The ID of the manager.
+   * @param {string} query - The report query.
+   * @return {function}
+   */
+  async getCustomColumnsConvertor(customerId, loginCustomerId, query) {
+    const customerColumns = await this.getCustomColumnsFromQuery(
+      customerId, loginCustomerId, query);
+    const columnConvertors = customerColumns.map(({ safeName, valueType }) => {
+      return (obj) => {
+        const value = obj[`${valueType.toLowerCase()}Value`];
+        return { [safeName]: value };
+      };
+    });
+    const convertor = (customerColumns) => {
+      return Object.assign(
+        ...customerColumns.map((obj, index) => columnConvertors[index](obj)));
+    };
+    return convertor;
   }
 
   /**
@@ -203,9 +270,9 @@ class SearchAds extends GoogleApiClient {
    * @see https://developers.google.com/search-ads/reporting/api/reference/rest/v0/customers.customColumns#CustomColumn
    */
   async listCustomColumns(customerId, loginCustomerId) {
-    const searchads = await this.getApiClient(loginCustomerId);
+    const searchads = await this.getApiClient({ loginCustomerId });
     const response = await searchads.customers.customColumns.list({ customerId });
-    return response.data.customColumns;
+    return response.data.customColumns || [];
   }
 
   /**
@@ -219,7 +286,7 @@ class SearchAds extends GoogleApiClient {
    */
   async getCustomColumn(columnId, customerId, loginCustomerId) {
     const resourceName = `customers/${customerId}/customColumns/${columnId}`;
-    const searchads = await this.getApiClient(loginCustomerId);
+    const searchads = await this.getApiClient({ loginCustomerId });
     const response = await searchads.customers.customColumns.get({ resourceName });
     return response.data;
   }

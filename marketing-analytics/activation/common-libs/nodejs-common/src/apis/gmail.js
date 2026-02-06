@@ -73,6 +73,9 @@ class Gmail extends GoogleApiClient {
         message.push(`${key}: ${value}`);
       }
     });
+    if (options.type) {
+      message.push(`content-type: ${options.type}`);
+    }
     if (message.length === 0)
       throw new Error(`Can not get email from ${options}`);
     message.push('\n');

@@ -89,10 +89,10 @@ class GoogleAdsOfflineUserDataJobUpload extends GoogleAdsCustomerMatch {
         const storageFile = new StorageFile(bucket, file);
         records = await storageFile.loadContent(0);
       } else {
-        this.logger.error('Could find GCS infomation in message', message);
+        this.logger.error('Could find GCS information in message', message);
         return {
           result: false,
-          errors: [`Could find GCS infomation in message: ${message}`],
+          errors: [`Could find GCS information in message: ${message}`],
         };
       }
     } catch (error) {
@@ -110,9 +110,9 @@ class GoogleAdsOfflineUserDataJobUpload extends GoogleAdsCustomerMatch {
         await googleAds.createOfflineUserDataJob(offlineUserDataJobConfig);
       this.logger.info('jobResourceName: ', jobResourceName);
       const managedSend = this.getManagedSendFn(config);
-      const configedUpload = googleAds.getAddOperationsToOfflineUserDataJobFn(
+      const configuredUpload = googleAds.getAddOperationsToOfflineUserDataJobFn(
         offlineUserDataJobConfig, jobResourceName);
-      const result = await managedSend(configedUpload, records, messageId);
+      const result = await managedSend(configuredUpload, records, messageId);
       this.logger.info('add userdata result: ', result);
       await googleAds.runOfflineUserDataJob(
         offlineUserDataJobConfig, jobResourceName);

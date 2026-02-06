@@ -33,7 +33,7 @@ const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/dfareporting',
   'https://www.googleapis.com/auth/dfatrafficking',
 ]);
-const API_VERSION = 'v4';
+const API_VERSION = 'v5';
 
 /**
  * Configuration for preparing conversions for Campaign Manager, includes:
@@ -41,8 +41,8 @@ const API_VERSION = 'v4';
  * The 'idType' can be one of the values: 'encryptedUserId', 'gclid' or
  * 'mobileDeviceId'.
  * The 'operation' can be 'insert' or 'update'. The default value is 'insert'.
- * 'insert' stands for https://developers.google.com/doubleclick-advertisers/rest/v4/conversions/batchinsert
- * 'update' stands for https://developers.google.com/doubleclick-advertisers/rest/v4/conversions/batchupdate
+ * 'insert' stands for https://developers.google.com/doubleclick-advertisers/rest/v5/conversions/batchinsert
+ * 'update' stands for https://developers.google.com/doubleclick-advertisers/rest/v5/conversions/batchupdate
  * For other properties, see
  * https://developers.google.com/doubleclick-advertisers/guides/conversions_update
  *
@@ -69,7 +69,7 @@ let ConversionsConfig;
 /**
  * List of properties that will be take from the data file as elements of a
  * conversion.
- * See https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion
+ * See https://developers.google.com/doubleclick-advertisers/rest/v5/Conversion
  * @type {Array<string>}
  */
 const PICKED_PROPERTIES = [
@@ -92,7 +92,7 @@ const IDENTIFIERS = [
 
 const MAX_IDENTIFIERS_PER_USER = 5;
 /**
- * Google DfaReport API v4.0 stub.
+ * Google DfaReport API v5 stub.
  * see https://developers.google.com/doubleclick-advertisers/service_accounts
  */
 class DfaReporting extends GoogleApiClient {
@@ -164,7 +164,7 @@ class DfaReporting extends GoogleApiClient {
       const operation =
         config.operation === 'update' ? 'batchupdate' : 'batchinsert';
       // customVariables is not supported by batchupdate.
-      // https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#CustomFloodlightVariable
+      // https://developers.google.com/doubleclick-advertisers/rest/v5/Conversion#CustomFloodlightVariable
       if (operation === 'batchupdate' &&
         typeof config.customVariables !== 'undefined') {
         this.logger.warn('customVariables is not supported by batchupdate');
@@ -252,9 +252,9 @@ class DfaReporting extends GoogleApiClient {
    * ConversionStatus object. This function extras failed lines and error
    * messages based on the 'errors'.
    * For 'ConversionStatus', see:
-   *   https://developers.google.com/doubleclick-advertisers/rest/v4/ConversionStatus
+   *   https://developers.google.com/doubleclick-advertisers/rest/v5/ConversionStatus
    * For 'ConversionError', see:
-   *   https://developers.google.com/doubleclick-advertisers/rest/v4/ConversionStatus#ConversionError
+   *   https://developers.google.com/doubleclick-advertisers/rest/v5/ConversionStatus#ConversionError
    * @param {!BatchResult} batchResult
    * @param {!Array<!Schema$ConversionStatus>} statuses
    * @param {!Array<string>} lines The original input data.
@@ -324,7 +324,7 @@ class DfaReporting extends GoogleApiClient {
    * has a relative date range, e.g. YESTERDAY. To solve this, if there are
    * `startDate` and `endDate` available in the given `config`, they will be
    * used to update the report before the report is started to run.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/run
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v5/reports/run
    *
    * @param {{
    *   accountId:(string|undefined),
@@ -366,7 +366,7 @@ class DfaReporting extends GoogleApiClient {
    * Returns file url from a report. If the report status is 'REPORT_AVAILABLE',
    * then return the apiUrl from the response; if the status is 'PROCESSING' or
    * 'QUEUED', returns undefined as it is unfinished; otherwise throws an error.
-   * @see https://developers.google.com/doubleclick-advertisers/rest/v4/reports/get
+   * @see https://developers.google.com/doubleclick-advertisers/rest/v5/reports/get
    *
    * @param {{
    *   accountId:(string|undefined),

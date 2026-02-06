@@ -31,7 +31,7 @@ const NUMBER_OF_THREADS = 20;
 /**
  *
  * @typedef {{
-*   type:TaskType.GMC_WEBPAGE_FETECHER,
+*   type:TaskType.GMC_WEBPAGE_FETCHER,
 *   source: {
 *     userAgency: string|undefined,
 *     option: {

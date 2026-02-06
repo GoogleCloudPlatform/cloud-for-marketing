@@ -27,7 +27,7 @@ way.
   - [3.4. Content of data files](#34-content-of-data-files)
   - [3.5. Set up the dashboard](#35-set-up-the-dashboard)
 - [4. API Details](#4-api-details)
-  - [4.1. MP: Google Analytics Measurement Protocol](#41-mp-google-analytics-measurement-protocol)
+  - [4.1. \[DEPRECATED\] MP: Google Analytics Measurement Protocol](#41-deprecated-mp-google-analytics-measurement-protocol)
   - [4.2. GA: Google Analytics Data Import](#42-ga-google-analytics-data-import)
   - [4.3. CM: Campaign Manager 360 insert/update offline conversions](#43-cm-campaign-manager-360-insertupdate-offline-conversions)
   - [4.4. SFTP: Business Data upload to Search Ads 360](#44-sftp-business-data-upload-to-search-ads-360)
@@ -337,7 +337,7 @@ Follow these steps to get the dashboard ready:
 
 ## 4. API Details
 
-### 4.1. MP: Google Analytics Measurement Protocol
+### 4.1. [DEPRECATED] MP: Google Analytics Measurement Protocol
 
 | API Specification      | Value                                                                                                    |
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |

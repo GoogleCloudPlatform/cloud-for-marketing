@@ -117,9 +117,9 @@ class GoogleAdsCustomerMatch extends GoogleAdsClickConversionUpload {
       return this.getResultFromError(googleAds, error);
     }
     const managedSend = this.getManagedSendFn(config);
-    const configedUpload =
+    const configuredUpload =
       googleAds.getUploadCustomerMatchFn(customerMatchConfig);
-    return managedSend(configedUpload, records, messageId);
+    return managedSend(configuredUpload, records, messageId);
   }
 }
 

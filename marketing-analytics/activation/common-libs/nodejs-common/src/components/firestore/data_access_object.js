@@ -34,7 +34,7 @@ const DatastoreModeAccess = require('./datastore_mode_access.js');
 /**
  * This is data access object base class on Firestore. It seals the details of
  * different underlying databases, Firestore and Datastore.
- * This class relies on an initial parameter in construtor to indicate the
+ * This class relies on an initial parameter in constructor to indicate the
  * Firestore type.
  *
  * Firestore and Datastore have different transaction APIs. In that case,

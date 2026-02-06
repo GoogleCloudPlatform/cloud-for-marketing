@@ -20,14 +20,13 @@ const {
   TaskType,
   BigQueryTableConfig,
   StorageFileConfig,
-} = require('../../task_config/task_config_dao.js');
+} = require('../../../task_config/task_config_dao.js');
 
 /**
  * Types of prediction services.
  * @enum {string}
  */
 const PREDICTION_SERVICE = Object.freeze({
-  AUTOML_TABLES: 'automl',
   VERTEX_AI: 'vertex',
 });
 
@@ -69,14 +68,14 @@ class Predict {
    * @param {ReportConfig} config
    * @return {string} Batch prediction job name
    */
-  batchPredict(config) {}
+  batchPredict(config) { }
 
   /**
    * Returns whether the given prediction job is completed.
    * @param {string} jobName
    * @return {boolean}
    */
-  isPredictDone(jobName) {}
+  isPredictDone(jobName) { }
 
   /**
    * Returns the output results of a predict job.
@@ -90,7 +89,7 @@ class Predict {
    *   tableId: string
    * }}
    */
-  getPredictOutput(jobName) {}
+  getPredictOutput(jobName) { }
 
 }
 

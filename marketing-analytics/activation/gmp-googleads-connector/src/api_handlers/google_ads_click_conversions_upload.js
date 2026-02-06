@@ -99,8 +99,8 @@ class GoogleAdsClickConversionUpload extends ApiHandler {
   */
   getGoogleAds(config) {
     const { developerToken, debug } = config;
-    return new GoogleAds(
-      developerToken, this.getDebug(debug), this.getOption(config));
+    return new GoogleAds(this.getOption(config),
+      { developerToken, debugMode: this.getDebug(debug) });
   }
 
   /**

@@ -17,7 +17,7 @@
  * (code name 'Sentinel').
  * It is a Cloud Functions based solution to coordinate BigQuery related
  * jobs(tasks), e.g. loading file from Cloud Storage, querying or exporting data
- * to Cloud Storage. Besides these jobs, it also support AutoML Tables batch
+ * to Cloud Storage. Besides these jobs, it also support Vertex AI batch
  * prediction job.
  */
 

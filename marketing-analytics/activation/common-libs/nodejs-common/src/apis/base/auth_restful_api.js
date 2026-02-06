@@ -62,8 +62,10 @@ class AuthRestfulApi extends RestfulApiBase {
    */
   async getDefaultHeaders() {
     const auth = await this.getAuth();
-    const headers = await auth.getRequestHeaders();
-    return Object.assign({}, super.getDefaultHeaders(), headers);
+    const authHeaders = await auth.getRequestHeaders();
+    const mergedHeaders = new Headers(await super.getDefaultHeaders());
+    authHeaders.forEach((value, key) => void mergedHeaders.set(key, value));
+    return mergedHeaders;
   }
 
 }

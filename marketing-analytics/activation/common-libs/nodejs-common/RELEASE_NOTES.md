@@ -1,5 +1,21 @@
 # Release Notes
 
+## 2.6.0 (2025-12-20)
+
+### Update to the v22 of the Google Ads API
+### Update to the v5 of the Campaign Manager 360 API
+### Update to the v4 of the DV360 API
+
+## 2.5.0 (2025-06-20)
+
+### Update to the v20 of the Google Ads API
+### Remove AutoML which has been retired
+### Remove GA Measurement Protocol, only Measurement Protocol for GA4 is available now
+
+## 2.4.0 (2024-12-04)
+
+### Update to the v18 of the Google Ads API
+
 ## 2.1.0 (2024-03-05)
 
 ### Update to the v3 of the DV360 API
@@ -67,7 +83,7 @@
 ### Updated OAuth flow
 
 With the [deprecation of oob flow](https://developers.googleblog.com/2022/02/making-oauth-flows-safer.html#disallowed-oob), Tentacles OAuth flow now uses loopback address to replace oob.
-Usually, users don't have a web server to host on the lookback address and this will make the browser to land on a 'non existing' page. This looks like 'something went wrong' but it is actually expected behavior.
+Usually, users don't have a web server to host on the loopback address and this will make the browser to land on a 'non existing' page. This looks like 'something went wrong' but it is actually expected behavior.
 Users should follow the instructions and copy/paste the whole URL to continue.
 
 ## 1.0.3 (2022-02-23)

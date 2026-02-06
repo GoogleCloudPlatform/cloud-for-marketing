@@ -38,16 +38,29 @@ class GoogleApiClient extends AuthRestfulApi {
   getVersion() { }
 
   /**
-   * Returns the Api instance.
-   * @return {!Promise<object>} The Api instance.
+   * Gets the default options to initialize an Api object in Google Api client
+   * library. It contains the Api version and auth information.
+   * @param {object|undefined} initOptions
+   * @return {object}
    */
-  async getApiClient() {
-    if (this.apiClient) return this.apiClient;
-    this.logger.info(`Initialized ${this.constructor.name} instance.`);
-    this.apiClient = google[this.googleApi]({
+  async getApiClientInitOptions(initOptions) {
+    return {
       version: this.getVersion(),
       auth: await this.getAuth(),
-    });
+    };
+  }
+
+  /**
+   * Returns the Api instance.
+   * This function expects an instance name for the object in Google Api client
+   * library, e.g. searchads360 for 'Search Ads 360'.
+   * @return {!Promise<object>} The Api instance.
+   */
+  async getApiClient(initOptions = {}) {
+    if (this.apiClient) return this.apiClient;
+    this.logger.info(`Initialized ${this.constructor.name} instance.`);
+    const options = await this.getApiClientInitOptions(initOptions);
+    this.apiClient = google[this.googleApi](options);
     return this.apiClient;
   }
 }

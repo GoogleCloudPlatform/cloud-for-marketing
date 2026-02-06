@@ -19,6 +19,8 @@
 'use strict';
 
 const { TableSchema: BqTableSchema } = require('@google-cloud/bigquery');
+const { api: { spreadsheets: { Spreadsheets } } } =
+  require('@google-cloud/nodejs-common');
 const { TaskType, BigQueryTableConfig, }
   = require('../../task_config/task_config_dao.js');
 const { BigQueryAbstractTask } = require('./bigquery_abstract_task.js');
@@ -32,6 +34,7 @@ const { LoadTaskDestination } = require('./load_task.js');
  *       url: string,
  *       sheetName: string,
  *       skipLeadingRows: number|undefined,
+ *       safeColumnNames: boolean|undefined,
  *     }
  *   },
  *   destination:!LoadTaskDestination,
@@ -62,7 +65,8 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
     const { sheet } = source;
     const { schema } = destination.tableSchema || {};
     const options = {
-      externalDataConfiguration: this.getSheetConfiguration_(sheet, schema),
+      externalDataConfiguration:
+        await this.getSheetConfiguration_(sheet, schema),
     };
     const [table] = await this.getBigQueryForTask()
       .dataset(destination.table.datasetId)
@@ -85,7 +89,7 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
   async completeTask() { }
 
   /**
-   * Prechecks for the target table. If it's an existing external table, will
+   * Pre-checks for the target table. If it's an existing external table, will
    * delete it; if the existing table is not an external one, will throw an
    * error.
    * @param {!BigQueryTableConfig} tableOptions BigQuery Table configuration.
@@ -114,7 +118,7 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
     }
     this.logger.debug(`Delete the existing table: `, tableOptions);
     let result = await table.delete();
-    this.logger.debug(`... resuslt: `, result);
+    this.logger.debug(`... result: `, result);
   }
 
   /**
@@ -125,17 +129,23 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
    * @param {!BqTableSchema|undefined} schema
    * @return {Object}
    */
-  getSheetConfiguration_(sheet, schema) {
+  async getSheetConfiguration_(sheet, schema) {
+    const skipLeadingRows = sheet.skipLeadingRows || 1;
     const config = {
       sourceFormat: 'GOOGLE_SHEETS',
       sourceUris: [sheet.url],
       googleSheetsOptions: {
-        skipLeadingRows: sheet.skipLeadingRows || 1,
+        skipLeadingRows,
         range: sheet.sheetName,
       },
     };
     if (schema) {
       config.schema = schema;
+    } else if (sheet.safeColumnNames) {
+      const spreadsheet = new Spreadsheets(sheet.url);
+      const headers =
+        await spreadsheet.getHeadline(sheet.sheetName, skipLeadingRows);
+      config.schema = this.getBigQuerySafeSchema(headers);
     } else {
       config.autodetect = true;
     }

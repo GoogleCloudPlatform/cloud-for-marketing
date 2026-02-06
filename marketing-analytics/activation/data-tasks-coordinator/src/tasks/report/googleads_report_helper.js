@@ -90,6 +90,11 @@ const GOOGLE_ADS_MESSAGES = {
       fields: [{name: 'amount_micros', type: 'INT64'}],
     },
   ],
+  // https://developers.google.com/google-ads/api/reference/rpc/latest/AssetUsage
+  AssetUsage: [
+    { name: 'asset', type: 'STRING', },
+    { name: 'served_asset_field_type', type: 'STRING', },
+  ]
 };
 
 /**
@@ -205,8 +210,12 @@ const getSingleField = (name, adsField, mappedTypes) => {
   if (type === 'RECORD') {
     const types = adsField.typeUrl.split('.');
     const fields = mappedTypes[types[types.length - 1]];
-    if (!fields) throw new Error(`${adsField.typeUrl} isn't defined.`);
-    field.fields = fields;
+    if (!fields) {
+      console.warn(`${adsField.typeUrl} isn't defined. Will use type JSON`);
+      field.type = 'JSON';
+    } else {
+      field.fields = fields;
+    }
   }
   return field;
 };

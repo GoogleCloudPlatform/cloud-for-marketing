@@ -20,7 +20,6 @@
 
 exports.api = require('./src/apis/index.js');
 exports.cloudfunctions = require('./src/components/cloudfunctions_utils.js');
-exports.automl = require('./src/components/automl.js');
 exports.firestore = require('./src/components/firestore/index.js');
 exports.pubsub = require('./src/components/pubsub.js');
 exports.scheduler = require('./src/components/scheduler.js');

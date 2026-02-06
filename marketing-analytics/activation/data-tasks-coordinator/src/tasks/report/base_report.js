@@ -20,7 +20,6 @@
 const {TableSchema: BqTableSchema} = require('@google-cloud/bigquery');
 const {
   api: {
-    doubleclicksearch: { ReportRequest: Sa360LegacyReportConfig },
     googleads: ReportQueryConfig,
     doubleclickbidmanager: { RequestBody: Dv360RequestBody },
   }
@@ -41,7 +40,7 @@ let CmReportConfig;
 /**
  * DV360 (DoubleClick BidManager) report configuration.
  * For 'requestBody', see:
- * https://developers.google.com/bid-manager/v1.1/queries/runquery#request-body
+ * https://developers.google.com/bid-manager/reference/rest/v2/queries/run#runqueryrequest
  * @typedef {{
  *   secretName: (string|undefined),
  *   queryId:string,
@@ -101,9 +100,6 @@ let AdsReportConfig;
  * } | {
  *   target: 'DV360',
  *   config: Dv360ReportConfig,
- * } | {
- *   target: 'DS',
- *   config: Sa360LegacyReportConfig,
  * } | {
  *   target: 'SA360',
  *   config: Sa360ReportConfig,
