@@ -29,10 +29,10 @@ const { Node, getLinkFunction } = require('./task_log_node_loader.js');
 /**
  * @const {number} DEFAULT_LEVEL The default value of a node level. In a graph
  * of a work flow. The task has a less (-1) level value comparing to tasks it
- * triggers. 'Trigger' here means 'next' tasks, 'embedded' tasks or 'mulitple'
+ * triggers. 'Trigger' here means 'next' tasks, 'embedded' tasks or 'multiple'
  * tasks.
  */
-const DEFAULT_LEVEL = 1;
+const DEFAULT_LEVEL = 10;
 
 /**
  * @const {number} MAX_LEVEL To prevent a loop in a workflow, the loading
@@ -96,7 +96,7 @@ class TaskConfigNodeLoader {
    * flow.
    * Besides the given taskConfig, this function it will also load following
    * other taskConfigs in a recursion way:
-   * 1. Its mulitple task if this is a multiple task.
+   * 1. Its multiple task if this is a multiple task.
    * 2. all embedded tasks if this is an embedded task.
    * 3. all its next tasks.
    *
@@ -107,11 +107,11 @@ class TaskConfigNodeLoader {
    *   object is used to add extra fields to let a TaskConfig node can reuse
    *   the same logic of a TaskLog Node, e.g. parentId, embeddedTag, so the
    *   taskConfigs can be connected as a workflow like taskLogs.
-   * @param {Object|undefined} parameters Appended parameters for the task.
+   * @param {Object|undefined} parameters Parameters for the task.
    * @return {!Map<string|number, Node>}
    */
   async loadNodes(taskConfigId, level = DEFAULT_LEVEL, nodeMap = new Map(),
-    options = {}, parameters) {
+    options = {}, parameters = this.parameters) {
     if (level > MAX_LEVEL) {
       const errorNode = {
         id: this.taskCounter++,
@@ -122,35 +122,39 @@ class TaskConfigNodeLoader {
       nodeMap.set(errorNode.id, errorNode);
       return nodeMap;
     }
-    this.appendParameters(parameters);
-    const currentNode = Object.assign(await this.getNode(taskConfigId), options);
+    const currentNode = Object.assign(
+      await this.getNode(taskConfigId, parameters), options);
     nodeMap.set(currentNode.id, currentNode);
     currentNode.link = this.getLink(taskConfigId);
     currentNode.level = level;
-    this.appendParameters(currentNode.appendedParameters);
+    const nextParameters = Object.assign(
+      {}, parameters, currentNode.appendedParameters);
     // A helper function to load a group of taskConfigs, e.g. next tasks or
     // embedded tasks.
     const loadTaskGroup = async (taskGroup, options) => {
       const tasks = getTaskArray(taskGroup);
       await Promise.all(tasks.map((task) => {
         const taskConfigId = task.taskId ? task.taskId : task;
-        const parameters = task.appendedParameters;
-        return this.loadNodes(taskConfigId, level + 1, nodeMap, options, parameters);
+        // Skip dynamic next tasks for TaskConfig. TaskLogs can connect this.
+        if (taskConfigId.indexOf('${') > -1) return;
+        const taskParameters =
+          Object.assign({}, nextParameters, task.appendedParameters);
+        return this.loadNodes(
+          taskConfigId, level + 1, nodeMap, options, taskParameters);
       }));
     }
-    // Load its mulitple sub task flow if this is a mulitple task.
+    // Load its multiple sub task flow if this is a multiple task.
     if (currentNode.type === TaskType.MULTIPLE) {
-      currentNode.tagHolded = `group${currentNode.id}`; // assign a multiple tag
+      currentNode.tagHeld = `group${currentNode.id}`; // assign a multiple tag
       currentNode.numberOfTasks = 'Runtime';
-      const multipleTag = currentNode.tagHolded;
-      await this.loadNodes(
-        currentNode.destination.taskId, level + 1, nodeMap, { multipleTag }
-      );
+      const multipleTag = currentNode.tagHeld;
+      await this.loadNodes(currentNode.destination.taskId, level + 1, nodeMap,
+        { multipleTag }, nextParameters);
     }
     // Load its all embedded tasks if this is an embedded task.
     if (currentNode.type === TaskType.KNOT && currentNode.embedded) {
-      currentNode.tagHolded = `group${currentNode.id}`;// assign an embedded tag
-      const embeddedTag = currentNode.tagHolded;
+      currentNode.tagHeld = `group${currentNode.id}`;// assign an embedded tag
+      const embeddedTag = currentNode.tagHeld;
       await loadTaskGroup(currentNode.embedded.tasks, { embeddedTag });
     }
     // Load its children(next) tasks.
@@ -161,27 +165,22 @@ class TaskConfigNodeLoader {
     return nodeMap;
   }
 
-  appendParameters(parameters) {
-    if (parameters)
-      this.parameters = Object.assign(this.parameters, parameters);
-  }
-
   /**
    * Gets a Node from a TaskConfig with the given TaskConfig Id.
    * @param {string|number} taskConfigId
+   * @param {object} parameters
    * @return {!Node}
    */
-  async getNode(taskConfigId) {
+  async getNode(taskConfigId, parameters) {
     const entity = await this.taskConfigDao.load(taskConfigId);
     if (entity) {
       const config = lodash.merge(lodash.pick(entity, TASK_CONFIG_PROPERTIES),
         {
           id: this.taskCounter++,
           taskId: taskConfigId,
-          status: TaskLogStatus.FINISHED, // To align with TaskConfig node
         });
       return JSON.parse(
-        replaceParameters(JSON.stringify(config), this.parameters, true));
+        replaceParameters(JSON.stringify(config), parameters, true));
     } else {
       console.warn(`TaskConfig ${taskConfigId} does not exist`);
       return {

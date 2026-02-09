@@ -228,7 +228,7 @@ const localApiRequester = async (namespace, file, bucket = undefined) => {
         throw new Error(`gs://${bucket}/${file} doesn't exist.`);
       }
     } else {
-      throw new Error(`Coundn't find file: ${file}`);
+      throw new Error(`Couldn't find file: ${file}`);
     }
   }
   const context = {eventId: 'test-demo-message'};

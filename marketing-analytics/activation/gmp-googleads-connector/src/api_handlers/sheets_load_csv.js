@@ -77,8 +77,12 @@ class GoogleSheetLoadCsv extends ApiHandler {
    */
   sendData(message, messageId, config) {
     if (!config.spreadsheetId && config.spreadsheetUrl) {
-      const id = /spreadsheets\/d\/([^\/]*)\//i.exec(config.spreadsheetUrl);
-      if (id) config.spreadsheetId = id[1];
+      const id = /spreadsheets\/d\/([^\/]*)(\/.*|$)/i.exec(config.spreadsheetUrl);
+      if (id) {
+        config.spreadsheetId = id[1];
+      } else {
+        this.logger.error('Fail to get spreadsheetId from:', config);
+      }
     }
     const spreadsheets = new Spreadsheets(
       config.spreadsheetId, this.getOption(config));

@@ -24,10 +24,11 @@ const {join} = require('path');
 const {
   api: { googleadsapi: { GoogleAdsApi: GoogleAds } },
   firestore: { getFirestoreDatabase },
+  utils: { replaceParameters },
 } = require('@google-cloud/nodejs-common');
 const {getSchemaFields} = require('./tasks/report/googleads_report_helper.js');
 const {TaskConfigDao} = require('./task_config/task_config_dao.js');
-const {guessSentinel} = require('./sentinel.js');
+const { guessSentinel, getDefaultParameters } = require('./sentinel.js');
 
 /**
  * Updates Sentinel Task Configs from a JSON object to Firestore or Datastore.
@@ -78,7 +79,7 @@ exports.uploadTaskConfig = async (taskConfig, parameters = {},
  *    fields are not supported in the report definition. Only its ancestor that
  *    is a GoogleAdsField can be in the report definition. However, the report
  *    data would be a JSON string with structure. To support the structure in
- *    BigQuery, an explict definition of the JSON object with required
+ *    BigQuery, an explicit definition of the JSON object with required
  *    properties need be put in the file 'googleads_report_helper.js'.
  * 3. Used those 'ancestor' field in previous case but without the structure
  *    definition in 'googleads_report_helper.js'.
@@ -113,7 +114,7 @@ exports.checkGoogleAdsReports = async (developerToken, folder = './') => {
     });
   });
   //2. Get GoogleAdsFields
-  const ads = new GoogleAds(developerToken);
+  const ads = new GoogleAds(process.env, { developerToken });
   const adsFields = await ads.searchReportField(fields);
   //3. if there are missing fields
   if (adsFields.length < fields.length) {
@@ -199,22 +200,39 @@ exports.checkGoogleAdsReports = async (developerToken, folder = './') => {
  * It won't trigger next tasks because it doesn't save TaskLog.
  *
  * @param {string} taskConfigId
- * @param {string=} parameters JSON string of parameters.
+ * @param {string=} data JSON string of parameters.
  * @return {!Promise<(string|undefined)>} Task job Id.
  */
-exports.startTaskFromLocal = async (taskConfigId, parameters = "{}",
+exports.startTaskFromLocal = async (taskConfigId, data = "{}",
     namespace = 'sentinel') => {
   console.log('Task: ', taskConfigId);
-  console.log('Parameters: ', parameters);
+  console.log('Parameters: ', data);
   console.log('Namespace: ', namespace);
   console.log('OAUTH2_TOKEN_JSON: ', process.env['OAUTH2_TOKEN_JSON']);
   const sentinel = await guessSentinel(namespace);
-  const task = await sentinel.prepareTask(taskConfigId, JSON.parse(parameters));
+
+  let parametersStr;
+  if (!data) {
+    parametersStr = '{}';
+  } else if (data.indexOf('${') === -1) { // No placeholder in parameters.
+    parametersStr = data;
+  } else { // There are placeholders in parameters. Need default values.
+    const regex = /\${([^}]*)}/g;
+    const parameters = data.match(regex).map((match) => {
+      return match.substring(2, match.length - 1);
+    });
+    const { timeZone, timezone } = JSON.parse(data);
+    const defaultParameters =
+      await getDefaultParameters(parameters, timeZone || timezone);
+    parametersStr = replaceParameters(data, defaultParameters);
+  }
+
+  const task = await sentinel.prepareTask(taskConfigId, JSON.parse(parametersStr));
   const startedTask = await task.start();
   const idDone = await task.isDone();
   if (idDone) {
     console.log('Task is done, continue to finish.', startedTask);
-    const newParameters = startedTask.parameters || parameters;
+    const newParameters = startedTask.parameters || data;
     console.log('new parameters', newParameters);
     const taskToFinish =
         await sentinel.prepareTask(taskConfigId, JSON.parse(newParameters));

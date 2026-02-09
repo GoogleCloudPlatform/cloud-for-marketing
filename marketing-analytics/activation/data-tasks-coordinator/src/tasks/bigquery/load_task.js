@@ -60,7 +60,7 @@ let LoadOptions;
  * `schemaSource` is a report task Id which generates report files and trigger
  * this load task to load data to BigQuery.
  * Sometimes BigQuery's autodetect can't figure out the schema correctly due to
- * the complexity of report. In that case, an explict schema is required to
+ * the complexity of report. In that case, an explicit schema is required to
  * complete the load job.
  * Some report systems, e.g. Google Ads report, through API offers a service to
  * indicate the data type and structure of reports. This makes it possible to
@@ -75,6 +75,7 @@ let LoadOptions;
  *    tableSchema:!TableSchema,
  *    schemaSource:string|undefined,
  *    schemaFile:!StorageFileConfig|undefined,
+ *    csvSafeColumnNames:boolean|undefined,
  *  }}
  */
 let LoadTaskDestination;
@@ -96,7 +97,7 @@ let LoadTaskConfig;
 
 /**
  * @const{number}
- * Rerty times if failed to start task.
+ * Retry times if failed to start task.
  * When the schema is from external source, e.g. a Google Ads report, there is
  * a chance that it failed to get the schema. A retry should solve this problem.
  */
@@ -161,7 +162,9 @@ class LoadTask extends BigQueryAbstractTask {
     if (!metadata.autodetect && !destination.tableSchema.schema) {
       destination.tableSchema.schema = await this.getSchemaForExternal_(
         destination, metadata, sourceFile);
-      this.logger.debug('External schema: ', destination.tableSchema.schema);
+      Object.assign(metadata, destination.tableSchema);
+      this.logger.debug('External schema: ',
+        JSON.stringify(destination.tableSchema.schema));
     }
     const storeTable = await this.getTableForLoading_(destination.table,
         destination.tableSchema);
@@ -267,21 +270,10 @@ class LoadTask extends BigQueryAbstractTask {
           { projectId: this.getCloudProject(sourceFile) });
         // Get first 100k bytes. This should be enough to cover the first line.
         const partialContent = await storageFile.loadContent(0, 100_000);
-        const headers = partialContent.split('\n')[0]
+        const { skipLeadingRows = 1 } = metadata;
+        const headers = partialContent.split('\n')[skipLeadingRows - 1]
           .split(metadata.fieldDelimiter || ',');
-        const fields = headers.map((header) => {
-          // replace all characters (expect digits, letters and underscore) with
-          // an underscore; add a leading underscore if it starts with a digit.
-          const name = header.trim().replace(/[^a-zA-Z0-9_]/g, '_')
-            .replace(/^([0-9])/, '_$1');
-          return {
-            name,
-            type: 'STRING',
-            mode: 'NULLABLE',
-          }
-
-        })
-        return { fields };
+        return this.getBigQuerySafeSchema(headers);
       }
     }
     throw new Error('Not schema defined in config or externally');

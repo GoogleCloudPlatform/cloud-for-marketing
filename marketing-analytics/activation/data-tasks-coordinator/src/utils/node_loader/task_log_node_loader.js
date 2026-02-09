@@ -25,7 +25,7 @@ const { TaskLogDao } = require('../../task_log/task_log_dao');
 /**
  * @const {number} DEFAULT_LEVEL The default value of a node level. In a graph
  * of a work flow. The task has a less (-1) level value comparing to tasks it
- * triggers. 'Trigger' here means 'next' tasks, 'embedded' tasks or 'mulitple'
+ * triggers. 'Trigger' here means 'next' tasks, 'embedded' tasks or 'multiple'
  * tasks.
  */
 const DEFAULT_LEVEL = 10;
@@ -46,15 +46,15 @@ const DEFAULT_LEVEL = 10;
  *  `taskId` is the TaskConfig Id.
  *
  *  `parentId` is the Id of the TaskLog that triggered this TaskLog.
- *  `tagHolded`, a knot(embedded) task or multiple task has a tag to be used to
- *     connecte to all tasks that it triggeres. These tags are called `Embedded
+ *  `tagHeld`, a knot(embedded) task or multiple task has a tag to be used to
+ *     connect to all tasks that it triggers. These tags are called `Embedded
  *     Tag` or `Multiple Tag`. For simplicity, those tags are saved as the
- *     `tagHolded` of the owner node.
+ *     `tagHeld` of the owner node.
  *
- *  `numberOfTasks` is the number of its mulitple tasks.
+ *  `numberOfTasks` is the number of its multiple tasks.
  *
- *  `embeddedTag` the tag of a task that is embeded in other task.
- *  `multipleTag` the tag of a task that belongs to a mulitple task.
+ *  `embeddedTag` the tag of a task that is embedded in other task.
+ *  `multipleTag` the tag of a task that belongs to a multiple task.
  *
  * @typedef {{
  *   id: string|number,
@@ -65,7 +65,7 @@ const DEFAULT_LEVEL = 10;
  *   type: string,
  *   taskId: string,
  *   parentId: string|number|undefined,
- *   tagHolded: string|number,
+ *   tagHeld: string|number,
  *   numberOfTasks: number|undefined,
  *   embeddedTag: string|undefined,
  *   multipleTag: string|undefined,
@@ -113,7 +113,7 @@ function getNodeFromTaskLog({ id, entity }) {
  */
 function getLinkFunction(kind, dataSource, databaseId, namespace, projectId) {
   /**
-   * Gets the link to Google Cloud Console of the Firstore entity with given Id.
+   * Gets the link to Google Cloud Console of the Firestore entity with given Id.
    * @param {string|number} id
    * @return {string|undefined}
    */
@@ -156,7 +156,7 @@ class TaskLogNodeLoader {
     this.databaseId = this.taskLogDao.databaseId || DEFAULT_DATABASE;
     // A cache map for tasks' type. A TaskLog entity only has 'taskId' which can
     // be used to load the TaskConfig which has the task 'type'. Use this map
-    // to cashe the tasks' types.
+    // to cache the tasks' types.
     this.taskConfigTypeCacheMap = new Map();
     this.getLink = getLinkFunction('TaskLog',
       this.dataSource, this.databaseId, this.namespace, this.projectId);
@@ -176,11 +176,11 @@ class TaskLogNodeLoader {
    * Returns a map of TaskLogId as the key and Node as the value for a workflow.
    * This is the main function to load the whole work flow. The given taskLogId
    * is expected to be one of the tasks on 'main' workflow which means it should
-   * not belong to any mulitple tasks or embedded tasks.
+   * not belong to any multiple tasks or embedded tasks.
    * Besides the given taskLog, this function it will also load following other
    * TaskLogs in a recursion way:
-   * 1. its multiple sub taskLogs if this is a mulitple task. It will only
-   *    load ONE sub taskLog because there might be too many instnaces.
+   * 1. its multiple sub taskLogs if this is a multiple task. It will only
+   *    load ONE sub taskLog because there might be too many instances.
    * 2. all embedded taskLogs if this is an embedded task.
    * 3. all its children taskLogs.
    * 4. its parent taskLog if there is a parentId.
@@ -199,11 +199,11 @@ class TaskLogNodeLoader {
     currentNode.type = await this.getTaskType(currentNode.taskId);
     currentNode.link = this.getLink(taskLogId);
     currentNode.level = level;
-    // Load its mulitple sub task flow if this is a mulitple task.
+    // Load its multiple sub task flow if this is a multiple task.
     const { multipleTag, numberOfTasks, embeddedTag }
       = JSON.parse(currentNode.parameters || '{}');
     if (currentNode.type === TaskType.MULTIPLE && multipleTag) {
-      currentNode.tagHolded = multipleTag;
+      currentNode.tagHeld = multipleTag;
       currentNode.numberOfTasks = numberOfTasks;
       if (numberOfTasks > 0) {
         const { taskId, id: multipleTaskLogId } =
@@ -215,7 +215,7 @@ class TaskLogNodeLoader {
     }
     // Load its all embedded taskLogs if this is an embedded task.
     if (currentNode.type === TaskType.KNOT && embeddedTag) {
-      currentNode.tagHolded = embeddedTag;
+      currentNode.tagHeld = embeddedTag;
       const embeddedTasks = await this.getNodesFromEmbeddedTask(embeddedTag);
       await Promise.all(
         embeddedTasks.map(({ id }) => this.loadNodes(id, level + 1, nodeMap))
@@ -261,7 +261,7 @@ class TaskLogNodeLoader {
 
   /**
    * Gets an array of nodes from the multiple tasks with a given multiple tag.
-   * By default, it only get one mulitple tasks as an example.
+   * By default, it only get one multiple tasks as an example.
    * @param {string} tag
    * @param {number=} limit The number of nodes that would be returned.
    * @return {!Array<Node>}

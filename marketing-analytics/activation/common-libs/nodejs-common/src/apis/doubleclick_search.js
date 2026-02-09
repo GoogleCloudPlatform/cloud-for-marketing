@@ -19,7 +19,6 @@
 
 'use strict';
 
-const {request} = require('gaxios');
 const { GoogleApiClient } = require('./base/google_api_client.js');
 const {
   getLogger,
@@ -65,47 +64,6 @@ let InsertConversionsConfig;
  * }}
  */
 let AvailabilityConfig;
-
-/**
- * Nodejs Google API client library doesn't export this type, so here is a
- * partial typedef of Report Request which only contains essential properties.
- * For complete definition, see:
- * https://developers.google.com/search-ads/v2/reference/reports/request
- * @typedef {{
- *    reportScope: {
- *      agencyId: string,
- *      advertiserId: string,
- *    },
- *    reportType: string,
- *    columns: Array<{
- *      columnName: string,
- *      headerText: string,
- *      startDate: string,
- *      endDate: string
- *    }>,
- *    filters: Array<{
- *      columnName: string,
- *      headerText: string,
- *      startDate: string,
- *      endDate: string
- *    }>|undefined,
- *    timeRange: {
- *      startDate: string,
- *      endDate: string,
- *      changedMetricsSinceTimestamp: datetime|undefined,
- *      changedAttributesSinceTimestamp: datetime|undefined,
- *    },
- *    downloadFormat: 'CSV'|'TSV',
- *    statisticsCurrency: 'usd'|'agency'|'advertiser'|'account',
- *    maxRowsPerFile: integer,
- *    includeDeletedEntities: boolean|undefined,
- *    includeRemovedEntities: boolean|undefined,
- *    verifySingleTimeZone: boolean|undefined,
- *    startRow: integer|undefined,
- *    rowCount: integer|undefined,
- * }}
- */
-let ReportRequest;
 
 /**
  * DoubleClick Search (DS) Ads 360 API v2 stub.
@@ -293,102 +251,12 @@ class DoubleClickSearch extends GoogleApiClient {
     });
     batchResult.errors = Array.from(errors);
   }
-
-  /**
-   * There are three steps to get asynchronous reports in SA360:
-   * 1. Call Reports.request() to specify the type of data for the report.
-   * 2. Call Reports.get() with the report id to check whether it's ready.
-   * 3. Call Reports.getFile() to the download the report files.
-   * @see https://developers.google.com/search-ads/v2/how-tos/reporting/asynchronous-requests
-   *
-   * This is the first step.
-   * @param {!ReportRequest} requestBody
-   * @return {!Promise<string>}
-   */
-  async requestReports(requestBody) {
-    const doubleclicksearch = await this.getApiClient();
-    const { status, data } = await doubleclicksearch.reports.request({ requestBody });
-    if (status >= 200 && status < 300) {
-      return data.id;
-    }
-    const errorMsg = `Fail to request reports: ${JSON.stringify(requestBody)}`;
-    this.logger.error(errorMsg, data);
-    throw new Error(errorMsg);
-  }
-
-  /**
-   * Returns the report file links if the report is ready or undefined if not.
-   * @param {string} reportId
-   * @return {!Promise<undefined|Array<{
-   *   url:string,
-   *   byteCount:string,
-   * }>>}
-   */
-  async getReportUrls(reportId) {
-    const doubleclicksearch = await this.getApiClient();
-    const { status, data } = await doubleclicksearch.reports.get({ reportId });
-    switch (status) {
-      case 200:
-        const {rowCount, files} = data;
-        this.logger.info(
-            `Report[${reportId}] has ${rowCount} rows and ${files.length} files.`);
-        return files;
-      case 202:
-        this.logger.info(`Report[${reportId}] is not ready.`);
-        break;
-      default:
-        const errorMsg =
-            `Error in get reports: ${reportId} with status code: ${status}`;
-        this.logger.error(errorMsg, data);
-        throw new Error(errorMsg);
-    }
-  }
-
-  /**
-   * Get the given part of a report.
-   * @param {string} reportId
-   * @param {number} reportFragment The index (based 0) of report files.
-   * @return {!Promise<string>}
-   */
-  async getReportFile(reportId, reportFragment) {
-    const doubleclicksearch = await this.getApiClient();
-    const response = await doubleclicksearch.reports.getFile(
-        {reportId, reportFragment});
-    if (response.status === 200) {
-      return response.data;
-    }
-    const errorMsg =
-        `Error in get file from reports: ${reportFragment}@${reportId}`;
-    this.logger.error(errorMsg, response);
-    throw new Error(errorMsg);
-  }
-
-  /**
-   * Returns a readable stream of the report.
-   * In case of the report is large, use stream directly to write out to fit in
-   * the resource limited environment, e.g. Cloud Functions.
-   * @param {string} url
-   * @return {!Promise<ReadableStream>}
-   */
-  async getReportFileStream(url) {
-    const auth = await this.getAuth();
-    const headers = await auth.getRequestHeaders();
-    const response = await request({
-      method: 'GET',
-      headers,
-      url,
-      responseType: 'stream',
-    });
-    return response.data;
-  }
-
 }
 
 module.exports = {
   DoubleClickSearch,
   InsertConversionsConfig,
   AvailabilityConfig,
-  ReportRequest,
   API_VERSION,
   API_SCOPES,
 };

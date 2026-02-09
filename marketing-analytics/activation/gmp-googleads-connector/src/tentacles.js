@@ -151,7 +151,7 @@ class Tentacles {
    *   load the ApiConfig based on `api` and `config`.
    *   A HTTP-based CF has been introduced to let other program can send more
    *   information (than GCS events) to start a TentaclesFile job. In this way,
-   *   this parameter is used to offer explicit configuraiton information,
+   *   this parameter is used to offer explicit configuration information,
    *   including `attributes` and `config`.
    * @param {object} adhocConfig.attributes The property `api` is required if
    *   this object is present.
@@ -162,7 +162,7 @@ class Tentacles {
   getLoadFileAndNudgeFn(adhocConfig = {}) {
     /**
      * Loads the GCS file and sent to Pub/Sub as messages, then sends a 'nudge'
-     * message to start the sendibng process.
+     * message to start the sending process.
      * @param {!ValidatedStorageFile} file Cloud Storage file information.
      * @return {!Promise<string|undefined>} The Id of TentaclesFile.
      */
@@ -431,7 +431,7 @@ class Tentacles {
         response.send({ error: error.message });
       }
     } else {
-      this.logger.error('Unknow data', parameters);
+      this.logger.error('Unknown data', parameters);
       response.send({
         error: `Missing data in request, ${JSON.stringify(parameters)}`,
       });
@@ -562,50 +562,45 @@ class Tentacles {
    */
   async passOneMessage_(sourceTopic, lockToken, timeout, targetTopic) {
     const subscriptionName = `${sourceTopic}-holder`;
-    /**
-     * Gets the message handler function for the pull subscription.
-     * @param {function(*)} resolver Function to call when promise is fulfilled.
-     * @return {function(!PubsubMessage):!Promise<!TransportResult>}
-     */
-    const getMessageHandler = (resolver) => {
-      return async (message) => {
-        const { id, length, attributes } = message;
-        const messageTag = `[${id}]@[${sourceTopic}]`;  // For log.
-        this.logger.debug(`Received ${messageTag} with data length: ${length}`);
-        const taskId = attributes.taskId;
-        attributes.lockToken = lockToken;
-        const transported = await this.tentaclesTaskDao.transport(taskId);
-        if (transported) {
-          const messageId = await this.pubsub.publish(targetTopic,
-            Buffer.from(message.data, 'base64').toString(), attributes);
-          this.logger.debug(
-            `Forward ${messageTag} as [${messageId}]@[${targetTopic}]`);
-          await this.pubsub.acknowledge(subscriptionName, message.ackId);
-          await this.tentaclesTaskDao.updateTask(taskId,
-            { apiMessageId: messageId, lockToken });
-          resolver(TransportResult.DONE);
-        } else {
-          this.logger.warn(
-            `Wrong status for ${messageTag} (duplicated?) Task [${taskId}].`);
-          await this.pubsub.acknowledge(subscriptionName, message.ackId);
-          resolver(TransportResult.DUPLICATED);
-        }
-      };
-    };
-    const subscription = await this.pubsub.getOrCreateSubscription(
-      sourceTopic, subscriptionName,
-      { ackDeadlineSeconds: 300, flowControl: { maxMessages: 1 } });
-    this.logger.debug(`Get subscription ${subscription.name}.`);
-    const subscriber = new Promise((resolver) => {
-      this.logger.debug(`Add messageHandler to Subscription:`, subscription);
-      subscription.once(`message`, getMessageHandler(resolver));
-    });
-    const result = await Promise.race([
-      subscriber,
-      wait(timeout * 1000, TransportResult.TIMEOUT),
-    ]);
-    this.logger.debug(`Remove messageHandler after ${result}.`);
-    subscription.removeAllListeners('message');
+
+    const start = Date.now();
+    const receivedMessages = await this.pubsub.pull(subscriptionName);
+    let result;
+    // XXX If this default waiting time is too short, a loop can be introduced
+    // here to try several times until the time (timeout) is reached.
+    if (receivedMessages.length === 0) {
+      this.logger.info('No messages received in seconds:',
+        (Date.now() - start) / 1000);
+      return TransportResult.TIMEOUT;
+    }
+    if (receivedMessages.length > 1) {
+      this.logger.warn('Get more than one message', receivedMessages.length);
+    }
+    const receivedMessage = receivedMessages[0];
+    const { ackId, message, deliveryAttempt } = receivedMessage;
+    const { messageId: id, attributes } = message;
+    const messageTag = `[${id}]@[${sourceTopic}]`;  // For log.
+    this.logger.debug(
+      `Received ${messageTag} with deliveryAttempt: ${deliveryAttempt}`);
+    const taskId = attributes.taskId;
+    attributes.lockToken = lockToken;
+    const transported = await this.tentaclesTaskDao.transport(taskId);
+    if (transported) {
+      const data = Buffer.from(message.data, 'base64').toString();
+      const messageId =
+        await this.pubsub.publish(targetTopic, data, attributes);
+      this.logger.info(
+        `Forward ${messageTag} as [${messageId}]@[${targetTopic}], length`,
+        data.length);
+      await this.tentaclesTaskDao.updateTask(taskId,
+        { apiMessageId: messageId, lockToken });
+      result = TransportResult.DONE;
+    } else {
+      this.logger.warn(
+        `Wrong status for ${messageTag} (duplicated?) Task [${taskId}].`);
+      result = TransportResult.DUPLICATED;
+    }
+    await this.pubsub.acknowledge(subscriptionName, ackId);
     return result;
   }
 

@@ -16,24 +16,24 @@
 
 'use strict';
 const lodash = require('lodash');
-const {nanoid} = require('nanoid');
+const { nanoid } = require('nanoid');
 const {
   utils: { apiSpeedControl, getProperValue, replaceParameters, requestWithRetry },
-  storage: {StorageFile},
+  storage: { StorageFile },
 } = require('@google-cloud/nodejs-common');
 const {
   TaskType,
   TaskGroup,
   StorageFileConfig,
   ErrorOptions,
-} = require('../task_config/task_config_dao.js');
-const {FIELD_NAMES} = require('../task_log/task_log_dao.js');
+} = require('../../task_config/task_config_dao.js');
+const { FIELD_NAMES } = require('../../task_log/task_log_dao.js');
 const { KnotTask } = require('./knot_task.js');
 const {
   TentaclesFileOption,
   getRequestOption,
   getFileUrl,
-} = require('./internal/speed_controlled_task.js');
+} = require('./speed_controlled_task.js');
 
 /**
  * `estimateRunningTime` Number of minutes to wait before doing the first task
@@ -58,8 +58,8 @@ const {
  *     taskId:string,
  *     target:'gcs',
  *     recordSize: number|undefined,
- *     file:(!StorageFileConfig|undefined),
  *     http:(!TentaclesFileOption|undefined),
+ *     file:(!StorageFileConfig|undefined),
  *   },
  *   multiple:{
  *     estimateRunningTime:(number|undefined),
@@ -126,10 +126,10 @@ class MultipleTask extends KnotTask {
     if (this.config.destination.target === 'pubsub') {
       numberOfTasks = await this.startThroughPubSub_(multipleTag, records);
     } else if (this.config.destination.target === 'gcs') {
-      if (this.config.destination.file) {
-        numberOfTasks = await this.startThroughStorage_(multipleTag, records);
-      } else if (this.config.destination.http) {
+      if (this.config.destination.http) {
         numberOfTasks = await this.startThroughHttp_(multipleTag, records);
+      } else if (this.config.destination.file) {
+        numberOfTasks = await this.startThroughStorage_(multipleTag, records);
       }
     }
     return {
@@ -152,7 +152,7 @@ class MultipleTask extends KnotTask {
    */
   async startThroughPubSub_(tag, records) {
     const qps = getProperValue(this.config.destination.qps, 1, false);
-    const { message: configedMessage } = this.config.destination;
+    const { message: configuredMessage } = this.config.destination;
     const managedSend = apiSpeedControl(
       this.recordSize, 1, qps, (batchResult) => batchResult);
     const sendSingleMessage = async (lines, batchId) => {
@@ -166,8 +166,8 @@ class MultipleTask extends KnotTask {
       }
       const finalParameters =
         Object.assign({}, this.parameters, extraParameters);
-      const message = configedMessage
-        ? replaceParameters(JSON.stringify(configedMessage), finalParameters)
+      const message = configuredMessage
+        ? replaceParameters(JSON.stringify(configuredMessage), finalParameters)
         : JSON.stringify(finalParameters);
       try {
         await this.taskManager.startTasks(
@@ -195,10 +195,10 @@ class MultipleTask extends KnotTask {
   async getRecordsFromFile_(sourceFile) {
     /** @const {StorageFile} */
     const storageFile = StorageFile.getInstance(
-        sourceFile.bucket, sourceFile.name,
-        {projectId: this.getCloudProject(sourceFile)});
+      sourceFile.bucket, sourceFile.name,
+      { projectId: this.getCloudProject(sourceFile) });
     const records = (await storageFile.loadContent()).split('\n')
-        .filter((record) => !!record); // filter out empty lines.
+      .filter((record) => !!record); // filter out empty lines.
     return records;
   }
 
@@ -211,7 +211,7 @@ class MultipleTask extends KnotTask {
    * @return {Array<string>} Array of record (JSON string).
    * @private
    */
-  getRecordsFromCsv_({header, records}) {
+  getRecordsFromCsv_({ header, records }) {
     const fields = header.split(',').map((field) => field.trim());
     return records.split('\n').map((line) => {
       const record = {}
@@ -253,10 +253,10 @@ class MultipleTask extends KnotTask {
     /** @type {StorageFileConfig} */
     const destination = this.config.destination.file;
     const outputFile = StorageFile.getInstance(
-        destination.bucket, destination.name, {
-          projectId: destination.projectId,
-          keyFilename: destination.keyFilename,
-        });
+      destination.bucket, destination.name, {
+      projectId: destination.projectId,
+      keyFilename: destination.keyFilename,
+    });
     await outputFile.getFile().save(content);
     return tasks.length;
   }
@@ -346,8 +346,8 @@ class MultipleTask extends KnotTask {
       value: this.parameters[FIELD_NAMES.MULTIPLE_TAG],
     }];
     return shouldCheck
-        ? this.areTasksFinished(filter, this.parameters.numberOfTasks)
-        : false;
+      ? this.areTasksFinished(filter, this.parameters.numberOfTasks)
+      : false;
   }
 }
 

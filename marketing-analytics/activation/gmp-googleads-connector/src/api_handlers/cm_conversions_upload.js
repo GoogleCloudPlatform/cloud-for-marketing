@@ -62,7 +62,7 @@ let CampaignManagerConfig;
 /**
  * Conversion upload for Campaign Manager.
  */
-class CampaingManagerConversionUpload extends ApiHandler {
+class CampaignManagerConversionUpload extends ApiHandler {
 
   /** @override */
   getSpeedOptions(config) {
@@ -108,15 +108,15 @@ class CampaingManagerConversionUpload extends ApiHandler {
     const profileId = await dfaReporting.getProfileId(config.cmAccountId);
     config.cmConfig.profileId = profileId;
     const managedSend = this.getManagedSendFn(config);
-    const configedUpload = dfaReporting.getUploadConversionFn(config.cmConfig);
-    return managedSend(configedUpload, records, messageId);
+    const configuredUpload = dfaReporting.getUploadConversionFn(config.cmConfig);
+    return managedSend(configuredUpload, records, messageId);
   };
 }
 
 /** API name in the incoming file name. */
-CampaingManagerConversionUpload.code = 'CM';
+CampaignManagerConversionUpload.code = 'CM';
 
 module.exports = {
   CampaignManagerConfig,
-  CampaingManagerConversionUpload,
+  CampaignManagerConversionUpload,
 };

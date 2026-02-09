@@ -52,7 +52,6 @@ GOOGLE_CLOUD_APIS["cloudscheduler.googleapis.com"]="Cloud Scheduler API"
 
 # Description of external APIs.
 INTEGRATION_APIS_DESCRIPTION=(
-  "Batch Prediction on Cloud AutoML API" # GCP API won't use OAuth.
   "Batch Prediction on Vertex AI API" # GCP API won't use OAuth.
   "Download Google Ads Reports"
   "Download Campaign Manager Reports"
@@ -65,7 +64,6 @@ INTEGRATION_APIS_DESCRIPTION=(
 
 # All build-in external APIs.
 INTEGRATION_APIS=(
-  "automl.googleapis.com"
   "aiplatform.googleapis.com"
   "googleads.googleapis.com"
   "dfareporting.googleapis.com"
@@ -192,7 +190,7 @@ confirm_external_tasks() {
   printf '%s\n' "Step ${STEP}: Confirm the integration with external tasks..."
   cat <<EOF
   This solution can do different external tasks, including batch prediction of \
-AutoML Tables API, or downloading reports from Google Ads, Campaign Manager or \
+Vertex AI API, or downloading reports from Google Ads, Campaign Manager or \
 Display & Video 360, etc. To enable them, corresponding APIs need to be \
 enabled and an authentication is required.
 EOF
@@ -248,11 +246,10 @@ Cloud Storage bucket [${GCS_BUCKET}]."
 # Arguments:
 #   None
 #######################################
-deploy_cloud_functions_workflow_reportor(){
+deploy_cloud_functions_workflow_reporter(){
   local cf_flag=()
   cf_flag+=(--entry-point=reportWorkflow)
   cf_flag+=(--trigger-http)
-  cf_flag+=(--no-gen2)
   set_cloud_functions_default_settings cf_flag
   printf '%s\n' "  . '${PROJECT_NAMESPACE}_report' support HTTP request to \
 report a Sentinel workflow."
@@ -464,6 +461,8 @@ EOF
     auth="OAUTH2_TOKEN_JSON=$(pwd)/${OAUTH2_TOKEN_JSON}"
   elif [[ -f "$(pwd)/${SA_KEY_FILE}" ]]; then
     auth="API_SERVICE_ACCOUNT=$(pwd)/${SA_KEY_FILE}"
+  else
+    auth="NO_LOCAL_AUTH=true"
   fi
   printf '%s\n' "  Setting environment variable of auth: ${auth}"
   env "${auth}" "DEBUG=true" node -e "require('./index.js').startTaskFromLocal(\

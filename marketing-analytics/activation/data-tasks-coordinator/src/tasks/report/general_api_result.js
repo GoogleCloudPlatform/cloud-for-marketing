@@ -24,8 +24,8 @@ const { Report } = require('./base_report.js');
 /**
  * General API Result class.
  * This report task presents a general Google Api stub class based on Google API
- * Client Libraries. By following naming convension, this task can extract a
- * kind of data from the given API. It will hanlde 'nextPageToken' and assemble
+ * Client Libraries. By following naming convention, this task can extract a
+ * kind of data from the given API. It will handle 'nextPageToken' and assemble
  * the results into one array.
  *
  * The supported API should be implemented in the nodejs-common lib with
@@ -42,9 +42,9 @@ class GeneralApiResult extends Report {
 
   constructor(config, apiStub) {
     super(config);
-    const { packageName: configedPackage, api: className } = this.config;
+    const { packageName: configuredPackage, api: className } = this.config;
     const packageName =
-      configedPackage ? configedPackage : className.toLowerCase();
+      configuredPackage ? configuredPackage : className.toLowerCase();
     this.apiStub =
       apiStub || new api[packageName][className](super.getOption());
   }
@@ -70,12 +70,13 @@ class GeneralApiResult extends Report {
       resource,
       functionName = 'list',
       args,
+      init,
       limit = 0,
       entityPath,
       pageTokenPath,
       fieldMask,
     } = this.config;
-    const apiClient = await this.apiStub.getApiClient();
+    const apiClient = await this.apiStub.getApiClient(init);
     const functionObject = getObjectByPath(apiClient, resource);
     const transformFn =
       fieldMask ? getFilterAndStringifyFn(fieldMask) : JSON.stringify;
@@ -98,7 +99,7 @@ class GeneralApiResult extends Report {
 }
 
 /**
- * Getst the arguments for next page (request) of the same Api request.
+ * Gets the arguments for next page (request) of the same Api request.
  * @param {string} pageTokenPath
  * @param {string} value
  * @return {object} Extra arguments for next page (request).

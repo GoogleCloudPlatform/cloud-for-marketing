@@ -19,8 +19,7 @@
 'use strict';
 
 const {Report, ReportConfig} = require('./base_report.js');
-const {CampaignManagerReport} = require('./campaign_manager_report.js');
-const {DoubleClickSearchReport} = require('./doubleclick_search_report.js');
+const { CampaignManagerReport } = require('./campaign_manager_report.js');
 const { SearchAdsReport } = require('./search_ads_report.js');
 const {DoubleClickBidManagerReport} =
     require('./doubleclick_bidmanager_report.js');
@@ -34,7 +33,6 @@ const { GoogleAdsReport } = require('./googleads_report_api.js');
 const REPORTING_FACTORY = Object.freeze({
   'CM': CampaignManagerReport,
   'CM360': CampaignManagerReport,// Alternative code support
-  'DS': DoubleClickSearchReport, // This will be discontinued after 2024/07
   'SA360': SearchAdsReport,
   'DV360': DoubleClickBidManagerReport,
   'API': GeneralApiResult,

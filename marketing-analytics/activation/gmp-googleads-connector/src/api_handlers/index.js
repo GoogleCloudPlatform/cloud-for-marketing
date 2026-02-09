@@ -21,11 +21,9 @@
 const { ApiHandlerFunction, ApiHandler } = require('./api_handler.js');
 const { GoogleAnalyticsConfig, GoogleAnalyticsDataImport }
   = require('./ga_data_import.js');
-const { MeasurementProtocolConfig, GoogleAnalyticsMeasurementProtocol }
-  = require('./ga_measurement_protocol.js');
 const { MpGa4IntegrationConfig, MeasurementProtocolForGoogleAnalytics4 }
   = require('./ga4_measurement_protocol.js');
-const { CampaignManagerConfig, CampaingManagerConversionUpload }
+const { CampaignManagerConfig, CampaignManagerConversionUpload }
   = require('./cm_conversions_upload.js');
 const { SearchAdsConfig, SearchAdsConversionUpload }
   = require('./sa_conversions_insert.js');
@@ -50,7 +48,7 @@ const { CloudFunctionInvokeConfig, CloudFunctionInvoke }
  * API configuration types for all APIs that Tentacles supports.
  *
  * @typedef {(!GoogleAnalyticsConfig|!CampaignManagerConfig|
- * !MeasurementProtocolConfig|!SftpConfig|!SheetsLoadConfig|
+ * |!SftpConfig|!SheetsLoadConfig|
  * !SearchAdsConfig|!PubSubMessageConfig|
  * !GoogleAdsConversionConfig|!GoogleAdsCustomerMatchConfig|
  * !GoogleAdsOfflineUserDataJobConfig|!MpGa4IntegrationConfig|
@@ -63,9 +61,8 @@ let ApiConfigItem;
  * @type {!Array<!ApiHandler>}
  */
 const API_HANDLERS = [
-  CampaingManagerConversionUpload,
+  CampaignManagerConversionUpload,
   GoogleAnalyticsDataImport,
-  GoogleAnalyticsMeasurementProtocol,
   MeasurementProtocolForGoogleAnalytics4,
   GoogleAdsClickConversionUpload,
   GoogleAdsCallConversionUpload,
@@ -81,7 +78,7 @@ const API_HANDLERS = [
 
 /**
  * Gets all supported API names.
- * Only used for bash script to generate Pub/Sub topics/subscriptons.
+ * Only used for bash script to generate Pub/Sub topics/subscriptions.
  * @return {!Array<string>}
  */
 const getApiNameList = () => {

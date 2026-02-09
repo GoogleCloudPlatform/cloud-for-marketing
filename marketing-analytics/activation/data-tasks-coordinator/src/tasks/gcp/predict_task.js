@@ -18,10 +18,9 @@
 
 'use strict';
 
-const {BaseTask} = require('./base_task.js');
-const {PREDICTION_SERVICE} = require('./predict/base_predict.js');
-const {AutoMlPredict} = require('./predict/automl_predict.js');
-const {VertexPredict} = require('./predict/vertex_predict.js');
+const { BaseTask } = require('../base_task.js');
+const { PREDICTION_SERVICE } = require('./predict/base_predict.js');
+const { VertexPredict } = require('./predict/vertex_predict.js');
 
 /** @const {string} The prediction job identity name. */
 const JOB_ID_PARAMETER = 'operationName';
@@ -29,7 +28,9 @@ const JOB_ID_PARAMETER = 'operationName';
 /**
  * Creates a batch prediction job and get the output information (BigQuery or
  * Cloud Storage). This task supports different external prediction services,
- * including AutoML Tables API, Vertex AI batch prediction.
+ * e.g. Vertex AI batch prediction.
+ * Google Cloud AutoML Tables was retired on April 30, 2024. Please migrate to
+ * Vertex AI instead.
  */
 class PredictTask extends BaseTask {
 
@@ -48,7 +49,7 @@ class PredictTask extends BaseTask {
   async doTask() {
     const jobName = await this.predictService.batchPredict(this.config);
     return {
-      parameters: this.appendParameter({[JOB_ID_PARAMETER]: jobName}),
+      parameters: this.appendParameter({ [JOB_ID_PARAMETER]: jobName }),
     };
   }
 
@@ -63,20 +64,18 @@ class PredictTask extends BaseTask {
     const jobName = this.parameters[JOB_ID_PARAMETER];
     const predictOutput = await this.predictService.getPredictOutput(jobName);
     return {
-      parameters: this.appendParameter({predictOutput}),
+      parameters: this.appendParameter({ predictOutput }),
     };
   }
 
   /**
    * Gets the corresponding prediction service based on config.
-   * @param {PREDICTION_SERVICE=} api, default is AutoMl Tables API
-   * @return {VertexPredict|AutoMlPredict}
+   * @param {PREDICTION_SERVICE=} api, default is Vertex AI API
+   * @return {VertexPredict}
    * @private
    */
-  getPredictService_(api = PREDICTION_SERVICE.AUTOML_TABLES) {
+  getPredictService_(api = PREDICTION_SERVICE.VERTEX_AI) {
     switch (api) {
-      case PREDICTION_SERVICE.AUTOML_TABLES:
-        return new AutoMlPredict();
       case PREDICTION_SERVICE.VERTEX_AI:
         return new VertexPredict();
       default:

@@ -25,11 +25,11 @@ const { getLogger } = require('../components/utils.js');
 const API_SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/display-video',
 ]);
-const API_VERSION = 'v3';
+const API_VERSION = 'v4';
 
 /**
- * Display and Video 360 API v3 stub.
- * @see https://developers.google.com/display-video/api/reference/rest/v3
+ * Display and Video 360 API v4 stub.
+ * @see https://developers.google.com/display-video/api/reference/rest/v4
  * This is not the same to Reports Display & Video 360 API which is from Google
  * Bid Manager API.
  * @see https://developers.google.com/bid-manager/reference/rest

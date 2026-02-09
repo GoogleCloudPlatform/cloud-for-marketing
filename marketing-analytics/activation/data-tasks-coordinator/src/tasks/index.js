@@ -28,16 +28,18 @@ const { ExportSchemaTask } = require('./bigquery/export_schema_task.js');
 const { DeleteBigQueryTask } = require('./bigquery/delete_bigquery_task.js');
 const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
 const { CreateExternalTableTask } = require('./bigquery/create_external_table.js');
-const { CopyGcsTask } = require('./copy_gcs_task.js');
+const { CopyGcsTask } = require('./gcp/copy_gcs_task.js');
+const { ExecuteNotebookTask } = require('./gcp/execute_notebook_task.js');
+const { InvokeCloudFunctionTask } = require('./gcp/invoke_cloud_function_task.js');
 const { GmcXmlFeedToJsonlTask } = require('./gmc/gmc_xml_feed_to_jsonl_task.js');
 const { GmcWebpageFetch } = require('./gmc/gmc_webpage_fetcher.js');
-const { DownloadTask } = require('./download_task.js');
-const { PredictTask } = require('./predict_task.js');
+const { DownloadTask } = require('./external/download_task.js');
+const { PredictTask } = require('./gcp/predict_task.js');
 const { QueryAdhTask } = require('./query_adh_task.js');
 const { ReportTask } = require('./report_task.js');
-const { KnotTask } = require('./knot_task.js');
+const { KnotTask } = require('./internal/knot_task.js');
 const { SpeedControlledTask } = require('./internal/speed_controlled_task.js');
-const { MultipleTask } = require('./multiple_task.js');
+const { MultipleTask } = require('./internal/multiple_task.js');
 const { NotifyTask } = require('./external/notify_task.js');
 
 /**
@@ -53,9 +55,11 @@ const ALL_TASKS = Object.freeze({
   [TaskType.DATA_TRANSFER]: DataTransferTask,
   [TaskType.CREATE_EXTERNAL]: CreateExternalTableTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
+  [TaskType.EXECUTE_NOTEBOOK]: ExecuteNotebookTask,
+  [TaskType.INVOKE_CLOUD_FUNCTION]: InvokeCloudFunctionTask,
   [TaskType.DOWNLOAD]: DownloadTask,
   [TaskType.GMC_XML_FEED_TO_JSONL]: GmcXmlFeedToJsonlTask,
-  [TaskType.GMC_WEBPAGE_FETECHER]: GmcWebpageFetch,
+  [TaskType.GMC_WEBPAGE_FETCHER]: GmcWebpageFetch,
   [TaskType.PREDICT]: PredictTask,
   [TaskType.QUERY_ADH]: QueryAdhTask,
   [TaskType.REPORT]: ReportTask,

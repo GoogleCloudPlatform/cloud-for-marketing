@@ -29,7 +29,7 @@ const lodash = require('lodash');
  * data that will be sent out in one single request.
  * Some APIs allows partial failure: it will take those correct data and
  * response with reasons for those failed ones. 'groupedFailed' uses error
- * message as the key, and tthe array of related failed lines(records) as value.
+ * message as the key, and the array of related failed lines(records) as value.
  * Some APIs upload whole file. In this case, there will be not 'numberOfLines'
  * or 'failedLines', etc.
  * @typedef {{
@@ -594,6 +594,19 @@ const changeObjectNamingFromLowerCamelToSnake = (obj) => {
 };
 
 /**
+ * Converts a string to be a safe column name for BigQuery table.
+ * Only keep letters, digits and underscore and replace all other characters
+ * with underscores. If the string starts with a digit, add a leading
+ * underscore to it.
+ *
+ * @param {string} str
+ * @return {string}
+ */
+const changeStringToBigQuerySafe = (str) => {
+  return str.trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/^([0-9])/, '_$1');
+}
+
+/**
  * Generates a function that can convert a given JSON object to a JSON string
  * with only specified fields(fieldMask), in specified naming convention.
  * @param {string} fieldMask The 'fieldMask' string from response.
@@ -658,6 +671,7 @@ module.exports = {
   changeNamingFromLowerCamelToSnake,
   changeObjectNamingFromSnakeToLowerCamel,
   changeObjectNamingFromLowerCamelToSnake,
+  changeStringToBigQuerySafe,
   getFilterAndStringifyFn,
   requestWithRetry,
 };

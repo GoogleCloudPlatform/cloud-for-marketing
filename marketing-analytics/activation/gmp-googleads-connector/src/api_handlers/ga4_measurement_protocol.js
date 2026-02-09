@@ -102,8 +102,8 @@ class MeasurementProtocolForGoogleAnalytics4 extends ApiHandler {
    */
   sendDataInternal(mpGa4, records, messageId, config) {
     const managedSend = this.getManagedSendFn(config);
-    const configedUpload = mpGa4.getSinglePingFn(config.mpGa4Config);
-    return managedSend(configedUpload, records, messageId);
+    const configuredUpload = mpGa4.getSinglePingFn(config.mpGa4Config);
+    return managedSend(configuredUpload, records, messageId);
   };
 }
 

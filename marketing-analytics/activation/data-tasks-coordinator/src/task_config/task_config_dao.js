@@ -39,10 +39,14 @@ const TaskType = {
   // GMC Feed convertor tasks
   DOWNLOAD: 'download',
   GMC_XML_FEED_TO_JSONL: 'gmc_xml_feed_to_jsonl',
-  GMC_WEBPAGE_FETECHER: 'gmc_webpage_fetcher',
+  GMC_WEBPAGE_FETCHER: 'gmc_webpage_fetcher',
   // Cloud Storage tasks
   COPY_GCS: 'copy_gcs',
-  // AutoML Tables API
+  // Execute Notebook
+  EXECUTE_NOTEBOOK: 'execute_notebook',
+  // Invoke Cloud Function
+  INVOKE_CLOUD_FUNCTION: 'invoke_cloud_function',
+  // Batch prediction API
   PREDICT: 'predict',
   // Report tasks
   REPORT: 'report',

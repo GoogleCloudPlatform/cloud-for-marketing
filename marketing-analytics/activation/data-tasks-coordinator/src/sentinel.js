@@ -25,6 +25,7 @@ const {
     validatedStorageTrigger,
   },
   pubsub: {EnhancedPubSub, getMessage,},
+  secretmanager: { SecretManager },
   utils: {getLogger, replaceParameters,},
 } = require('@google-cloud/nodejs-common');
 const {
@@ -67,13 +68,6 @@ const {
 } = require('./utils/adapter/mermaid_flowchart.js');
 
 /**
- * String value of BigQuery Data Transfer job status 'SUCCEEDED'
- * in BigQuery Data Transfer pubsub messages.
- * @const {string}
- */
-const DATATRANSFER_JOB_STATUS_DONE = 'SUCCEEDED';
-
-/**
  * Types of internal (intrinsic) tasks.
  * @enum {string}
  */
@@ -84,8 +78,7 @@ const INTERNAL_TASK_TYPE = Object.freeze({
 /**
  * Sentinel is a Cloud Functions based solution to coordinate BigQuery related
  * jobs(tasks), e.g. loading file from Cloud Storage, querying or exporting data
- * to Cloud Storage. Besides these jobs, it also support AutoML Tables batch
- * prediction job.
+ * to Cloud Storage. Besides these jobs, it also support many other tasks.
  */
 class Sentinel {
 
@@ -211,7 +204,7 @@ class Sentinel {
       if (this.isBigQueryLoggingMessage_(message)) {
         return this.finishBigQueryTask_(message);
       }
-      throw new Error(`Unknown message: ${getMessage(message)}`);
+      this.logger.error(getMessage(message));
     };
     return coordinateTask;
   }
@@ -223,7 +216,7 @@ class Sentinel {
   }
 
   /** Starts the task based on a Pub/sub message. */
-  startTaskByMessage_(message, context) {
+  async startTaskByMessage_(message, context) {
     const attributes = message.attributes || {};
     const data = getMessage(message);
     this.logger.debug('message.data decoded:', data);
@@ -239,9 +232,10 @@ class Sentinel {
       const parameters = data.match(regex).map((match) => {
         return match.substring(2, match.length - 1);
       });
-      const {timezone} = JSON.parse(data);
-      parametersStr = replaceParameters(data,
-          getDefaultParameters(parameters, timezone));
+      const { timeZone, timezone } = JSON.parse(data);
+      const defaultParameters =
+        await getDefaultParameters(parameters, timeZone || timezone);
+      parametersStr = replaceParameters(data, defaultParameters);
     }
     const taskLog = {
       parameters: parametersStr,
@@ -511,13 +505,14 @@ class Sentinel {
       taskLogId,
       taskConfigId,
       lastRun,
+      timeZone = 'UTC',
       responseContent = 'json',
     } = parameters;
     // default output
     const output =
       Object.assign({ target: 'mermaid', format: 'dev' }, parameters.output);
-    const { nodes, title } =
-      await this.getWorkflowNodesAndTitle_(taskLogId, taskConfigId, lastRun);
+    const { nodes, title } = await this.getWorkflowNodesAndTitle_(
+      taskLogId, taskConfigId, lastRun, timeZone);
     const { target, format } = output;
     let result;
     if (target === 'mermaid') {
@@ -539,28 +534,43 @@ class Sentinel {
   }
 
   /**
-   * Returns the array of nodes based on given TaksLog Id or TaskConfig Id.
+   * Returns the array of nodes based on given TaskLog Id or TaskConfig Id.
    * 1. If given a TaskLodId, it returns the workflow execution result;
    * 2. If given a TaskConfigId and with a 'lastRun' as 'true', it returns the
    *    latest execution result; if there is no execution data or no 'lastRun'
-   *    is set, it returns the defintion of this workflow.
+   *    is set, it returns the definition of this workflow.
    * @param {string|number|undefined} taskLogId
    * @param {string|number|undefined} taskConfigId
    * @param {string|undefined} lastRun
+   * @param {string|undefined} timeZone
    * @return {{nodes:Array<Node>, title: string|undefined}} The empty (undefined)
-   *     nodes is allowed as the chart will be blank with the title visiable.
+   *     nodes is allowed as the chart will be blank with the title visible.
    * @private
    */
-  async getWorkflowNodesAndTitle_(taskLogId, taskConfigId, lastRun) {
+  async getWorkflowNodesAndTitle_(taskLogId, taskConfigId, lastRun, timeZone) {
     let nodes, title, targetLogId;
+
+    /**
+     * Returns a string stands for the `date` value from database.
+     * Firestore returns `date` value as a Timestamp object which can be
+     * converted to JavaScript `Date` by the function `toDate`.
+     * Datastore returns `Date` directly and has no such method.
+     *
+     * @param {Date|Timestamp} obj
+     * @return {string}
+     */
+    const getTimeString = (obj) => {
+      const date = obj.toDate ? obj.toDate() : obj;
+      return date.toLocaleString('en', { timeZone });
+    }
     if (taskLogId) {
       const taskLog = await this.taskLogDao.load(taskLogId);
       if (!taskLog) {
         title = `Error_Not_found_TaskLogId ${taskLogId}`;
       } else {
-        const startTime = taskLog.createTime.toDate();
+        const startTime = getTimeString(taskLog.createTime);
         title = `${taskLog.taskId}' execution ${taskLogId},`
-          + ` started at ${startTime.toUTCString()}`;
+          + ` started at ${startTime}`;
         targetLogId = taskLogId;
       }
     } else if (taskConfigId) {
@@ -570,9 +580,8 @@ class Sentinel {
           title = `No ${taskConfigId}'s logs found. Show the workflow instead`;
         } else {
           targetLogId = taskLog.id;
-          const startTime = taskLog.entity.createTime.toDate();
-          title = `${taskConfigId}' latest execution,`
-            + ` started at ${startTime.toUTCString()}`;
+          const startTime = getTimeString(taskLog.entity.createTime);
+          title = `${taskConfigId}' latest execution, started at ${startTime}`;
         }
       } else {
         title = `${taskConfigId} workflow`;
@@ -581,7 +590,33 @@ class Sentinel {
     if (targetLogId) {
       const logNodeLoader =
         new TaskLogNodeLoader(this.taskLogDao, this.taskConfigDao);
-      nodes = await logNodeLoader.getWorkFlow(targetLogId);
+      const logs = await logNodeLoader.getWorkFlow(targetLogId);
+      const configNodeLoader = new TaskConfigNodeLoader(this.taskConfigDao);
+      const configs = await configNodeLoader.getWorkFlow(taskConfigId);
+      nodes = [];
+      outer: for (let i = 0; i < configs.length; i++) {
+        const config = configs[i];
+        for (let j = 0; j < logs.length; j++) {
+          const log = logs[j];
+          if (log.taskId === config.taskId && log.level === config.level) {
+            nodes.push(log);
+            configs.forEach((c) => {
+              if (c.parentId === config.id) c.parentId = log.id;
+              if (config.tagHeld) {
+                if (c.embeddedTag === config.tagHeld) c.embeddedTag = log.tagHeld;
+                if (c.multipleTag === config.tagHeld) c.multipleTag = log.tagHeld;
+              }
+            });
+            logs.splice(j, 1);
+            continue outer;
+          }
+        }
+        config.isTaskConfig = true;
+        nodes.push(config);
+      }
+      logs.forEach((log) => {
+        nodes.push(log);
+      });
     } else if (taskConfigId) {
       const configNodeLoader = new TaskConfigNodeLoader(this.taskConfigDao);
       nodes = await configNodeLoader.getWorkFlow(taskConfigId);
@@ -648,13 +683,14 @@ const getDatePartition = (filename) => {
  *       e.g. yesterday_sub_X, yesterday_hyphenated, etc.
  * Parameters get values ignoring their cases status (lower or upper).
  * @param {Array<string>} parameters Names of default parameter.
- * @param {string=} timezone Default value is UTC.
+ * @param {string=} timeZone Default value is UTC.
  * @param {number=} unixMillis Unix timestamps in milliseconds. Default value is
  *     now. Used for test.
  * @return {{string: string}}
  */
-const getDefaultParameters = (parameters, timezone = 'UTC',
+const getDefaultParameters = async (parameters, timeZone = 'UTC',
     unixMillis = Date.now()) => {
+  const SECRET_NAME_PREFIX = 'SECRET/';
   const DATE_KEYWORDS = [
     'now',
     'today',
@@ -678,12 +714,24 @@ const getDefaultParameters = (parameters, timezone = 'UTC',
    * @param {string=} parameter
    * @return {string|number}
    */
-  const getDefaultValue = (parameter) => {
+  const getDefaultValue = async (parameter) => {
+    if (parameter.startsWith(SECRET_NAME_PREFIX)) {
+      const secretManager = new SecretManager();
+      const secretName = parameter.substring(SECRET_NAME_PREFIX.length);
+      const secret = await secretManager.access(secretName);
+      if (secret) {
+        return secret;
+      } else {
+        throw new Error(`Cannot find secret in parameters for ${parameter}.`);
+      }
+    }
     const regex = new RegExp(DATE_KEYWORDS.map((k) => `(${k})`).join('|'), 'ig');
     let realParameter = parameter.replace(/(yesterday)/ig, 'today_sub_1')
       .replace(regex, (match) => match.toLowerCase());
-    const now = DateTime.fromMillis(unixMillis, {zone: timezone});
+    const now = DateTime.fromMillis(unixMillis, { zone: timeZone });
     if (realParameter === 'now') return now.toISO(); // 'now' is a Date ISO String.
+    // 'lastHour' is used for hourly partitioning table.
+    if (realParameter === 'lastHour') return now.toFormat('yyyyMMddHH');
     if (realParameter === 'today') return now.toFormat('yyyyMMdd');
     // [last|current]_[week|month|quarter|year]_[start|end]
     if (realParameter.startsWith('last_')
@@ -743,9 +791,9 @@ const getDefaultParameters = (parameters, timezone = 'UTC',
   }
 
   const result = {};
-  parameters.forEach((parameter) => {
-    result[parameter] = getDefaultValue(parameter);
-  })
+  for (const parameter of parameters) {
+    result[parameter] = await getDefaultValue(parameter);
+  }
   return result;
 };
 

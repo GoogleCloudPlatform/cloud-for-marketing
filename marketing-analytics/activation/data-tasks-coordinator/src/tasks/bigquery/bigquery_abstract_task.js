@@ -19,6 +19,8 @@
 'use strict';
 
 const {BigQuery} = require('@google-cloud/bigquery');
+const { utils: { changeStringToBigQuerySafe } }
+  = require('@google-cloud/nodejs-common');
 const {BaseTask} = require('../base_task.js');
 
 /**
@@ -85,6 +87,26 @@ class BigQueryAbstractTask extends BaseTask {
       ];
     }
     return new BigQuery(authOptions);
+  }
+
+  /**
+   * Converts an array of string to BigQuery safe fields schema. The field type
+   * will be 'STRING'.
+   * It will replace all characters (expect digits, letters and underscore) with
+   * an underscore; add a leading underscore if it starts with a digit.
+   * @param {!Array<string>} headers
+   * @return {fields: Array}
+   */
+  getBigQuerySafeSchema(headers) {
+    const fields = headers.map((header) => {
+      const name = changeStringToBigQuerySafe(header);
+      return {
+        name,
+        type: 'STRING',
+        mode: 'NULLABLE',
+      }
+    });
+    return { fields };
   }
 }
 

@@ -12,7 +12,8 @@ and [Data Tasks Coordinator]. This library includes:
    for [GMP and Google Ads Connector]:
 
    - Google Analytics data import
-   - Google Analytics measurement protocol
+   - ~~Google Analytics measurement protocol~~ (This has
+ been deprecated since v2.4.4.)
    - Campaign Manager offline conversion upload
    - Search Ads 360 conversions upload
    - Google Ads click conversions upload
@@ -39,9 +40,11 @@ and [Data Tasks Coordinator]. This library includes:
      interface to operate data objects within or not a transaction on either
      Firestore Native mode or Firestore Datastore mode.
 
-   - **AutoMl Tables API**: Offers a unified entry to use this API based on
+   - ~~**AutoMl Tables API**: Offers a unified entry to use this API based on
      Google Cloud client library combined with REST requests to service
-     directly due to some functionalities missed in the client library.
+     directly due to some functionalities missed in the client library.~~(Google
+    Cloud AutoML Tables was retired on April 30, 2024. Please migrate to Vertex
+    AI instead.)
 
    - **Vertex AI API**: Offers a unified entry to use this API based on Google
      Cloud client library.
@@ -67,9 +70,11 @@ and [Data Tasks Coordinator]. This library includes:
      an adapter to wrap a Node8 Cloud Functions into Node6 and Node8 compatible
      functions.~~ (This has been removed since v1.9.0)
 
-4. A share library for [Bash] to facilitate installation tasks.
+4. ~~A share library for [Bash] to facilitate installation tasks.~~ (This has
+ been deprecated since v2.4.0. [Sheets Based Installer] is preferred.)
 
 [gmp and google ads connector]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/gmp-googleads-connector
 [data tasks coordinator]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/master/marketing-analytics/activation/data-tasks-coordinator
+[sheets based installer]: https://github.com/GoogleCloudPlatform/cloud-for-marketing/tree/main/marketing-analytics/activation/sheets-based-installer
 [comparison]: https://cloud.google.com/datastore/docs/firestore-or-datastore
 [bash]: https://www.gnu.org/software/bash/

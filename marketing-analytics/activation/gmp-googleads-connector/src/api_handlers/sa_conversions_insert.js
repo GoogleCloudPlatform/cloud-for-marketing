@@ -109,9 +109,9 @@ class SearchAdsConversionUpload extends ApiHandler {
       return batchResult;
     }
     const managedSend = this.getManagedSendFn(config);
-    const configedUpload =
+    const configuredUpload =
       doubleClickSearch.getInsertConversionFn(config.saConfig);
-    return managedSend(configedUpload, records, messageId);
+    return managedSend(configuredUpload, records, messageId);
   }
 
 }

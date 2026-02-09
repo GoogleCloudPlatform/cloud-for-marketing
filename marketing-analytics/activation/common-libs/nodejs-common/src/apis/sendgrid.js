@@ -64,11 +64,18 @@ class SendGrid extends RestfulApiBase {
 
   /** @override */
   async getDefaultHeaders() {
-    return Object.assign({}, super.getDefaultHeaders(), {
-      Authorization: `Bearer ${this.apiKey}`,
-    });
+    const headers = await super.getDefaultHeaders();
+    headers.set('Authorization', `Bearer ${this.apiKey}`);
+    return headers;
   }
 
+  /**
+   * No responseType is required for empty body response.
+   * @override
+   */
+  getRequesterOptions() {
+    return {};
+  }
   /**
    * Generates an email object for Sendgrid.
    * @param {!EmailOptions} options

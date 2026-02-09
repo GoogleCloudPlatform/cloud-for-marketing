@@ -33,7 +33,7 @@ const {
 } = require('./access_base.js');
 const {getLogger, wait} = require('../utils.js');
 
-/** @const {number} Max retry times when commit failed in a transcation. */
+/** @const {number} Max retry times when commit failed in a transaction. */
 const MAX_RETRY_TIMES = 5;
 
 /**
@@ -66,7 +66,7 @@ class DatastoreModeAccess {
    * Datastore uses 'Key' to identify entities. A 'Key' composes of Id, entity
    * kind and namespace. The 'id' can be 'undefined' if the next operation is
    * creating a new entity.
-   * The default Id of Datastore is a integar. However, Pub/sub can only send
+   * The default Id of Datastore is an integer. However, Pub/sub can only send
    * attributes with string values. This will cause the Datastore Ids to be
    * converted to strings. So here will try to change the id back to number if
    * possible.
@@ -106,7 +106,7 @@ class DatastoreModeAccess {
   async waitUntilGetObject(id) {
     const entity = await this.getObject(id);
     if (entity) return id;
-    this.logger.debug(`Wait 1 more second until the eneity@${id} is ready`);
+    this.logger.debug(`Wait 1 more second until the entity@${id} is ready`);
     return wait(1000, this.waitUntilGetObject(id));
   }
 

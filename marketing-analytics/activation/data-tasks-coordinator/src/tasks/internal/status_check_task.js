@@ -43,7 +43,7 @@ const CHECKED_TASK_STATUS = Object.freeze({
 
 /**
  * When the number of async tasks is lower, it is very likely it starts handle
- * the mutilple-layered embedded tasks.
+ * the multiple-layered embedded tasks.
  * @const{number}
  */
 const EXTRA_CHECK_THRESHOLD = 10;

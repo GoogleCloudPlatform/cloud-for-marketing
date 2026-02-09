@@ -16,6 +16,7 @@
 
 'use strict';
 
+const jsonLogic = require('json-logic-js');
 const {
   pubsub: {EnhancedPubSub},
   utils: { wait, getLogger },
@@ -122,8 +123,17 @@ class TaskManager {
         nextTaskId = nextTask;
       } else {
         nextTaskId = nextTask.taskId;
-        param = JSON.stringify(Object.assign(JSON.parse(parameterStr),
-          nextTask.appendedParameters));
+        const parameterObject = Object.assign(JSON.parse(parameterStr),
+          nextTask.appendedParameters);
+        param = JSON.stringify(parameterObject);
+        const condition = nextTask.condition;
+        if (condition) {
+          const shouldContinue = jsonLogic.apply(condition, parameterObject);
+          if (!shouldContinue) {
+            this.logger.debug(`Skip conditional task ${nextTaskId}, ${param}`);
+            return results;
+          }
+        }
       }
       const attributes = {
         ...defaultAttributes,

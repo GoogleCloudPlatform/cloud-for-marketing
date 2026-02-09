@@ -18,7 +18,7 @@
 'use strict';
 
 const { request } = require('gaxios');
-const { BaseTask } = require('./base_task.js');
+const { BaseTask } = require('../base_task.js');
 const { storage: { StorageFile } } = require('@google-cloud/nodejs-common');
 
 /**
@@ -63,12 +63,16 @@ class DownloadTask extends BaseTask {
   /** @override */
   async getContent_(parameters) {
     const { url, userAgent } = this.config.source;
-    const requestOptions = { url };
+    const requestOptions = {
+      url,
+      // responseType: 'stream',
+    };
     if (userAgent) {
       requestOptions.headers = { 'User-Agent': userAgent };
     }
     const response = await request(requestOptions);
-    return response.data;
+    // return response.data;
+    return response.data.map((o) => JSON.stringify(o)).join('\n');
   }
 
 }

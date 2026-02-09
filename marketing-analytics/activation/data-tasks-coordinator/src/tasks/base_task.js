@@ -38,8 +38,8 @@ const {TaskManager, TaskManagerOptions} = require('../task_manager.js');
  *     ExportTask and QueryTask. These tasks will get notification when BigQuery
  *     completes the job and Sentinel can continue to next tasks automatically.
  *  3. Manual asynchronous tasks. There's no notification when these task
- *     complete, so their status should be polled regularly, e.g. AutoML Tables
- *     API batchpredict job, or DCM generating offline reports.
+ *     complete, so their status should be polled regularly, e.g. Vertex AI
+ *     API batch predict job, or DCM generating offline reports.
  */
 class BaseTask {
 
