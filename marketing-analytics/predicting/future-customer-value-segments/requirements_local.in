@@ -54,7 +54,7 @@ overrides==7.7.0
 packaging==24.2
 pandas==2.2.3
 pbr==6.1.0
-pillow==11.0.0
+pillow==12.1.1
 pip-tools==7.4.1
 pluggy==1.5.0
 proto-plus==1.25.0
