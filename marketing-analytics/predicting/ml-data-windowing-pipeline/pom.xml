@@ -27,7 +27,7 @@
   <packaging>jar</packaging>
 
   <properties>
-    <avro.version>1.8.2</avro.version>
+    <avro.version>1.11.5</avro.version>
     <beam.version>2.14.0</beam.version>
     <bigquery.version>v2-rev374-1.23.0</bigquery.version>
     <google-clients.version>1.30.2</google-clients.version>
