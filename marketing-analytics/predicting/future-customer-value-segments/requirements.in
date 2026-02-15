@@ -21,7 +21,7 @@ docopt==0.6.2
 docstring_parser==0.16
 fastavro==1.9.7
 fasteners==0.19
-fonttools==4.55.0
+fonttools==4.61.0
 future==1.0.0
 google-api-core==2.23.0
 google-apitools==0.5.31
