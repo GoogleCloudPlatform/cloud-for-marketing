@@ -70,7 +70,7 @@ pymongo==4.10.1
 pyparsing==3.2.0
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 pytz==2024.2
 redis==5.2.0
 referencing==0.35.1
