@@ -9,6 +9,9 @@
     "src/"
   ],
   "main": "index.js",
+  "publishConfig": {
+    "registry": "https://us-npm.pkg.dev/oss-exit-gate-prod/cloud-for-marketing--npm/"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/GoogleCloudPlatform/cloud-for-marketing",
