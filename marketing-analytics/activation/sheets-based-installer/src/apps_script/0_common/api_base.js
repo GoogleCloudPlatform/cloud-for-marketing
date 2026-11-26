@@ -16,7 +16,7 @@
 
 /**
  * This class contains basic methods to interact with general APIs using the
- * @link {UrlFetchApp} and @link {ScriptApp} classes.
+ * {@link UrlFetchApp} and {@link ScriptApp} classes.
  * @see https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app?hl=en
  * The recommended way is to consume the API if it is available as 'Advanced
  * Google Service' within Apps Script's 'Resources' section. However if the
@@ -27,35 +27,84 @@
  * @abstract
  */
 class ApiBase {
+  /**
+   * Registers a response interceptor function to be called after each API call.
+   * The interceptor function should accept the response object and return a
+   * modified response object or throw an error if needed.
+   * @param {function(!Object): !Object} interceptorFn The interceptor function.
+   */
+  static registerInterceptor(interceptorFn) {
+    ApiBase.responseInterceptors.push(interceptorFn);
+  }
+
+  /**
+   * Sets the explicit token provider function.
+   * @param {?function(): ?string} provider
+   */
+  static setExplicitTokenProvider(provider) {
+    ApiBase.explicitTokenProvider = provider;
+  }
 
   /**
    * Returns the base Url of the Api request.
    * @return {string}
    * @abstract
    */
-  getBaseUrl() { }
+  getBaseUrl() {}
 
   /**
    * Sends a HTTP GET request and returns the response.
    * @param {string} requestUri
-   * @param {object} parameters Parameters in querystring.
-   * @return {object} Returned JSON object.
+   * @param {!Object} parameters Parameters in querystring.
+   * @return {!Object} Returned JSON object.
    */
   get(requestUri, parameters) {
-    const url = this.getRequestUrl(requestUri) + this.getQueryString(parameters);
+    const url =
+      this.getRequestUrl(requestUri) + this.getQueryString(parameters);
     const params = this.getFetchAppParams();
     params.method = 'GET';
     return this.fetchAndReturnJson(url, params);
   }
 
   /**
+   * Most APIs offer a `list` service to return a list of resources with a
+   * possible property in response: nextPageToken, which is used to fetch the
+   * next page of resources. This function is used to offer a general way to
+   * get the complete list.
+   * Note: unlike other `get` or `mutate` functions which will silently include
+   * an 'error' object in the response whenever an error occurs, this function
+   * will throw the error. The main reason is that this function is not basic
+   * HTTP methods, but a layer above them. The caller is expecting to receive a
+   * list of given objects, and there usually are following up steps, so a
+   * silent error makes the processing complicated,
+   *
+   * @param {string} propertyName
+   * @param {string} requestUri
+   * @param {!Object=} parameters
+   * @return {!Array<!Object>}
+   */
+  list(propertyName, requestUri, parameters = {}) {
+    const results = [];
+    do {
+      const response = this.get(requestUri, parameters);
+      if (response.error) {
+        console.error(`Fail to list ${propertyName}`, response.error);
+        throw response.error;
+      }
+      results.push(...(response[propertyName] || []));
+      parameters.pageToken = response.nextPageToken;
+    } while (parameters.pageToken);
+    return results;
+  }
+
+  /**
    * Sends a HTTP request other than GET, e.g. POST or DELETE and returns the
    * response.
    * @param {string} requestUri
-   * @param {(object|string|undefined)=} payload A JSON object as the payload.
+   * @param {(!Object|string)=} payload A JSON object as the payload.
    *     Default is undefined.
    * @param {string=} method HTTP method, default is POST.
-   * @return {object} Returned JSON object.
+   * @return {!Object} Returned JSON object.
    */
   mutate(requestUri, payload = undefined, method = 'POST') {
     const url = this.getRequestUrl(requestUri);
@@ -75,10 +124,10 @@ class ApiBase {
    * Uses UrlFetchApp to send out the HTTP request and returns HTTPResponse
    * @see https://developers.google.com/apps-script/reference/url-fetch/http-response
    * @param {string} url Request url.
-   * @param {object} params The optional JavaScript object specifying advanced
+   * @param {!Object} params The optional JavaScript object specifying advanced
    *   parameters.
    *   @see https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app#advanced-parameters
-   * @return {object} Raw response.
+   * @return {!Object} Raw response.
    */
   fetchAndReturnRawResponse(url, params) {
     console.info(`UrlFetchApp ${params.method}: ${url}`);
@@ -90,15 +139,25 @@ class ApiBase {
    * Uses UrlFetchApp to send out the HTTP request and returns content as a JSON
    * object.
    * @param {string} url Request url.
-   * @param {object} params The optional JavaScript object specifying advanced
+   * @param {!Object} params The optional JavaScript object specifying advanced
    *   parameters. @see
    *   https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app#advanced-parameters
-   * @return {object} Returned JSON object.
+   * @return {!Object} Returned JSON object.
    */
   fetchAndReturnJson(url, params) {
     const response = this.fetchAndReturnRawResponse(url, params);
     try {
       const result = JSON.parse(response.getContentText() || '{}');
+      if (result.error) {
+        console.log(`Get error from ${url}`, result.error);
+        for (const interceptor of ApiBase.responseInterceptors) {
+          const resolved = interceptor(result.error, this);
+          if (resolved) {
+            console.log(`Applied interceptor for ${url}, retrying...`);
+            return this.fetchAndReturnJson(url, params);
+          }
+        }
+      }
       return result;
     } catch (error) {
       console.error('Failed to get JSON from', response.getContentText());
@@ -106,14 +165,13 @@ class ApiBase {
         error: {
           code: response.getResponseCode(),
           content: response.getContentText(),
-        }
+        },
       };
     }
   }
 
   /**
-   * Constructs the fully-qualified URL to the API using the given @param
-   * {requestUri}.
+   * Constructs the fully-qualified URL to the API using the given requestUri.
    * If it is an absolute url, return it directly;
    * Otherwise append it after base url which is defined in detail API classes.
    *
@@ -133,22 +191,29 @@ class ApiBase {
    * Gets the URL encoded querystring from a parameter object.
    * If a parameter is an array, the parameter will be in the querystring for
    * multiple times.
-   * @param {object} params.
+   * @param {!Object} params
    * @return {string} A querystring which starts with '?'.
    */
   getQueryString(params) {
     if (!params || Object.keys(params).length === 0) return '';
-    return '?' + Object.keys(params).map((key) => {
-      if (!Array.isArray(params[key]))
-        return `${key}=${encodeURIComponent(params[key])}`;
-      return params[key].map((v) => `${key}=${encodeURIComponent(v)}`).join('&');
-    }).join('&');
+    return (
+      '?' +
+      Object.keys(params)
+        .map(key => {
+          if (!Array.isArray(params[key]))
+            return `${key}=${encodeURIComponent(params[key])}`;
+          return params[key]
+            .map(v => `${key}=${encodeURIComponent(v)}`)
+            .join('&');
+        })
+        .join('&')
+    );
   }
 
   /**
    * Returns the default params for UrlFetchApp.
    * @see https://developers.google.com/apps-script/reference/url-fetch/url-fetch-app#fetch(String,Object)
-   * @return {object}
+   * @return {!Object}
    */
   getFetchAppParams() {
     return {
@@ -160,7 +225,7 @@ class ApiBase {
 
   /**
    * Returns HTTP headers. By default, it contains OAuth token.
-   * @return {object} HTTP headers.
+   * @return {!Object} HTTP headers.
    */
   getDefaultHeader() {
     const token = this.getAccessToken();
@@ -175,10 +240,16 @@ class ApiBase {
    * @return {string} access token.
    */
   getAccessToken() {
-    if (typeof EXPLICIT_AUTH !== 'undefined' && EXPLICIT_AUTH.enabled()) {
-      return EXPLICIT_AUTH.getAccessToken();
+    if (ApiBase.explicitTokenProvider) {
+      const token = ApiBase.explicitTokenProvider();
+      if (token) return token;
     }
     return ScriptApp.getOAuthToken();
   }
-
 }
+
+/** @private @const {!Array<function(!Object): !Object>} */
+ApiBase.responseInterceptors = [];
+
+/** @private {?function(): ?string} */
+ApiBase.explicitTokenProvider = null;

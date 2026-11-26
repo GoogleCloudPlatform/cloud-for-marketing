@@ -1,26 +1,36 @@
 # Release Notes
 
+## 4.10.0 (2026-05-20)
+
+### Integrated APIs
+
+- Updated to the v24 of the Google Ads API.
+
 ## 4.9.0 (2026-01-20)
 
 ### Integrated APIs
+
 - Updated to the v22 of the Google Ads API.
 - Updated to the v5 of the Campaign Manager 360 API.
 
 ## 4.8.0 (2025-08-22)
 
 ### Enhancements
+
 - Optimize Tentacles transporter Cloud Functions for the `pull` message
-implementation.
+  implementation.
 
 ## 4.7.0 (2025-06-20)
 
 ### Integrated APIs
+
 - Updated to the v20 of the Google Ads API.
 - Deprecated Measurement Protocol connector `MP`.
 
 ## 4.6.0 (2024-12-05)
 
 ### Integrated APIs
+
 - Updated to the v18 of the Google Ads API.
 
 ## 4.5.0 (2024-07-31)
@@ -32,15 +42,14 @@ implementation.
 ### Bug fix
 
 - Fixed: When data files are empty, there is a chance that the task is shown
-as `Timeout` in the dashboard.
+  as `Timeout` in the dashboard.
 
 ## 4.4.1 (2024-04-11)
 
 ### Enhancements
 
 - Campaign Manager 360 connector `CM` now supports `adUserDataConsent` for
-consent for ad user data.
-
+  consent for ad user data.
 
 ## 4.4.0 (2024-04-09)
 
@@ -52,11 +61,12 @@ consent for ad user data.
 ### Bug fix
 
 - Configurations of Google Ads API now support lowerCamelCase, as well as
-snake_case.
+  snake_case.
 
 ## 4.3.0 (2024-03-05)
 
 ### Integrated APIs
+
 - Updated to the v16 of the Google Ads API.<br>
   Due to the change of underlying Google Ads API library, the naming
   convention of Google Ads related connectors (`ACLA`, `ACM`, `ACA` and `AOUD`)
@@ -76,16 +86,16 @@ snake_case.
 ### Enhancements
 
 - Users now can create more than one Firestore databases in one Google Cloud
-Project with different modes. Tentacles has been upgraded to use any designated
-database regardless the mode. The feature is only available in the [new Google
-Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
+  Project with different modes. Tentacles has been upgraded to use any designated
+  database regardless the mode. The feature is only available in the [new Google
+  Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 
 ## 4.1.0 (2023-11-03)
 
 ### Enhancements
 
 - Accelerate the speed to distribute the incoming data as tasks in the
-`tentacles_init` Cloud Functions.
+  `tentacles_init` Cloud Functions.
 - Refine the parameters of `MP_GA4` for stability and performance.
 
 ### Integrated APIs
@@ -97,7 +107,7 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 ### Integrated APIs
 
 - Updated CM360 Conversion API with a new field
-[UserIdentifier](https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#useridentifier).
+  [UserIdentifier](https://developers.google.com/doubleclick-advertisers/rest/v4/Conversion#useridentifier).
 
 ### Change the Cloud Functions deployment to Artifact Registry
 
@@ -113,7 +123,6 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
   multiple instances of Cloud Functions **apirequester** are available now.
   The sending rate can be increased 5 to 10 times.
 
-
 ### Integrated APIs
 
 - Updated to the v13 of the Google Ads API.
@@ -122,17 +131,17 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 
 - Fixed: Some Google Ads related errors can not be show properly in the dashboard.
 - Fixed: If there was a [BOM](https://en.wikipedia.org/wiki/Byte_order_mark) at
- the beginning of data files, the first line is not a valid JSON string and the
- process will fail. Now, Tentacles will ignore the BOM.
+  the beginning of data files, the first line is not a valid JSON string and the
+  process will fail. Now, Tentacles will ignore the BOM.
 
 ## 3.1.0 (2023-03-08)
 
 ### New Features
 
 - Google Ads conversion adjustment upload service (code `ACA`) supports
-`RESTATEMENT` conversion adjustment
+  `RESTATEMENT` conversion adjustment
 - Google Ads conversion upload service (code `ACLC`) supports `gbraid` and
-`wbraid` as click identifier
+  `wbraid` as click identifier
 - Google Ads offline user data job service (code `AOUD`) supports new types of job:
   - `STORE_SALES_UPLOAD_FIRST_PARTY` with [`TransactionAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/TransactionAttribute)
   - `CUSTOMER_MATCH_WITH_ATTRIBUTES` with [`UserAttribute`](https://developers.google.com/google-ads/api/reference/rpc/latest/UserAttribute)
@@ -172,8 +181,7 @@ Sheet based tool](./tutorials/install_tentacles_in_google_sheets.md).
 ### Bug fix
 
 - Fixed the problem of spammed logs from the Cloud Functions `tentacles_tran`
-  which is caused by the [failure of `message.ack()`](
-    https://github.com/googleapis/nodejs-pubsub/issues/1648).
+  which is caused by the [failure of `message.ack()`](https://github.com/googleapis/nodejs-pubsub/issues/1648).
 
 ## 2.4.0 (2022-10-14)
 

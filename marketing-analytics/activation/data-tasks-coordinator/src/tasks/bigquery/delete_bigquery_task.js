@@ -37,9 +37,8 @@ let DeleteBigQueryTaskConfig;
 
 /** BigQuery delete dataset/table task. */
 class DeleteBigQueryTask extends BigQueryAbstractTask {
-
   /** @override */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
     const sourceTable = this.config.source;
     return this.getBigQuery(sourceTable);
@@ -51,20 +50,22 @@ class DeleteBigQueryTask extends BigQueryAbstractTask {
    */
   async doTask() {
     /** @const {BigQueryTableConfig} */ const source = this.config.source;
+    const bigQuery = await this.getBigQueryForTask();
     /** @const {Dataset} */
-    const dataset = this.getBigQueryForTask().dataset(source.datasetId);
+    const dataset = bigQuery.dataset(source.datasetId);
     if (source.tableId) {
       const table = dataset.table(source.tableId);
       const [tableExists] = await table.exists();
       if (tableExists) {
-        await table.delete({ ignoreNotFound: true });
+        await table.delete({ignoreNotFound: true});
         this.logger.info(`Deleted table ${source.tableId}`);
       } else {
         this.logger.info(
-          `Table [${source.tableId}] to be deleted doesn't exist.`);
+          `Table [${source.tableId}] to be deleted doesn't exist.`,
+        );
       }
     } else {
-      await dataset.delete({ force: true });
+      await dataset.delete({force: true});
       this.logger.info(`Deleted dataset ${source.datasetId}`);
     }
   }

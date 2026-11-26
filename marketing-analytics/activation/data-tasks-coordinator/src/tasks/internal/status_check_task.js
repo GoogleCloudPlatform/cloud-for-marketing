@@ -19,14 +19,16 @@
 
 'use strict';
 
-const { utils: { wait } } = require('@google-cloud/nodejs-common');
+const {
+  utils: {wait},
+} = require('@google-cloud/nodejs-common');
 const {
   TaskLogStatus,
   TaskLogDao,
   FIELD_NAMES,
 } = require('../../task_log/task_log_dao.js');
-const { ErrorHandledStatus } = require('../error/error_handled_status.js');
-const { RetryableError } = require('../error/retryable_error.js');
+const {ErrorHandledStatus} = require('../error/error_handled_status.js');
+const {RetryableError} = require('../error/retryable_error.js');
 const {BaseTask} = require('../base_task.js');
 
 /**
@@ -79,7 +81,6 @@ let TaskCheckLog;
  * @type {StatusCheckTask}
  */
 class StatusCheckTask extends BaseTask {
-
   /**
    * Sets the function to initialize a task. This function depends on all Tasks
    * that will be created, so it can't be put into TaskManagerOptions to be
@@ -118,8 +119,8 @@ class StatusCheckTask extends BaseTask {
     // tasks one by one. If 'reduce' causes a performance issue, then change to
     // use 'apiSpeedControl' nodejs-common.
     const results = await taskLogs.reduce(this.getReduceFn(), []);
-    if (!extraCheck) return { results };
-    return { results: await this.extraCheck_(asyncTaskLogs, results) };
+    if (!extraCheck) return {results};
+    return {results: await this.extraCheck_(asyncTaskLogs, results)};
   }
   /**
    * Gets the reduce function to update status of TaskLogs and returns results.
@@ -129,7 +130,7 @@ class StatusCheckTask extends BaseTask {
    * @return {!Promise<!Array<TaskCheckLog>>}
    */
   getReduceFn() {
-    return async (previous, { id: taskLogId, entity: taskLog }) => {
+    return async (previous, {id: taskLogId, entity: taskLog}) => {
       const results = await previous;
       const currentResult = await this.updateTaskLog_(taskLogId, taskLog);
       results.push(currentResult);
@@ -144,22 +145,25 @@ class StatusCheckTask extends BaseTask {
    * @private
    */
   async getCrashedTasks_() {
-    const filter = { property: 'status', value: TaskLogStatus.FINISHING };
+    const filter = {property: 'status', value: TaskLogStatus.FINISHING};
     const taskLogs = await this.options.taskLogDao.list([filter]);
     const now = new Date();
-    return taskLogs.filter(({ id: taskLogId, entity: taskLog }) => {
+    return taskLogs.filter(({id: taskLogId, entity: taskLog}) => {
       if (taskLog.prefinishTime) {
         //Firestore returns Timestamp type which has the 'toDate' function,
         //while Datastore returns as Date type.
-        const prefinishTime = taskLog.prefinishTime.toDate ?
-          taskLog.prefinishTime.toDate() : taskLog.prefinishTime;
+        const prefinishTime = taskLog.prefinishTime.toDate
+          ? taskLog.prefinishTime.toDate()
+          : taskLog.prefinishTime;
         if (now - prefinishTime > 9 * 60 * 1000) {
           this.logger.warn('Got a timeout finishing task:', taskLog);
           return true;
         }
       } else {
-        this.logger.warn(`Finishing task:[${taskLogId}] without prefinishTime`,
-          taskLog);
+        this.logger.warn(
+          `Finishing task:[${taskLogId}] without prefinishTime`,
+          taskLog,
+        );
       }
       return false;
     });
@@ -182,27 +186,33 @@ class StatusCheckTask extends BaseTask {
         const task = await this.prepareExternalTask(taskConfigId, parameters);
         const done = await task.isDone();
         if (done) return this.sendFinishTaskMessage_(taskLogId);
-        return { taskLogId, status: CHECKED_TASK_STATUS.RUNNING, };
+        return {taskLogId, status: CHECKED_TASK_STATUS.RUNNING};
       }
     } catch (error) {
       this.logger.error(`Error in task: ${taskLogId}`, error);
-      const [errorHandledStatus] =
-        await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
+      const [errorHandledStatus] = await this.taskManager.handleFailedTask(
+        taskLogId,
+        taskLog,
+        error,
+      );
       switch (errorHandledStatus) {
         case ErrorHandledStatus.RETRIED:
-          const { messageId } = await this.sendFinishTaskMessage_(taskLogId);
-          return { taskLogId, messageId, status: CHECKED_TASK_STATUS.RETRIED, };
+          const {messageId} = await this.sendFinishTaskMessage_(taskLogId);
+          return {taskLogId, messageId, status: CHECKED_TASK_STATUS.RETRIED};
         case ErrorHandledStatus.FAILED:
-          return { taskLogId, status: CHECKED_TASK_STATUS.ERROR, };
+          return {taskLogId, status: CHECKED_TASK_STATUS.ERROR};
         case ErrorHandledStatus.IGNORED:
           this.logger.debug('Ignore error task: ', taskLogId);
-          const taskConfig = await this.options.taskConfigDao.load(taskConfigId);
+          const taskConfig =
+            await this.options.taskConfigDao.load(taskConfigId);
           if (taskConfig.next) {
-            await this.taskManager.startTasks(taskConfig.next,
-              { [FIELD_NAMES.PARENT_ID]: taskLogId },
-              taskLog.parameters); // Error task pass out origin parameters.
+            await this.taskManager.startTasks(
+              taskConfig.next,
+              {[FIELD_NAMES.PARENT_ID]: taskLogId},
+              taskLog.parameters,
+            ); // Error task pass out origin parameters.
           }
-          return { taskLogId, status: CHECKED_TASK_STATUS.ERROR_IGNORED, };
+          return {taskLogId, status: CHECKED_TASK_STATUS.ERROR_IGNORED};
       }
     }
   }
@@ -222,23 +232,26 @@ class StatusCheckTask extends BaseTask {
    */
   async extraCheck_(taskLogs, results) {
     const mappedTaskLogs = {};
-    taskLogs.forEach(({ id: taskLogId, entity: taskLog }) => {
+    taskLogs.forEach(({id: taskLogId, entity: taskLog}) => {
       mappedTaskLogs[taskLogId] = taskLog;
     });
     let checkedResults = results.filter(
-      ({ taskLogId }) => !!mappedTaskLogs[taskLogId]
+      ({taskLogId}) => !!mappedTaskLogs[taskLogId],
     );
     let checkedTimes = 0;
-    while (this.hasDoneTasks_(checkedResults) && ++checkedTimes < EXTRA_CHECK_TIMES) {
+    while (
+      this.hasDoneTasks_(checkedResults) &&
+      ++checkedTimes < EXTRA_CHECK_TIMES
+    ) {
       const runningTaskLogIds = checkedResults
-        .filter(({ status }) => status === CHECKED_TASK_STATUS.RUNNING)
-        .map(({ taskLogId }) => taskLogId);
+        .filter(({status}) => status === CHECKED_TASK_STATUS.RUNNING)
+        .map(({taskLogId}) => taskLogId);
       this.logger.info(`Extra check ${checkedTimes}`, runningTaskLogIds);
       if (runningTaskLogIds.length === 0) break;
       await wait(10000);
-      checkedResults = await runningTaskLogIds.map(
-        (id) => ({ id, entity: mappedTaskLogs[id] })
-      ).reduce(this.getReduceFn(), []);
+      checkedResults = await runningTaskLogIds
+        .map(id => ({id, entity: mappedTaskLogs[id]}))
+        .reduce(this.getReduceFn(), []);
       results.push(...checkedResults);
     }
     return results;
@@ -247,14 +260,16 @@ class StatusCheckTask extends BaseTask {
   /**
    * Returns whether there is a task done.
    * @param {!Array<TaskCheckLog>} results
-   * @returns
+   * @return
    * @private
    */
   hasDoneTasks_(results) {
-    return results.some(({ status }) => {
-      return status === CHECKED_TASK_STATUS.DONE ||
+    return results.some(({status}) => {
+      return (
+        status === CHECKED_TASK_STATUS.DONE ||
         status === CHECKED_TASK_STATUS.ERROR ||
-        status === CHECKED_TASK_STATUS.ERROR_IGNORED;
+        status === CHECKED_TASK_STATUS.ERROR_IGNORED
+      );
     });
   }
 
@@ -267,8 +282,8 @@ class StatusCheckTask extends BaseTask {
    */
   async sendFinishTaskMessage_(taskLogId) {
     const messageId = await this.taskManager.sendTaskMessage(
-        '', // No parameter is required for a finish task message.
-        {taskLogId}
+      '', // No parameter is required for a finish task message.
+      {taskLogId},
     );
     return {
       taskLogId,
@@ -286,11 +301,15 @@ class StatusCheckTask extends BaseTask {
    */
   async pauseCronjobIfNoNewTasks_(startTime) {
     const filter = {property: 'createTime', value: startTime, operator: '>'};
-    const taskLogs = await this.options.taskLogDao.list([filter],
-        {name: 'createTime', desc: true}, 1);
+    const taskLogs = await this.options.taskLogDao.list(
+      [filter],
+      {name: 'createTime', desc: true},
+      1,
+    );
     if (taskLogs.length === 0) {
       this.logger.info(
-          'There is no tasks need to be checked. Pause cronjob now.');
+        'There is no tasks need to be checked. Pause cronjob now.',
+      );
       return this.options.statusCheckCronJob.pause();
     }
   }

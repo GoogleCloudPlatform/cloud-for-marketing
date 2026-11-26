@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.5.0/mermaid.min.js"></script>
+  <script src="https://bumbu.me/svg-pan-zoom/dist/svg-pan-zoom.js"></script>
+  <script>
+    const taskConfigId = '<?= taskConfigId ?>';
+    const lastRun = '<?= lastRun ?>';
+    const taskLogId = '<?= taskLogId ?>';
+    const initialWorkflowCode = '<?= initialWorkflowCode ?>';
+    let panZoomInstance = null; // To store the panZoom instance
+    let interval;
+
+    mermaid.initialize({
+      startOnLoad: false,
+      flowchart: {
+        useMaxWidth: false, // Important for allowing zooming beyond initial width
+      },
+      securityLevel: 'loose', // Required for pan/zoom interaction
+    });
+
+    function openTab(tabName) {
+      const tabs = document.querySelectorAll('.tab-content');
+      const buttons = document.querySelectorAll('.tab-button');
+      for (let i = 0; i < tabs.length; i++) {
+        tabs[i].style.display = 'none';
+        buttons[i].classList.remove('active');
+      }
+      document.getElementById(tabName + '-tab').style.display = 'block';
+      document.querySelector(`.tab-button[onclick="openTab('${tabName}')"]`)
+        .classList.add('active');
+    }
+
+    /**
+     * Fetches the code for flow chart from the server.
+     */
+    function updateDiagram() {
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const chartDiv = document.getElementById('chartContainer');
+      loadingIndicator.style.display = 'block';
+      chartDiv.style.display = 'none';
+      google.script.run
+        .withSuccessHandler(drawDiagram)
+        .getSentinelWorkflow(taskConfigId, lastRun === 'true', taskLogId);
+    }
+
+    /**
+     * Refreshes the Mermaid flow chart
+     */
+    async function drawDiagram(workflowCode) {
+      // removes the interval function
+      if (interval) {
+        console.log('clear interval job');
+        clearInterval(interval);
+        interval = null;
+      }
+      // switches to loading indicator
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const chartDiv = document.getElementById('chartContainer');
+      loadingIndicator.style.display = 'none'; // Hide loader on success
+      chartDiv.style.display = 'block'; // Show chart on success
+      // Update chart, svg and code
+      const needRefresh = isWorkflowRunning(workflowCode);
+      document.getElementById('mermaidCode').value = workflowCode;
+      const { svg } = await mermaid.render('svg', workflowCode);
+      const mermaidChart = document.getElementById('mermaidChart');
+      mermaidChart.innerHTML = svg.replace(/[ ]*max-width:[ 0-9\.]*px;/i, '');
+      console.log('start drawDiagram, need refresh?', needRefresh);
+      // restores diagram's zoom and pan
+      let zoom, pan;
+      if (panZoomInstance) {
+        zoom = panZoomInstance.getZoom();
+        pan = panZoomInstance.getPan();
+        panZoomInstance.destroy();
+      }
+      panZoomInstance = svgPanZoom('#svg', {
+        zoomEnabled: true,
+        panEnabled: true,
+        controlIconsEnabled: true,
+        fit: true, // Optionally fit the diagram initially
+        center: true // Optionally center the diagram initially
+      });
+      if (zoom) {
+        panZoomInstance.zoom(zoom);
+        panZoomInstance.pan(pan);
+      }
+      // updates the refreshing interval.
+      const countdownDisplay = document.querySelector('#refreshNote');
+      if (needRefresh) {
+        console.log('Create interval job');
+        let countdownDuration = 120; // Refresh every 5 seconds
+        startCountdown(countdownDuration, countdownDisplay);
+      } else {
+        countdownDisplay.textContent = 'No need for auto refreshing';
+      }
+    };
+
+    /**
+     * Returns whether the execution needs to be refreshed.
+     * @param {string} workflowCode - The code for the Mermaid flow chart.
+     * @return {boolean}
+     */
+    function isWorkflowRunning(workflowCode) {
+      const regex = /:::([\w=]+)$/gm;
+      const styles = [...workflowCode.matchAll(regex)].map(([_, s]) => s);
+      if (styles.indexOf('running') > -1) return true;
+      if (styles.indexOf('taskConfig') === -1) return false;
+      return styles.some((s) => s !== 'taskConfig')
+    }
+
+    /**
+     * Starts the countdown for auto refreshing.
+     */
+    function startCountdown(duration, display) {
+      let timer = duration, seconds;
+      if (!interval) {
+        interval = setInterval(function () {
+          display.textContent = "Auto refreshing in: " + timer + " seconds";
+          if (--timer < 0) {
+            timer = duration; // Reset the timer
+            console.log('clear interval job');
+            clearInterval(interval);
+            interval = null;
+            updateDiagram();
+          }
+        }, 1000);
+      }
+    }
+  </script>
+  <style>
+    #svg {
+      height: 100%;
+      width: 100%;
+    }
+
+    .mermaid {
+      width: 100%;
+      height: 100vh;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      /* Mimic Google Sheets font */
+      font-size: 14px;
+      color: #262626;
+      /* Mimic Google Sheets text color */
+      margin: 0;
+      padding: 0;
+    }
+
+    .tab-container {
+      border-bottom: 1px solid #dadce0;
+      /* Mimic tab separator */
+    }
+
+    .tab-button {
+      background: none;
+      border: none;
+      color: #5f6368;
+      /* Mimic inactive tab color */
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .tab-button.active {
+      color: #1a73e8;
+      /* Mimic active tab color */
+      border-bottom: 2px solid #1a73e8;
+    }
+
+    .tab-content {
+      padding: 16px;
+    }
+
+    .manualRefreshButton {
+      background-color: #f8f9fa;
+      border: 1px solid #dadce0;
+      color: #3c4043;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .refreshNote {
+      font-size: 12px;
+      color: #5f6368;
+    }
+
+    #chart-tab {
+      display: block;
+    }
+
+    #code-tab {
+      display: none;
+    }
+
+    .refresh-button {
+      background-color: #f8f9fa;
+      border: 1px solid #dadce0;
+      color: #3c4043;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      outline: none;
+      margin-top: 10px;
+    }
+
+    .refresh-button:hover {
+      background-color: #e8eaed;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100%;
+      font-family: monospace;
+      font-size: 12px;
+      border: 1px solid #dadce0;
+      box-sizing: border-box;
+      padding: 8px;
+      overflow: auto;
+      resize: vertical;
+    }
+
+    .loader {
+      border: 4px solid #f3f3f3;
+      /* Light grey border */
+      border-top: 4px solid #3498db;
+      /* Blue border for animation */
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 2s linear infinite;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700" rel="stylesheet">
+</head>
+
+<body onload="openTab('chart');drawDiagram(JSON.parse(initialWorkflowCode))">
+  <div class="tab-container">
+    <button class="tab-button active" onclick="openTab('chart')">Chart</button>
+    <button class="tab-button" onclick="openTab('code')">Code</button>
+  </div>
+
+  <div id="chart-tab" class="tab-content">
+    <div id="chartContainer" style="display: none;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <button id="manualRefreshButton" onclick="updateDiagram()" class="manualRefreshButton">
+          Refresh Now
+        </button>
+        <div id="refreshNote" class="refreshNote"></div>
+      </div>
+      <div id="mermaidChart" class="mermaid"></div>
+    </div>
+    <div id="loadingIndicator" class="loader"></div>
+  </div>
+
+  <div id="code-tab" class="tab-content">
+    <p>Open <a href='https://mermaid.live/' target='_blank'>Mermaid Live Editor</a>
+      and paste following code into it.</p>
+    <textarea id="mermaidCode" cols='106' rows="48"></textarea>
+  </div>
+</body>
+
+</html>

@@ -14,28 +14,28 @@
 
 /** @fileoverview BigQuery Data Transfer API handler class.*/
 
-/**
- * Types of data transfer configuration.
- * @enum {string}
- */
-const DATA_TRANSFER_SOURCE = Object.freeze({
-  GOOGLE_MERCHANT_CENTER: 'merchant_center',
-  GOOGLE_ADS: 'google_ads',
-  GOOGLE_ADWORDS: 'adwords',
-  SCHEDULED_QUERY: 'scheduled_query',
-});
-
 class BigQueryDataTransfer extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   * @param {string=} locationId
+   */
   constructor(projectId, locationId) {
     super();
-    this.apiUrl = 'https://bigquerydatatransfer.googleapis.com';
+    this.name = 'BigQuery Data Transfer API';
+    this.api = 'bigquerydatatransfer.googleapis.com';
+    this.permissions = ['bigquery.transfers.get', 'bigquery.transfers.update'];
+    this.adminRole = 'BigQuery Admin';
+    this.runtimeRoles = [];
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v1';
     this.projectId = projectId;
     this.locationId = locationId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
   }
@@ -69,26 +69,30 @@ class BigQueryDataTransfer extends ApiBase {
    * Returns information about all transfer configs owned by a project in the
    * specified location.
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs/list
-   * @param {{dataSourceIds:(Array<string>|undefined)}} param
-   * @return {!ListTransferConfigsResponse}
+   * @param {{dataSourceIds:(!Array<string>|undefined)}} param
+   * @return {!Array<!TransferConfig>}
    */
   listTransferConfigs(param) {
-    if (this.locationId)
-      return this.get(`locations/${this.locationId}/transferConfigs`, param);
-    return this.get('transferConfigs', param);
+    const uri = this.locationId
+      ? `locations/${this.locationId}/transferConfigs`
+      : 'transferConfigs';
+    return this.list('transferConfigs', uri, param);
   }
 
   /**
    * Creates a new data transfer configuration.
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs/create
    * @param {!TransferConfig} config
-   * @param {{authorizationCode: (string|undefined)}} params
+   * @param {{versionInfo: (string|undefined)}} params
    * @return {!TransferConfig}
    */
   createTransferConfig(config, params) {
     const response = this.mutate(
-      `locations/${this.locationId}/transferConfigs${this.getQueryString(params)}`,
-      config);
+      `locations/${this.locationId}/transferConfigs${this.getQueryString(
+        params,
+      )}`,
+      config,
+    );
     return response;
   }
 
@@ -97,14 +101,17 @@ class BigQueryDataTransfer extends ApiBase {
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs/patch
    * @param {string} configId
    * @param {!TransferConfig} config
-   * @param {{updateMask:string}} params
+   * @param {{updateMask:string}=} params
    * @return {!TransferConfig}
    */
   updateTransferConfig(configId, config, params = {}) {
     const id = this.getIdWithoutProject_(configId);
     params.updateMask = Object.keys(config).join(',');
-    const response = this.mutate(`${id}${this.getQueryString(params)}`,
-      config, 'PATCH');
+    const response = this.mutate(
+      `${id}${this.getQueryString(params)}`,
+      config,
+      'PATCH',
+    );
     return response;
   }
 
@@ -116,31 +123,31 @@ class BigQueryDataTransfer extends ApiBase {
    */
   startManualRuns(configId) {
     const id = this.getIdWithoutProject_(configId);
-    return this.mutate(
-      `${id}:startManualRuns`, { requestedRunTime: new Date().toISOString() }
-    );
+    return this.mutate(`${id}:startManualRuns`, {
+      requestedRunTime: new Date().toISOString(),
+    });
   }
 
   /**
    * Returns information about running and completed transfer runs.
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs.runs/list
    * @param {string} configId
-   * @return {!ListTransferRunsResponse}
+   * @return {!Array<!TransferRun>}
    */
   listRuns(configId) {
     const id = this.getIdWithoutProject_(configId);
-    return this.get(`${id}/runs`);
+    return this.list('transferRuns', `${id}/runs`);
   }
 
   /**
    * Returns log messages for the transfer run.
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs.runs.transferLogs/list
    * @param {string} jobId
-   * @return {!ListTransferLogsResponse}
+   * @return {!Array<!TransferMessages>}
    */
   listRunsLogs(jobId) {
     const id = this.getIdWithoutProject_(jobId);
-    return this.get(`${id}/transferLogs`);
+    return this.list('transferMessages', `${id}/transferLogs`);
   }
 
   /**
@@ -150,9 +157,12 @@ class BigQueryDataTransfer extends ApiBase {
    * @param {string} dataSourceId
    * @return {boolean}
    */
-  needsAuthorizationCode(dataSourceId) {
-    const { hasValidCreds } = this.mutate(
-      `locations/${this.locationId}/dataSources/${dataSourceId}:checkValidCreds`);
+  doesNotExistValidCredentials(dataSourceId) {
+    const {hasValidCreds} = this.mutate(
+      `locations/${this.locationId}/dataSources/${
+        dataSourceId
+      }:checkValidCreds`,
+    );
     return hasValidCreds !== true;
   }
 
@@ -160,23 +170,71 @@ class BigQueryDataTransfer extends ApiBase {
    * Returns a link for the user to complete OAuth2 authorization and generate
    * the authorization code to use with the transfer configuration.
    * This is required when new credentials are needed, as indicated by
-   * the method 'needsAuthorizationCode'.
+   * the method 'doesNotExistValidCredentials'.
    * @see https://cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/create#query-parameters
    * @param {string} dataSourceId
    * @return {string}
    */
   getAuthUrlForDataSource(dataSourceId) {
-    const { clientId, scopes } =
-      this.get(`locations/${this.locationId}/dataSources/${dataSourceId}`);
+    const response = this.get(
+      `locations/${this.locationId}/dataSources/${dataSourceId}`,
+    );
+    if (response && response.error) {
+      throw new Error(
+        `Failed to get data source info: ${response.error.message}`,
+      );
+    }
+    const {clientId, scopes = []} = response || {};
     const params = {
       redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
-      response_type: 'authorization_code',
+      response_type: 'version_info',
       client_id: clientId,
-      scope: scopes.join(' '),
+      scope: (scopes || []).join(' '),
     };
-    const url = 'https://www.gstatic.com/bigquerydatatransfer/oauthz/auth' +
+    const url =
+      'https://bigquery.cloud.google.com/datatransfer/oauthz/auth' +
       this.getQueryString(params);
     return url;
   }
 
+  /**
+   * Returns a link to the BigQuery Data Transfer config in Google Cloud
+   * Console.
+   * @param {*} name
+   *     projects/{projectId}/locations/{locationId}/transferConfigs/{configId}
+   *
+   * @return {string}
+   */
+  getLinkToCloudConsole(name) {
+    const configId = name
+      .split('/')
+      .slice(2)
+      .join('/')
+      .replace('transferConfigs/', 'configs/');
+    const url = `https://console.cloud.google.com/bigquery/transfers/${
+      configId
+    }?project=${this.projectId}`;
+    return url;
+  }
 }
+
+/**
+ * Types of data transfer configuration.
+ * @enum {string}
+ */
+BigQueryDataTransfer.DATA_TRANSFER_SOURCE = Object.freeze({
+  GOOGLE_MERCHANT_CENTER: 'merchant_center',
+  GOOGLE_ADS: 'google_ads',
+  SCHEDULED_QUERY: 'scheduled_query',
+});
+
+// Attributes used in Cyborg sheet to manage this resource.
+BigQueryDataTransfer.ATTRIBUTE_NAMES = Object.freeze({
+  versionInfo: 'Version Info',
+  schedule: 'Schedule (UTC)',
+  destinationDatasetId: 'Destination Dataset',
+  // datasetRegion: 'Dataset Location',
+  dataSourceId: 'Data Source',
+  customerId: 'Customer Id',
+  dataRefreshWindowDays: 'Refresh Window (days)',
+});

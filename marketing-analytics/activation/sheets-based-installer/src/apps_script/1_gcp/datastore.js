@@ -15,40 +15,43 @@
 /** @fileoverview Cloud Datastore API handler class.*/
 
 /**
- * The ultility functions to convert data between Json and Datastore entity.
+ * The utility functions to convert data between Json and Datastore entity.
  */
 const DATASTORE_TRANSFORM = {
-
-  toJson: (obj) => {
+  toJson: obj => {
     const json = {};
-    Object.keys(obj).forEach((key) => {
+    Object.keys(obj).forEach(key => {
       json[key] = DATASTORE_TRANSFORM.toJsonValue_(obj[key]);
-    })
+    });
     return json;
   },
   /**
-    * Returns a Datastore 'Value' for a Javascript object.
-    * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
-    * @param {object} obj A JSON object.
-    * @return {!Value} Datastore object.
-    * @private
-    */
-  toDatastoreObject: (obj) => {
+   * Returns a Datastore 'Value' for a Javascript object.
+   * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
+   * @param {!Object} obj A JSON object.
+   * @return {!Value} Datastore object.
+   * @private
+   */
+  toDatastoreObject: obj => {
     const entity = {};
-    Object.keys(obj).forEach((key) => {
+    Object.keys(obj).forEach(key => {
       entity[key] = DATASTORE_TRANSFORM.toDatastoreValue_(obj[key]);
-    })
+    });
     return entity;
   },
-  toJsonValue_: (value) => {
+  toJsonValue_: value => {
     if (typeof value.stringValue !== 'undefined') return value.stringValue;
     if (typeof value.booleanValue !== 'undefined') return value.booleanValue;
-    if (typeof value.integerValue !== 'undefined') return Number(value.integerValue);
-    if (typeof value.doubleValue !== 'undefined') return Number(value.doubleValue);
-    const { arrayValue, entityValue } = value;
+    if (typeof value.integerValue !== 'undefined')
+      return Number(value.integerValue);
+    if (typeof value.doubleValue !== 'undefined')
+      return Number(value.doubleValue);
+    if (typeof value.timestampValue !== 'undefined')
+      return new Date(value.timestampValue);
+    const {arrayValue, entityValue} = value;
     if (arrayValue) {
-      return arrayValue.values ?
-        arrayValue.values.map(DATASTORE_TRANSFORM.toJsonValue_)
+      return arrayValue.values
+        ? arrayValue.values.map(DATASTORE_TRANSFORM.toJsonValue_)
         : arrayValue;
     }
     if (entityValue) {
@@ -62,11 +65,12 @@ const DATASTORE_TRANSFORM = {
   /**
    * Returns a Datastore 'Value' for a Javascript value.
    * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value
-   * @param {string|number|boolean Array|Object} value A Javascript value.
+   * @param {(string|number|boolean|!Array<!Object>|!Object)} value A Javascript
+   *     value.
    * @return {!Value} Datastore object.
    * @private
    */
-  toDatastoreValue_: (value) => {
+  toDatastoreValue_: value => {
     let propertyName;
     let propertyValue = value;
     switch (typeof value) {
@@ -84,19 +88,28 @@ const DATASTORE_TRANSFORM = {
     if (typeof value === 'object') {
       if (Array.isArray(value)) {
         propertyName = 'arrayValue';
-        propertyValue = { values: value.map(DATASTORE_TRANSFORM.toDatastoreValue_) };
+        propertyValue = {
+          values: value.map(DATASTORE_TRANSFORM.toDatastoreValue_),
+        };
       } else {
         propertyName = 'entityValue';
-        propertyValue = { properties: DATASTORE_TRANSFORM.toDatastoreObject(value) };
+        propertyValue = {
+          properties: DATASTORE_TRANSFORM.toDatastoreObject(value),
+        };
       }
     }
     if (!propertyName) throw new Error(`Unrecognizable value ${value}`);
-    return { [propertyName]: propertyValue };
-  }
+    return {[propertyName]: propertyValue};
+  },
 };
 
 class Datastore extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   * @param {string=} databaseId = DEFAULT_DATABASE
+   * @param {string=} namespace
+   * @param {string=} kind
+   */
   constructor(projectId, databaseId = DEFAULT_DATABASE, namespace, kind) {
     super();
     this.apiUrl = 'https://datastore.googleapis.com';
@@ -107,12 +120,18 @@ class Datastore extends ApiBase {
     this.kind = kind;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {!Object<string, string>}
+   */
   getDefaultHeader() {
     const headers = super.getDefaultHeader();
     headers['x-goog-request-params'] =
@@ -124,31 +143,33 @@ class Datastore extends ApiBase {
    * Saves a group of entities to Datastore in a transaction.
    * @see https://cloud.google.com/datastore/docs/reference/data/rest/v1/projects/beginTransaction
    * @see https://cloud.google.com/datastore/docs/reference/data/rest/v1/projects/commit
-   * @param {Object<string,object>} entities
-   * @param {string} kind
-   * @param {string} namespace
+   * @param {!Object<string,!Object>} entities
+   * @param {string=} kind
+   * @param {string=} namespace
    * @return {!Datastore.Commit}
    * @see https://cloud.google.com/datastore/docs/reference/data/rest/v1/projects/commit#google.datastore.v1.Datastore.Commit
    */
   txSave(entities, kind = this.kind, namespace = this.namespace) {
-    const { transaction } = super.mutate(':beginTransaction',
-      { databaseId: this.databaseId, transactionOptions: { readWrite: {} } });
+    const {transaction} = this.mutate(':beginTransaction', {
+      databaseId: this.databaseId,
+      transactionOptions: {readWrite: {}},
+    });
     /**
      * Create an array of entities.
      * @const {!Array<!Entity>}
      * @see https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value#Entity
      */
-    const mutations = Object.keys(entities).map((key) => {
+    const mutations = Object.keys(entities).map(key => {
       return {
         upsert: {
-          //https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value#Key
+          // https://cloud.google.com/datastore/docs/reference/data/rest/Shared.Types/Value#Key
           key: {
             partitionId: {
               projectId: this.projectId,
               databaseId: this.databaseId,
               namespaceId: namespace,
             },
-            path: [{ kind: kind, name: key, }]
+            path: [{kind: kind, name: key}],
           },
           properties: DATASTORE_TRANSFORM.toDatastoreObject(entities[key]),
         },
@@ -160,7 +181,7 @@ class Datastore extends ApiBase {
       mutations,
       transaction,
     };
-    const response = super.mutate(':commit', payload);
+    const response = this.mutate(':commit', payload);
     if (response.error) {
       throw new Error(response.error.message);
     }
@@ -172,7 +193,7 @@ class Datastore extends ApiBase {
    * @see https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/list
    * @return {!Array<{
    *    id:string,
-   *    json:object,
+   *    json:!Object,
    * }>}
    */
   list() {
@@ -184,22 +205,22 @@ class Datastore extends ApiBase {
         namespaceId: this.namespace,
       },
       query: {
-        kind: [{ name: this.kind }],
+        kind: [{name: this.kind}],
       },
     };
     const results = [];
     let hasMoreResult = false;
     do {
-      const { batch } = super.mutate(':runQuery', payload);
-      const { entityResults = [], endCursor, moreResults } = batch;
+      const {batch} = this.mutate(':runQuery', payload);
+      const {entityResults = [], endCursor, moreResults} = batch;
       results.push(...entityResults);
       hasMoreResult = moreResults !== 'NO_MORE_RESULTS';
       payload.query.startCursor = endCursor;
-    } while (hasMoreResult)
-    return results.map(({ entity: { key, properties } }) => {
+    } while (hasMoreResult);
+    return results.map(({entity: {key, properties}}) => {
       const id = key.path[0].name;
       const json = DATASTORE_TRANSFORM.toJson(properties);
-      return { id, json };
+      return {id, json};
     });
   }
 }

@@ -15,7 +15,6 @@
 /** @fileoverview Google Ads API handler class.*/
 
 class GoogleAds extends ExternalApi {
-
   /**
    * @constructor
    * @param {Object} option Authorization option.
@@ -24,8 +23,10 @@ class GoogleAds extends ExternalApi {
    */
   constructor(option, mccCid, developerToken) {
     super(option);
+    this.name = 'Google Ads API';
+    this.api = 'googleads.googleapis.com';
     this.apiUrl = 'https://googleads.googleapis.com';
-    this.version = 'v16';
+    this.version = 'v24';
     this.mccCid = GoogleAds.getCleanedId(mccCid);
     this.developerToken = developerToken;
   }
@@ -46,7 +47,7 @@ class GoogleAds extends ExternalApi {
    */
   getDefaultHeader() {
     const headers = super.getDefaultHeader();
-    headers['developer-token'] = this.developerToken;
+    if (this.developerToken) headers['developer-token'] = this.developerToken;
     headers['login-customer-id'] = this.mccCid;
     return headers;
   }
@@ -60,20 +61,22 @@ class GoogleAds extends ExternalApi {
   getErrorResult_(error) {
     return {
       valid: false,
-      reason: error.details[0].errors.map(({ message }) => message).join(' '),
-    }
+      reason: error.details[0].errors.map(({message}) => message).join(' '),
+    };
   }
 
   /**
-   * Verifies the accessiblity of current user to the Google Ads account.
+   * Verifies the accessibility of current user to the Google Ads account.
    * @return {VerifyResult}
    */
   verifyReportAccess() {
-    const payload = { query: 'SELECT customer.id FROM customer' };
-    const { error } = this.mutate(
-      `customers/${this.mccCid}/googleAds:search`, payload);
+    const payload = {query: 'SELECT customer.id FROM customer'};
+    const {error} = this.mutate(
+      `customers/${this.mccCid}/googleAds:search`,
+      payload,
+    );
     if (error) return this.getErrorResult_(error);
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -85,11 +88,15 @@ class GoogleAds extends ExternalApi {
   verifyConversion(conversionId, cid = this.mccCid) {
     const cleanedId = GoogleAds.getCleanedId(cid);
     const payload = {
-      query: `SELECT customer.id FROM conversion_action WHERE conversion_action.id = ${conversionId}`,
+      query: `SELECT customer.id FROM conversion_action WHERE conversion_action.id = ${
+        conversionId
+      }`,
     };
-    const response = this.mutate(`customers/${cleanedId}/googleAds:search`,
-      payload);
-    const { error, results } = response;
+    const response = this.mutate(
+      `customers/${cleanedId}/googleAds:search`,
+      payload,
+    );
+    const {error, results} = response;
     if (error) return this.getErrorResult_(error);
     if (!results || results.length === 0) {
       return {
@@ -97,7 +104,7 @@ class GoogleAds extends ExternalApi {
         reason: `Can not find the conversion ${conversionId} for account ${cid}`,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -111,9 +118,11 @@ class GoogleAds extends ExternalApi {
     const payload = {
       query: `SELECT customer.id FROM user_list WHERE user_list.id = ${listId}`,
     };
-    const response = this.mutate(`customers/${cleanedId}/googleAds:search`,
-      payload);
-    const { error, results } = response;
+    const response = this.mutate(
+      `customers/${cleanedId}/googleAds:search`,
+      payload,
+    );
+    const {error, results} = response;
     if (error) return this.getErrorResult_(error);
     if (!results || results.length === 0) {
       return {
@@ -121,7 +130,7 @@ class GoogleAds extends ExternalApi {
         reason: `Can not find the user list ${listId} for account ${cid}`,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 }
 
@@ -130,6 +139,6 @@ class GoogleAds extends ExternalApi {
  * @param {string} cid
  * @return {string}
  */
-GoogleAds.getCleanedId = (cid) => {
+GoogleAds.getCleanedId = cid => {
   return cid.replace(/-/g, '');
-}
+};

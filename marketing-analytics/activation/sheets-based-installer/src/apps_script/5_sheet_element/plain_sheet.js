@@ -22,20 +22,26 @@
  * @abstract
  */
 class PlainSheet extends DataTableSheet {
+  /** @return {!Object<string, !PlainSheet>} */
+  static get instances() {
+    if (!this._instances) {
+      this._instances = {};
+    }
+    return this._instances;
+  }
 
   /**
    * During initialization, the constructor will prepare itself (the instance)
    * as the object that holds functions for menu items.
-   * @param {object} options Configuration to intialize the sheet, can have
+   * @param {?Object=} options Configuration to initialize the sheet, can have
    *   optional properties: sheetName,
-   * @constructor
    */
   constructor(options = {}) {
     super();
     this.options = options;
-    const { menuItems = [] } = this.options;
+    const {menuItems = []} = this.options;
     /**
-     * Prepares customized menu itmes. Some Plane Sheets have customized menu
+     * Prepares customized menu items. Some Plane Sheets have customized menu
      * items whose functions are not in this class or subclass. For example,
      * some updates to (Sentinel) task configurations for a specific solution.
      * To support this use case, the passed in menu functions can be bound to
@@ -44,28 +50,24 @@ class PlainSheet extends DataTableSheet {
      * same of `inherentMenuItems`.
      * @see menuItem
      *
-    */
-    this.customizedMenuItems = menuItems.map(({ separator, name, method }) => {
-      if (separator) return { separator: true };
+     */
+    this.customizedMenuItems = menuItems.map(({separator, name, method}) => {
+      if (separator) return {separator: true};
       this[method.name] = method.bind(this);
-      return { name, method: method.name };
+      return {name, method: method.name};
     });
 
     /**
-     * Following two global variables `MENU_OBJECTS` and `JSON_COLUMNS` are
-     * defined in file `trigger_functions.js` which contains trigger functions
-     * of the Google Sheets: `onOpen` and `onEdit`.
-     * `onOpen` will render the customized menu `Cyborg` based on `MENU_OBJECTS`
-     * where every sheets would register its menu items;
-     * `onEdit` will format a cell if it is registed as a `JSON` cell by its
-     * owner sheets.
+     * `onOpen` will render the customized menu `Cyborg` using the instances
+     * registered here. `onEdit` will route to this sheet's `processEditEvent`
+     * instance method to format a cell if it is configured as a `JSON` cell
+     * (via `this.jsonColumn`). Any creation of a new instance here will
+     * OVERWRITE the menu object. So we should try to avoid creating different
+     * instances for the same sheet, use the objects in `PlainSheet.instances`
+     * instead.
      */
     // Set up the holder for menu functions
-    MENU_OBJECTS[this.menuObjectName] = this;
-    // Register columns contain a JSON string to `JSON_COLUMNS` for auto-checking.
-    this.jsonColumn.forEach((column) => {
-      JSON_COLUMNS.push(`${this.sheetName}.${column}`);
-    });
+    PlainSheet.instances[this.menuObjectName] = this;
   }
 
   /** Default name of the sheet. */
@@ -75,12 +77,16 @@ class PlainSheet extends DataTableSheet {
   /**
    * Name of the sheet. Will be the default value if not specified by options.
    * @override
+   * @return {string}
    */
   get sheetName() {
     return this.options.sheetName || this.defaultSheetName;
   }
 
-  /** Default headline style. */
+  /**
+   * Default headline style.
+   * @return {!Object<string, string>}
+   */
   get defaultHeadlineStyle() {
     return {
       backgroundColor: '#669DF6',
@@ -90,41 +96,66 @@ class PlainSheet extends DataTableSheet {
   /**
    * Headline style.
    * @override
+   * @return {!Object<string, string>}
    */
   get headlineStyle() {
     return this.options.headlineStyle || this.defaultHeadlineStyle;
   }
 
-  /** Menu items of the sheet. All functions should be in the instance. */
+  /**
+   * Menu items of the sheet. All functions should be in the instance.
+   * @return {!Array<!Object>}
+   */
   get inherentMenuItems() {
     throw new Error('Undefined inherent MenuItems');
   }
+  /**
+   * @return {!Array<!Object>}
+   */
   get menuItem() {
-    return this.inherentMenuItems.concat(this.customizedMenuItems)
-      .map(({ separator, name, method }) => {
-        if (separator) return { separator: true };
-        return { name, method: `${this.menuFunctionHolder}.${method}` };
+    return this.inherentMenuItems
+      .concat(this.customizedMenuItems)
+      .map(({separator, name, method}) => {
+        if (separator) return {separator: true};
+        return {name, method: `${this.menuFunctionHolder}.${method}`};
       });
   }
+  /**
+   * @return {string}
+   */
   get menuObjectName() {
-    return camelize(this.sheetName);
+    return getSafePropertyName(this.sheetName);
   }
+  /**
+   * @return {string}
+   */
   get menuFunctionHolder() {
-    return `MENU_OBJECTS.${this.menuObjectName}`;
+    return `PlainSheet.instances.${this.menuObjectName}`;
   }
 
-  /** The column to host operation result (note) */
+  /**
+   * The column to host operation result (note)
+   * @return {string|undefined}
+   */
   get defaultNoteColumn() {
-    return this.columnConfiguration.filter(({ defaultNote }) => defaultNote)
-      .map(({ name }) => name)[0];
-  };
-  /** Columns contain a JSON string to `JSON_COLUMNS` for auto-checking. */
+    return this.columnConfiguration
+      .filter(({defaultNote}) => defaultNote)
+      .map(({name}) => name)[0];
+  }
+  /**
+   * Columns contain a JSON string to `JSON_COLUMNS` for auto-checking.
+   * @return {!Array<string>}
+   */
   get jsonColumn() {
-    return this.columnConfiguration.filter(({ jsonColumn }) => jsonColumn)
-      .map(({ name }) => name);
+    return this.columnConfiguration
+      .filter(({jsonColumn}) => jsonColumn)
+      .map(({name}) => name);
   }
 
-  /** Filter function to filter out results. */
+  /**
+   * Filter function to filter out results.
+   * @return {function(!Object): boolean}
+   */
   get entityFilter() {
     return this.options.entityFilter || (() => true);
   }
@@ -132,13 +163,12 @@ class PlainSheet extends DataTableSheet {
   /**
    * Operates on an array of rows. The detailed operation will be defined in the
    * sub classes.
-   * @abstract
-   * @param {!Array<object>} rowEntities
+   * @param {!Array<!Object>} rowEntities
    * @param {number} startRowIndex Index number of the starting selected row.
-   * @return {!Array<object>}
+   * @return {!Array<!Object>}
    */
   processResources(rowEntities, startRowIndex) {
-    throw new Error('Should be overwrittern in sub class.');
+    throw new Error('Should be overwritten in sub class.');
   }
 
   /**
@@ -149,28 +179,39 @@ class PlainSheet extends DataTableSheet {
   }
 
   /**
-   * Operates on the selected row. This is a menu funciton.
+   * Refreshes the data range of columns. This is a menu function.
+   */
+  refreshDataRange() {
+    this.getEnhancedSheet().setColumnDataRange_(
+      this.columnName,
+      this.columnDataRange,
+    );
+  }
+
+  /**
+   * Operates on the selected row. This is a menu function.
    * The operation to a row is defined in the function `processResources` which
-   * should be overrided by the sub classes.
+   * should be overridden by the sub classes.
    */
   operateSingleRow() {
     const rowIndex = this.getSelectedRow();
     const rowEntity = this.getArrayOfRowEntity()[rowIndex - ROW_INDEX_SHIFT];
     this.processResources([rowEntity], rowIndex).forEach(
-      (result) => void this.showOperationResult(rowIndex, result)
+      result => void this.showOperationResult(rowIndex, result),
     );
   }
 
   /**
-   * Operates on all rows in this sheet. This is a menu funciton.
+   * Operates on all rows in this sheet. This is a menu function.
    * The operation to a row is defined in the function `processResources` which
-   * should be overrided by the sub classes.
+   * should be overridden by the sub classes.
    */
   operateAllRows() {
     this.processResources(this.getArrayOfRowEntity(), ROW_INDEX_SHIFT).forEach(
       (result, index) => {
         this.showOperationResult(index + ROW_INDEX_SHIFT, result);
-      });
+      },
+    );
   }
 
   /**
@@ -178,16 +219,24 @@ class PlainSheet extends DataTableSheet {
    * `defaultNoteColumn` font color to green and add the result as a note for
    * the cell.
    * @param {number} rowIndex
-   * @param {!string} note
+   * @param {string} note
+   * @param {string=} fontColor
+   * @param {string=} column
    */
-  showOperationResult(rowIndex, note,
-    fontColor = 'green', column = this.defaultNoteColumn) {
+  showOperationResult(
+    rowIndex,
+    note,
+    fontColor = 'green',
+    column = this.defaultNoteColumn,
+  ) {
     if (!column) {
       throw new Error('There is no column defined to host the result.');
     }
     const columnIndex = this.columnName.indexOf(column) + 1;
-    this.getEnhancedSheet().sheet.getRange(rowIndex, columnIndex, 1, 1)
-      .setFontColor(fontColor).setNote(note);
+    this.getEnhancedSheet()
+      .sheet.getRange(rowIndex, columnIndex, 1, 1)
+      .setFontColor(fontColor)
+      .setNote(note);
   }
 
   /**
@@ -195,7 +244,11 @@ class PlainSheet extends DataTableSheet {
    * @return {!EnhancedSheet}
    */
   getEnhancedSheet() {
-    return new EnhancedSheet(this.sheetName);
+    const enhancedSheet = new EnhancedSheet(this.sheetName);
+    if (enhancedSheet.sheet.getLastRow() === 0) {
+      enhancedSheet.initialize(this);
+    }
+    return enhancedSheet;
   }
 
   /**
@@ -204,7 +257,21 @@ class PlainSheet extends DataTableSheet {
    * @return {!Array<!Object>}
    */
   getArrayOfRowEntity() {
-    return this.getEnhancedSheet().loadArrayOfEntity({ fields: this.fields });
+    return this.getEnhancedSheet().loadArrayOfEntity({fields: this.fields});
+  }
+
+  /**
+   * Returns a map of objects that are built from sheet rows. Every row will be
+   * loaded as an object with properties are the `fields`, the specified column
+   * (value of `idProperty`) will be used as the key of the object in the map.
+   * @param {string=} idProperty
+   * @return {!Object<string, !Object>}
+   */
+  getMapOfRowEntity(idProperty = this.idColumn) {
+    return this.getEnhancedSheet().loadMapOfEntity({
+      idProperty,
+      fields: this.fields,
+    });
   }
 
   /**
@@ -217,11 +284,12 @@ class PlainSheet extends DataTableSheet {
     const cell = SpreadsheetApp.getSelection().getCurrentCell();
     const sheetName = cell.getSheet().getSheetName();
     const row = cell.getRow();
-    if (sheetName !== this.sheetName
-      || row < ROW_INDEX_SHIFT || row > cell.getSheet().getLastRow()) {
-      throw new Error(
-        `Select a valid row in [${this.sheetName}] and retry.`
-      );
+    if (
+      sheetName !== this.sheetName ||
+      row < ROW_INDEX_SHIFT ||
+      row > cell.getSheet().getLastRow()
+    ) {
+      throw new Error(`Select a valid row in [${this.sheetName}] and retry.`);
     }
     return row;
   }
@@ -238,34 +306,94 @@ class PlainSheet extends DataTableSheet {
   }
 
   /**
+   * Sets a link for the specified cell.
+   * @param {number} row Row number of the cell.
+   * @param {number} column Column number of the cell.
+   * @param {string} link
+   */
+  updateLink(row, column, link) {
+    const enhancedSheet = this.getEnhancedSheet();
+    const range = enhancedSheet.sheet.getRange(row, column, 1, 1);
+    const richTextValue = SpreadsheetApp.newRichTextValue()
+      .setText(range.getDisplayValue())
+      .setLinkUrl(link)
+      .build();
+    range.setRichTextValue(richTextValue);
+  }
+
+  /**
    * Updates a row specified by `rowIndex` with an object of key value pairs.
    * @param {!Object<string, string>} cells
    * @param {number} rowIndex
-   * @private
+   * @param {string=} fontColor
    */
-  updateCells(cells, rowIndex, fontColor = 'black') {//columnName, rowIndex, value
+  updateCells(cells, rowIndex, fontColor = 'black') {
+    // columnName, rowIndex, value
     Object.keys(cells)
-      .filter((columnName) => typeof cells[columnName] !== 'undefined')
-      .forEach((columnName) => {
+      .filter(columnName => typeof cells[columnName] !== 'undefined')
+      .forEach(columnName => {
         const columnIndex = this.fields.indexOf(columnName) + 1;
-        this.getEnhancedSheet().sheet.getRange(rowIndex, columnIndex, 1, 1)
-          .setValue(cells[columnName]).setFontColor(fontColor);
+        this.getEnhancedSheet()
+          .sheet.getRange(rowIndex, columnIndex, 1, 1)
+          .setValue(cells[columnName])
+          .setFontColor(fontColor);
       });
   }
 
   /** Content for the downloaded file. */
   get downloadContent() {
-    throw new Error('Should be overwrittern in sub class.');
+    throw new Error('Should be overwritten in sub class.');
   }
 
   /** Default file name for the downloaded file. */
   get downloadFilename() {
-    throw new Error('Should be overwrittern in sub class.');
+    throw new Error('Should be overwritten in sub class.');
   }
 
-  /** MIME media type for the downloaded file. */
+  /**
+   * MIME media type for the downloaded file.
+   * @return {string}
+   */
   get downloadType() {
     return 'application/json';
+  }
+
+  /**
+   * Handle the edit event for the sheet.
+   * Format JSON columns if they are edited. Supports editing multiple cells at
+   * once (e.g. by paste).
+   * @param {!Object} event Event object from Google Apps Script.
+   */
+  processEditEvent(event) {
+    const range = event.range;
+    if (range.getRow() <= 1) return; // Ignore edits to the title row
+
+    const numCols = range.getNumColumns();
+    const numRows = range.getNumRows();
+    const startRow = range.getRow();
+    const startCol = range.getColumn();
+    const activeSheet = range.getSheet();
+
+    // Loop over the columns that are being edited
+    for (let c = 0; c < numCols; c++) {
+      const currentEditingColIndex = startCol + c;
+      const colName = this.columnName[currentEditingColIndex - 1];
+
+      // If this column is configured as a JSON column, format it
+      if (colName && this.jsonColumn.includes(colName)) {
+        for (let r = 0; r < numRows; r++) {
+          const cell = activeSheet.getRange(
+            startRow + r,
+            currentEditingColIndex,
+            1,
+            1,
+          );
+          if (typeof formatSheetRowForJsonCell === 'function') {
+            formatSheetRowForJsonCell(cell);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -301,9 +429,9 @@ class PlainSheet extends DataTableSheet {
   </body>
 </html>
 `;
-    const html = HtmlService
-      .createHtmlOutput(htmlTemplate).setWidth(250).setHeight(100);
-    SpreadsheetApp.getUi().showModalDialog(html, "Start downloading ...");
+    const html = HtmlService.createHtmlOutput(htmlTemplate)
+      .setWidth(250)
+      .setHeight(100);
+    SpreadsheetApp.getUi().showModalDialog(html, 'Start downloading ...');
   }
-
 }

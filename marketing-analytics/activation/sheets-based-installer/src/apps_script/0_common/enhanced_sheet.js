@@ -14,15 +14,15 @@
 
 /**
  * @fileoverview An enhanced sheet class contain utilities functions for a
- * GoogleSpreadsheet (@link {SpreadsheetApp}).
+ * GoogleSpreadsheet ({@link SpreadsheetApp}).
  */
 
 /**
  * The options when load data into entity from the sheet.
  * @typedef {{
  *   fields: !Array<string>,
- *   idProperty: string|undefined,
- *   skipHeadLines: number|undefined,
+ *   idProperty: (string|undefined),
+ *   skipHeadLines: (number|undefined),
  * }}
  */
 let SheetLoadOptions;
@@ -30,22 +30,22 @@ let SheetLoadOptions;
 /**
  * The options to initialize the sheet for data and/or styles.
  *   `columnsToBeMerged` is the columns will be merged vertically.
- *   `columnesToBeMergedMap`, the columns will be merged vertically by the other
+ *   `columnsToBeMergedMap`, the columns will be merged vertically by the other
  *     given column. By default, a column will be merged vertically if the
  *     values are the same. This object defines other columns will be merged
- *     veritically when the given column has the same value.
+ *     vertically when the given column has the same value.
  *   `frozenRow` how many rows from the beginning to be frozen. Default 1.
  * @typedef {{
  *   columnName: !Array<string>,
- *   columnFormat: !Object<string, (!RangeStyle|!Array<!RangeStyle>)>|undefined,
- *   columnWidth: !Object<string, number>|undefined,
- *   columnDataRange: !Object<string, !Array<string>>|undefined,
- *   columnConditionalFormat: !Object<string, string>|undefined,
- *   headlineStyle: !Object<string, string>|undefined,
- *   initialData: Array<Array<string|number>>,
- *   columnsToBeMerged: !Array<string>|undefined,
- *   columnsToBeMergedMap: !Object<string, !Array<string>>|undefined,
- *   frozenRow: number|undefined,
+ *   columnFormat: (!Object<string, (!RangeStyle|!Array<!RangeStyle>)>|undefined),
+ *   columnWidth: (!Object<string, number>|undefined),
+ *   columnDataRange: (!Object<string, !Array<string>>|undefined),
+ *   columnConditionalFormat: (!Object<string, string>|undefined),
+ *   headlineStyle: (!Object<string, string>|undefined),
+ *   initialData: !Array<!Array<(string|number)>>,
+ *   columnsToBeMerged: (!Array<string>|undefined),
+ *   columnsToBeMergedMap: (!Object<string, !Array<string>>|undefined),
+ *   frozenRow: (number|undefined),
  * }}
  */
 let SheetConfig;
@@ -56,11 +56,18 @@ let SheetConfig;
  * '#0.00%'.
  * @see https://developers.google.com/apps-script/reference/spreadsheet/range
  * @typedef {{
-*   fn: string,
-*   format: string,
-* }}
-*/
+ *   fn: string,
+ *   format: string,
+ * }}
+ */
 let RangeStyle;
+
+/**
+ * By default, sheet rows start at index 2 as it is 1-based index and has 1
+ * head line.
+ * @const {number}
+ */
+const ROW_INDEX_SHIFT = 2;
 
 /**
  * @const {string} COLUMN_NAME_FOR_DEFAULT_CONFIG A name of column holds the
@@ -71,13 +78,19 @@ const COLUMN_NAME_FOR_DEFAULT_CONFIG = 'default_';
 /** Style for column. */
 const COLUMN_STYLES = {
   ALIGN_MIDDLE_AND_CENTER: [
-    { fn: 'setHorizontalAlignment', format: 'center' },
-    { fn: 'setVerticalAlignment', format: 'middle' },
+    {fn: 'setHorizontalAlignment', format: 'center'},
+    {fn: 'setVerticalAlignment', format: 'middle'},
   ],
-  ALIGN_MIDDLE: { fn: 'setVerticalAlignment', format: 'middle' },
-  ALIGN_TOP: { fn: 'setVerticalAlignment', format: 'top' },
-  MONO_FONT: { fn: 'setFontFamily', format: 'Consolas' },
-}
+  ALIGN_MIDDLE: {fn: 'setVerticalAlignment', format: 'middle'},
+  ALIGN_TOP: {fn: 'setVerticalAlignment', format: 'top'},
+  WRAP_TEXT: {fn: 'setWrapStrategy', format: SpreadsheetApp.WrapStrategy.WRAP},
+  MONO_FONT: {fn: 'setFontFamily', format: 'Consolas'},
+  READONLY: [
+    {fn: 'setFontColor', format: '#5F6368'},
+    {fn: 'setBackground', format: '#F1F3F4'},
+    {fn: 'setFontStyle', format: 'italic'},
+  ],
+};
 
 /** Default headline style. */
 const DEFAULT_HEADLINE_STYLE = {
@@ -90,13 +103,13 @@ const DEFAULT_HEADLINE_STYLE = {
 
 /**
  * Default column format.
- * @type {{string: !RangeStyle}}
+ * @type {!Object<string, !RangeStyle>}
  */
 const COLUMN_FORMAT = {
-  DATE: { fn: 'setNumberFormat', format: 'YYYY-MM-DD' },
-  TIMESTAMP: { fn: 'setNumberFormat', format: 'YYYY-MM-DD HH:mm:SS' },
-  CURRENCY: { fn: 'setNumberFormat', format: '$#,###.00' },
-  PERCENTAGE: { fn: 'setNumberFormat', format: '#0.00%' },
+  DATE: {fn: 'setNumberFormat', format: 'YYYY-MM-DD'},
+  TIMESTAMP: {fn: 'setNumberFormat', format: 'YYYY-MM-DD HH:mm:SS'},
+  CURRENCY: {fn: 'setNumberFormat', format: '$#,###.00'},
+  PERCENTAGE: {fn: 'setNumberFormat', format: '#0.00%'},
 };
 
 /**
@@ -109,12 +122,10 @@ const COLUMN_FORMAT = {
  * 6. Merge empty cells vertically.
  */
 class EnhancedSheet {
-
   /**
-   * Create a
-   * @constructor
+   * Create an EnhancedSheet instance.
    * @param {string} sheetName
-   * @param {Spreadsheet} spreadsheet
+   * @param {!Spreadsheet=} spreadsheet
    * @see https://developers.google.com/apps-script/reference/spreadsheet/spreadsheet
    */
   constructor(sheetName, spreadsheet = SpreadsheetApp.getActiveSpreadsheet()) {
@@ -129,8 +140,18 @@ class EnhancedSheet {
   /** Clears the whole sheet, including charts. */
   clear() {
     this.sheet.clear();
-    this.sheet.getCharts().forEach(
-      (chart) => void this.sheet.removeChart(chart));
+    const range = this.sheet.getRange(
+      1,
+      1,
+      this.sheet.getMaxRows(),
+      this.sheet.getMaxColumns(),
+    );
+    range.clearDataValidations();
+    // remove all row groups.
+    // https://developers.google.com/apps-script/reference/spreadsheet/range#shiftrowgroupdepthdelta
+    range.expandGroups();
+    range.shiftRowGroupDepth(-9);
+    this.sheet.getCharts().forEach(chart => void this.sheet.removeChart(chart));
   }
 
   /**
@@ -140,49 +161,66 @@ class EnhancedSheet {
    */
   clearData(startRow = 2, startColumn = 1) {
     if (this.sheet.getLastRow() < startRow) return;
-    this.sheet.getRange(
-      startRow,
-      startColumn,
-      this.sheet.getLastRow() - startRow + 1,
-      this.sheet.getLastColumn() - startColumn + 1,
-    ).clearContent();
+    this.sheet
+      .getRange(
+        startRow,
+        startColumn,
+        this.sheet.getLastRow() - startRow + 1,
+        this.sheet.getLastColumn() - startColumn + 1,
+      )
+      .clearContent();
   }
 
   /**
    * Saves the data to the given position.
-   * @param {Array<Array<string|number>>} data
+   * @param {!Array<!Array<(string|number)>>} data
    * @param {number=} startRow, starting row 1-based index. Default 1.
    * @param {number=} startColumn, starting column 1-based index. Default 1.
    */
   save(data, startRow = 1, startColumn = 1) {
     if (data.length > 0)
-      this.sheet.getRange(startRow, startColumn, data.length, data[0].length)
+      this.sheet
+        .getRange(startRow, startColumn, data.length, data[0].length)
         .setValues(data);
   }
 
   /**
    * Appends the data to the current sheet.
-   * @param {Array<Array<string|number>>} data
+   * @param {!Array<!Array<(string|number)>>} data
    */
   append(data) {
     const startRow = this.sheet.getLastRow() + 1;
-    return this.save(data, startRow, 1);
+    this.save(data, startRow, 1);
+  }
+
+  /**
+   * Returns the fields based on first row. The names of fields will be
+   * processed by the function `getSafePropertyName`
+   * @see getSafePropertyName in utils.js
+   * @param {number=} fieldRow
+   * @return {!Array<string>}
+   */
+  guessFields(fieldRow = 1) {
+    console.log('Guess fields for ', this.sheetName, fieldRow);
+    return this.sheet
+      .getRange(fieldRow, 1, 1, this.sheet.getLastColumn())
+      .getDisplayValues()[0]
+      .map(getSafePropertyName);
   }
 
   /**
    * Cleans the data and loads an array of entities to this sheet.
-   * @param {Array<object>} entities
-   * @param {Array<string>} fields Names of fields which are mapped to the
+   * @param {!Array<!Object>} entities
+   * @param {!Array<string>} fields Names of fields which are mapped to the
    *   headline.
    */
   saveEntities(entities, fields) {
     this.clearData();
-    const data = entities.map((entity) => {
-      return fields.map((field) => {
+    const data = entities.map(entity => {
+      return fields.map(field => {
         const value = entity[field];
-        if (typeof value !== 'object')
-          return value;
-        return JSON.stringify(value);//stringify(value, null, 2);
+        if (typeof value !== 'object') return value;
+        return JSON.stringify(value); // stringify(value, null, 2);
       });
     });
     this.save(data, 2);
@@ -201,19 +239,33 @@ class EnhancedSheet {
    */
   initialize(sheetConfig, headlineStyle) {
     this.clear();
-    const { columnName: columns, initialData = [] } = sheetConfig;
+    const {columnName: columns, columnNote, initialData = []} = sheetConfig;
     if (columns) {
-      this.sheet.deleteColumns(1, columns.length);
       this.sheet.insertColumns(1, columns.length);
+      this.sheet.deleteColumns(
+        columns.length + 1,
+        Math.min(columns.length, this.sheet.getMaxColumns() - columns.length),
+      );
       this.save([columns]);
+      if (columnNote) {
+        // Mojo sheet doesn't have columnNote
+        columnNote.forEach((note, index) => {
+          if (note) {
+            this.sheet.getRange(1, index + 1, 1, 1).setNote(note);
+          }
+        });
+      }
     }
-    this.setSheetStyle(sheetConfig, headlineStyle);
     this.initMergeSettings(sheetConfig);
     const appendedData =
       typeof initialData === 'function' ? initialData() : initialData;
     if (appendedData.length > 0) {
       this.append(appendedData);
     }
+    this.setSheetStyle(sheetConfig, headlineStyle);
+    this.sheet.setRowGroupControlPosition(
+      SpreadsheetApp.GroupControlTogglePosition.BEFORE,
+    );
     SpreadsheetApp.flush();
   }
 
@@ -223,7 +275,7 @@ class EnhancedSheet {
    *  2. set columns' data range (drop list);
    *  3. set columns' width;
    *  4. set columns' conditional format to indicate the validation of a row;
-   *  5. set the syle of headline.
+   *  5. set the style of headline.
    * @param {!SheetConfig} sheetConfig
    * @param {!Object<string, string>} headlineStyle
    */
@@ -236,16 +288,16 @@ class EnhancedSheet {
       columnConditionalFormat,
       frozenRow = 1,
     } = sheetConfig;
-    if (columnFormat)
-      this.setColumnFormat_(columns, columnFormat);
-    if (columnDataRange)
-      this.setColumnDataRange_(columns, columnDataRange);
-    if (columnWidth)
-      this.setColumnWidth_(columns, columnWidth);
+    if (columnFormat) this.setColumnFormat_(columns, columnFormat);
+    if (columnDataRange) this.setColumnDataRange_(columns, columnDataRange);
+    if (columnWidth) this.setColumnWidth_(columns, columnWidth);
     if (columnConditionalFormat)
       this.setConditionalFormat_(columns, columnConditionalFormat);
-    const style = Object.assign({}, DEFAULT_HEADLINE_STYLE,
-      headlineStyle || sheetConfig.headlineStyle);
+    const style = Object.assign(
+      {},
+      DEFAULT_HEADLINE_STYLE,
+      headlineStyle || sheetConfig.headlineStyle,
+    );
     this.setHeadlineStyle_(columns, style);
     this.sheet.setFrozenRows(frozenRow);
   }
@@ -260,23 +312,24 @@ class EnhancedSheet {
     const {
       columnName,
       columnsToBeMerged = [],
-      columnsToBeMergedMap = {}
+      columnsToBeMergedMap = {},
     } = sheetConfig;
-    this.mergedColumnIndexes = columnsToBeMerged.map(
-      (column) => columnName.indexOf(column)
+    this.mergedColumnIndexes = columnsToBeMerged.map(column =>
+      columnName.indexOf(column),
     );
     this.mergedColumnIndexMap = {};
-    Object.keys(columnsToBeMergedMap).forEach((key) => {
-      this.mergedColumnIndexMap[columnName.indexOf(key)] =
-        columnsToBeMergedMap[key].map((value) => columnName.indexOf(value));
-    })
+    Object.keys(columnsToBeMergedMap).forEach(key => {
+      this.mergedColumnIndexMap[columnName.indexOf(key)] = columnsToBeMergedMap[
+        key
+      ].map(value => columnName.indexOf(value));
+    });
   }
 
   /**
    * Sets the format of columns. Because there is a headline as column names,
    * all the formats set here start from the second row.
    * @param {!Array<string>} columns Column names.
-   * @param {!Object<string, (!RangeStyle|!Array<!RangeStyle>)>} columnFormat
+   * @param {!Object<string, (!RangeStyle|!Array<!RangeStyle>)>=} columnFormat
    *   A map contains formats for columns. The `key` is the column names and the
    *  `value` is `RangeStyle` or an array of `RangeStyle`.
    *   A specific column (@see COLUMN_NAME_FOR_DEFAULT_CONFIG) offers for the
@@ -285,9 +338,13 @@ class EnhancedSheet {
    */
   setColumnFormat_(columns, columnFormat = {}) {
     if (columnFormat[COLUMN_NAME_FOR_DEFAULT_CONFIG]) {
-      const exceptHeadline = this.sheet.getRange('2:' + this.sheet.getMaxRows());
-      this.setRangeFormat_(exceptHeadline,
-        columnFormat[COLUMN_NAME_FOR_DEFAULT_CONFIG]);
+      const exceptHeadline = this.sheet.getRange(
+        '2:' + this.sheet.getMaxRows(),
+      );
+      this.setRangeFormat_(
+        exceptHeadline,
+        columnFormat[COLUMN_NAME_FOR_DEFAULT_CONFIG],
+      );
     }
     columns.forEach((column, index) => {
       const format = columnFormat[column];
@@ -304,7 +361,7 @@ class EnhancedSheet {
    * starts from the second row.
    * @see https://developers.google.com/apps-script/reference/spreadsheet/data-validation
    * @param {!Array<string>} columns Column names.
-   * @param {!Object<string, !Array<string>>} columnDataRang
+   * @param {!Object<string, !Array<string>>=} columnDataRange
    * @private
    */
   setColumnDataRange_(columns, columnDataRange = {}) {
@@ -320,7 +377,7 @@ class EnhancedSheet {
   /**
    * Set width for columns.
    * @param {!Array<string>} columns Column names.
-   * @param {!Object<string, number>} columnWidth The default value is 100.
+   * @param {!Object<string, number>=} columnWidth The default value is 100.
    * @private
    */
   setColumnWidth_(columns, columnWidth = {}) {
@@ -333,14 +390,20 @@ class EnhancedSheet {
 
   /**
    * Set format for the given range.
-   * @param {Range} range
+   * @param {!Range} range
    *   @see https://developers.google.com/apps-script/reference/spreadsheet/range
-   * @param {Array<!RangeStyle>|!RangeStyle} format
+   * @param {!Array<!RangeStyle>|!RangeStyle} format
    * @private
    */
   setRangeFormat_(range, format) {
     const formats = Array.isArray(format) ? format : [format];
-    formats.forEach(({ fn, format }) => range[fn](format));
+    formats.forEach(({fn, format}) => {
+      if (typeof format === 'undefined') {
+        range[fn]();
+      } else {
+        range[fn](format);
+      }
+    });
   }
 
   /**
@@ -362,25 +425,30 @@ class EnhancedSheet {
     const rules = [];
     columns.forEach((field, index) => {
       if (!conditionalFormats[field]) return;
-      const [requried, type] = conditionalFormats[field].split('_');
+      const [required, type] = conditionalFormats[field].split('_');
       const columnLetter = getColumnLetter(index);
       const range = this.sheet.getRange(`${columnLetter}2:${columnLetter}`);
       const conditions = [];
-      if (requried === 'REQUIRED' && requiredColumnLetter) {
+      if (required === 'REQUIRED' && requiredColumnLetter) {
         conditions.push(
-          `AND(NOT(ISBLANK($${requiredColumnLetter}2)),ISBLANK($${columnLetter}2))`
-        )
+          `AND(NOT(ISBLANK($${requiredColumnLetter}2)),ISBLANK($${
+            columnLetter
+          }2))`,
+        );
       }
       if (type) {
         conditions.push(
-          `AND(NOT(ISBLANK($${columnLetter}2)),NOT(IS${type}($${columnLetter}2)))`
-        )
+          `AND(NOT(ISBLANK($${columnLetter}2)),NOT(IS${type}($${
+            columnLetter
+          }2)))`,
+        );
       }
-      const fomular = conditions.length > 1
-        ? `=OR(${conditions.join(',')})`
-        : `=${conditions[0]}`;
+      const formula =
+        conditions.length > 1
+          ? `=OR(${conditions.join(',')})`
+          : `=${conditions[0]}`;
       const rule = SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied(fomular)
+        .whenFormulaSatisfied(formula)
         .setBackground('#F5AEA9')
         .setRanges([range])
         .build();
@@ -396,12 +464,12 @@ class EnhancedSheet {
    * `backgroundColor` not `background` for clarity.
    * @see https://developers.google.com/apps-script/reference/spreadsheet/range
    * @param {!Array<string>} columns Sheet column names.
-   * @param {!Object<string:string>} style
+   * @param {!Object<string, string>=} styles
    */
   setHeadlineStyle_(columns, styles = DEFAULT_HEADLINE_STYLE) {
     if (columns) {
       const headline = this.sheet.getRange(1, 1, 1, columns.length);
-      Object.keys(styles).forEach((style) => {
+      Object.keys(styles).forEach(style => {
         const value = styles[style];
         const fn = `set${style.replace(/^([a-z])/, (m, c) => c.toUpperCase())}`;
         if (style.startsWith('row')) {
@@ -411,25 +479,29 @@ class EnhancedSheet {
         }
       });
     }
-    if (styles.backgroundColor)
-      this.sheet.setTabColor(styles.backgroundColor);
+    if (styles.backgroundColor) this.sheet.setTabColor(styles.backgroundColor);
   }
 
   /**
    * Loads data from the sheet as an array of entity (JSON object) which have
    * the given fields as properties.
-   * @param {!SheetLoadOptions} options
-   * @return {!Array<Object>}
+   * @param {!SheetLoadOptions=} options
+   * @return {!Array<!Object>}
    */
-  loadArrayOfEntity(options) {
-    const { fields, skipHeadLines = 1 } = options;
+  loadArrayOfEntity(options = {}) {
+    const {fields = this.guessFields(), skipHeadLines = 1} = options;
     if (this.sheet.getLastRow() <= skipHeadLines) {
       return [];
     }
-    const rows = this.sheet.getRange(
-      skipHeadLines + 1, 1, this.sheet.getLastRow() - skipHeadLines, fields.length
-    ).getDisplayValues();
-    return rows.map((row) => {
+    const rows = this.sheet
+      .getRange(
+        skipHeadLines + 1,
+        1,
+        this.sheet.getLastRow() - skipHeadLines,
+        fields.length,
+      )
+      .getDisplayValues();
+    return rows.map(row => {
       const entity = {};
       fields.forEach((key, index) => void (entity[key] = row[index]));
       return entity;
@@ -437,28 +509,27 @@ class EnhancedSheet {
   }
 
   /**
-   * Loads data fromt the sheet as a map with the value as the entities.
+   * Loads data from the sheet as a map with the value as the entities.
    * For the key in map, there must be a field (idProperty) as "id".
    * @param {!SheetLoadOptions} options
-   * @return {Object<string, Object>} the map contains all objects in the sheet.
+   * @return {!Object<string, !Object>} the map contains all objects in the
+   *     sheet.
    */
   loadMapOfEntity(options) {
-    const { idProperty = 'id' } = options;
+    const {idProperty = 'id'} = options;
     const entities = {};
-    this.loadArrayOfEntity(options).forEach((entity) => {
-      const id = entity[idProperty];
-      if (!id) {
-        console.error(`There is no 'id' detected in the fields. Quit`);
-        return;
-      } else {
+    this.loadArrayOfEntity(options)
+      .filter(entity => entity[idProperty] !== '')
+      .forEach(entity => {
+        const id = entity[idProperty];
         if (entities[id]) {
           console.log(
             `Warning: Duplicated id(${id}) detected in the fields.` +
-            ' The previous one will be overwritten.');
+              ' The previous one will be overwritten.',
+          );
         }
         entities[id] = entity;
-      }
-    });
+      });
     return entities;
   }
 
@@ -474,8 +545,11 @@ class EnhancedSheet {
    *   merged even if they belong to a different previous group. This parameter
    *   limits how far a merge operation will go.
    */
-  mergeVertically(index = 0, startRowIndex = 1,
-    endRowIndex = this.sheet.getLastRow() - 1) {
+  mergeVertically(
+    index = 0,
+    startRowIndex = 1,
+    endRowIndex = this.sheet.getLastRow() - 1,
+  ) {
     if (index >= this.mergedColumnIndexes.length) return;
     const cellValues = this.sheet
       .getRange(1, this.mergedColumnIndexes[index] + 1, endRowIndex + 1, 1)
@@ -485,7 +559,8 @@ class EnhancedSheet {
     for (let i = startRow + 1; i < cellValues.length; i++) {
       const value = cellValues[i][0];
       if (value !== previousValue) {
-        if (startRow + 1 < i) { // Merge when there are multiple lines.
+        if (startRow + 1 < i) {
+          // Merge when there are multiple lines.
           this.mergeVertical_(index, startRow, i - 1);
         }
         previousValue = value;
@@ -512,9 +587,14 @@ class EnhancedSheet {
     if (this.mergedColumnIndexMap[mainColumnIndex]) {
       columnsToBeMerged.push(...this.mergedColumnIndexMap[mainColumnIndex]);
     }
-    columnsToBeMerged.forEach((columnIndex) => {
-      this.sheet.getRange(
-        startRowIndex + 1, columnIndex + 1, endRowIndex - startRowIndex + 1, 1)
+    columnsToBeMerged.forEach(columnIndex => {
+      this.sheet
+        .getRange(
+          startRowIndex + 1,
+          columnIndex + 1,
+          endRowIndex - startRowIndex + 1,
+          1,
+        )
         .merge();
     });
     this.mergeVertically(index + 1, startRowIndex, endRowIndex);
@@ -528,16 +608,20 @@ class EnhancedSheet {
    */
   mergeSheets(sheets, skipHeadLines = 1) {
     const startRow = skipHeadLines + 1;
-    sheets.forEach((sheet) => {
+    sheets.forEach(sheet => {
       const rows = sheet.getLastRow() - skipHeadLines;
       if (rows > 0) {
         const source = sheet.getRange(startRow, 1, rows, sheet.getLastColumn());
         const target = this.sheet.getRange(
-          this.sheet.getLastRow() + 1, 1, rows, sheet.getLastColumn());
+          this.sheet.getLastRow() + 1,
+          1,
+          rows,
+          sheet.getLastColumn(),
+        );
         this.sheet.insertRowsAfter(this.sheet.getLastRow(), rows);
         source.copyTo(target);
       }
       SpreadsheetApp.flush();
     });
   }
-};
+}

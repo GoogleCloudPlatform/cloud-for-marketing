@@ -15,9 +15,10 @@
 /** @fileoverview Search Ads API handler class.*/
 
 class SearchAds extends ExternalApi {
-
   constructor(option) {
     super(option);
+    this.name = 'Search Ads 360 API';
+    this.api = 'doubleclicksearch.googleapis.com';
     this.apiUrl = 'https://www.googleapis.com/doubleclicksearch';
     this.version = 'v2';
   }
@@ -40,53 +41,18 @@ class SearchAds extends ExternalApi {
    */
   verifyFloodlightActivities(availabilities) {
     const availabilityTimestamp = Date.now();
-    availabilities.forEach((activity) => {
+    availabilities.forEach(activity => {
       activity.availabilityTimestamp = availabilityTimestamp;
-    })
-    const { error } =
-      this.mutate('conversion/updateAvailability', { availabilities });
+    });
+    const {error} = this.mutate('conversion/updateAvailability', {
+      availabilities,
+    });
     if (error) {
       return {
         valid: false,
         reason: error.message || error.errors[0].message,
       };
     }
-    return { valid: true };
-  }
-
-  /**
-   * Verifies the existence of the agency.
-   * @see https://developers.google.com/search-ads/v2/reference/reports/generate
-   * @param {string} agencyId
-   * @return {VerifyResult}
-   */
-  verifyAgency(agencyId) {
-    const payload = {
-      reportType: 'account',
-      rowCount: 1,
-      startRow: 0,
-      statisticsCurrency: 'usd',
-      columns: [{ columnName: 'agency' }],
-      filters: [{
-        column: { columnName: 'agencyId' },
-        operator: 'equals',
-        values: [agencyId],
-      }],
-    };
-    const response = this.mutate('reports/generate', payload);
-    const { rowCount, error } = response;
-    if (error) {
-      return {
-        valid: false,
-        reason: error.message || error.errors[0].message,
-      };
-    }
-    if (rowCount === 0) {
-      return {
-        valid: false,
-        reason: `Can not find Agency with ID ${agencyId}`,
-      };
-    }
-    return { valid: true };
+    return {valid: true};
   }
 }

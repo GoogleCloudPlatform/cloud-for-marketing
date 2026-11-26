@@ -42,6 +42,8 @@ const TaskType = {
   GMC_WEBPAGE_FETCHER: 'gmc_webpage_fetcher',
   // Cloud Storage tasks
   COPY_GCS: 'copy_gcs',
+  // Execute Cloud Run Job
+  EXECUTE_RUN_JOB: 'execute_run_job',
   // Execute Notebook
   EXECUTE_NOTEBOOK: 'execute_notebook',
   // Invoke Cloud Function

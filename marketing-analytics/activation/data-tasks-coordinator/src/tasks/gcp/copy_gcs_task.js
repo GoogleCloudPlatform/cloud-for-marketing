@@ -21,13 +21,13 @@
 const unzipper = require('unzipper');
 const stripBomStream = require('strip-bom-stream').default;
 const path = require('path');
-const { Bucket, File } = require('@google-cloud/storage');
+const {Bucket, File} = require('@google-cloud/storage');
 const {
   TaskType,
   StorageFileConfig,
 } = require('../../task_config/task_config_dao.js');
 
-const { BaseTask } = require('../base_task.js');
+const {BaseTask} = require('../base_task.js');
 
 /**
  * Options for copying Cloud Storage file(s).
@@ -59,39 +59,41 @@ let CopyGcsOption;
 let CopyGcsTaskTaskConfig;
 
 class CopyGcsTask extends BaseTask {
-
   /** @override */
   async doTask() {
-    const {
-      /** @const {!StorageFileConfig} */ destination,
-      options = {},
-    } = this.config;
+    const {/** @const {!StorageFileConfig} */ destination, options = {}} =
+      this.config;
     /** @const {!Bucket} */
-    const targetBucket = this.getStorage(destination).bucket(destination.bucket);
+    const targetBucket = this.getStorage(destination).bucket(
+      destination.bucket,
+    );
     const targetFolder = destination.name || '';
     /** @const {!Array<!File>} */
     const files = await this.getFiles_();
-    this.copyPromises = files.map((file) => {
+    this.copyPromises = files.map(file => {
       if (options.unzip && file.name.toLocaleLowerCase().endsWith('.zip')) {
         return this.getUnzipPromise_(file, targetBucket, targetFolder);
       } else {
         return new Promise((resolve, reject) => {
-          const outputStream = targetBucket.file(
-            path.join(targetFolder, file.name)).createWriteStream();
+          const outputStream = targetBucket
+            .file(path.join(targetFolder, file.name))
+            .createWriteStream();
           const sourceStream = options.stripBom
             ? file.createReadStream().pipe(stripBomStream())
             : file.createReadStream();
-          sourceStream.pipe(outputStream)
+          sourceStream
+            .pipe(outputStream)
             .on('error', reject)
             .on('finish', () => {
               this.logger.debug(
-                `Copied ${file.name} to ${destination.bucket}/${targetFolder}`);
+                `Copied ${file.name} to ${destination.bucket}/${targetFolder}`,
+              );
               resolve(true);
             });
         });
-      };
+      }
     });
-    return { numberOfCopiedFiles: files.length };
+    return {numberOfCopiedFiles: files.length};
   }
 
   /**
@@ -103,30 +105,38 @@ class CopyGcsTask extends BaseTask {
    * @param {File} zipFile - Source file object (google-cloud/storage File).
    * @param {Bucket} targetBucket - Destination bucket object (google-cloud/storage Bucket).
    * @param {string} targetFolder - Destination folder path within the bucket.
-   * @returns {Promise<boolean>} Resolves to true when all files are unzipped and uploaded.
+   * @return {Promise<boolean>} Resolves to true when all files are unzipped and uploaded.
    * @private
    */
   async getUnzipPromise_(zipFile, targetBucket, targetFolder) {
     const promises = [];
     const stripBom = this.config.options ? this.config.options.stripBom : false;
     return new Promise((resolve, reject) => {
-      zipFile.createReadStream().pipe(unzipper.Parse())
-        .on('entry', (entry) => {
+      zipFile
+        .createReadStream()
+        .pipe(unzipper.Parse())
+        .on('entry', entry => {
           const fileName = entry.path;
           const type = entry.type;
           if (type === 'File') {
             const uploadPromise = new Promise((res, rej) => {
-              const outputStream = targetBucket.file(
-                path.join(targetFolder, fileName)).createWriteStream();
-              const sourceStream = stripBom ? entry.pipe(stripBomStream()) : entry;
-              sourceStream.pipe(outputStream)
+              const outputStream = targetBucket
+                .file(path.join(targetFolder, fileName))
+                .createWriteStream();
+              const sourceStream = stripBom
+                ? entry.pipe(stripBomStream())
+                : entry;
+              sourceStream
+                .pipe(outputStream)
                 .on('finish', () => {
                   this.logger.debug(`Unzip and upload: ${fileName}`);
                   res(true);
                 })
-                .on('error', (error) => {
-                  this.logger.error(`Fail to unzip and upload: ${fileName}`,
-                    error);
+                .on('error', error => {
+                  this.logger.error(
+                    `Fail to unzip and upload: ${fileName}`,
+                    error,
+                  );
                   rej(error);
                 });
             });
@@ -140,12 +150,12 @@ class CopyGcsTask extends BaseTask {
         .on('finish', async () => {
           await Promise.all(promises);
           this.logger.info(
-            `Finished unzip ${zipFile.name} to ${targetBucket.name}`);
+            `Finished unzip ${zipFile.name} to ${targetBucket.name}`,
+          );
           resolve(true);
         });
     });
   }
-
 
   /** @override */
   async isDone() {
@@ -160,25 +170,26 @@ class CopyGcsTask extends BaseTask {
 
   /** @override */
   async completeTask() {
-    const { options } = this.config;
+    const {options} = this.config;
     if (options && options.deleteSource) {
       this.logger.debug(`Need to delete source file(s).`);
       /** @const {!Array<!File>} */
       const files = await this.getFiles_();
-      await Promise.all(files.map((file) => {
-        this.logger.debug(`Delete ${file.name}.`);
-        return file.delete();
-      }));
+      await Promise.all(
+        files.map(file => {
+          this.logger.debug(`Delete ${file.name}.`);
+          return file.delete();
+        }),
+      );
     }
     return {
-      parameters: this.appendParameter(
-        {
-          destinationFile: {
-            bucket: this.config.destination.bucket,
-            name: this.config.source.name,
-          }
-        }),
-    }
+      parameters: this.appendParameter({
+        destinationFile: {
+          bucket: this.config.destination.bucket,
+          name: this.config.source.name,
+        },
+      }),
+    };
   }
 
   /**
@@ -189,15 +200,17 @@ class CopyGcsTask extends BaseTask {
    * @private
    */
   async getFiles_() {
-    const {/** @const {!StorageFileConfig} */ source } = this.config;
-    const filter = { prefix: source.name };
+    const {/** @const {!StorageFileConfig} */ source} = this.config;
+    const filter = {prefix: source.name};
     if (this.config.options && this.config.options.noSubFolder) {
       filter.delimiter = '/';
     }
-    const [files] = await this.getStorage(source).bucket(source.bucket)
+    const [files] = await this.getStorage(source)
+      .bucket(source.bucket)
       .getFiles(filter);
     this.logger.debug(
-      `Get ${files.length} files in ${source.bucket}/${source.name}`);
+      `Get ${files.length} files in ${source.bucket}/${source.name}`,
+    );
     return files;
   }
 }

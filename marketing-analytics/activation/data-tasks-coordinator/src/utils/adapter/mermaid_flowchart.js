@@ -62,6 +62,7 @@ const SENTINEL_TASK_STYLE = {
   multiple: 'fill:#a1e4f2',
   speed_controlled: 'fill:#f6aea9',
   execute_notebook: 'fill:#fba9d6',
+  execute_run_job: 'fill:#fba9d6',
   invoke_cloud_function: 'fill:#fba9d6',
   notify: 'fill:#fdc69c',
   taskConfig: 'fill:#e8eaed,font-style:italic,stroke-dasharray: 5 5',

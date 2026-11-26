@@ -19,8 +19,9 @@
 'use strict';
 
 const {BigQuery} = require('@google-cloud/bigquery');
-const { utils: { changeStringToBigQuerySafe } }
-  = require('@google-cloud/nodejs-common');
+const {
+  utils: {changeStringToBigQuerySafe},
+} = require('@google-cloud/nodejs-common');
 const {BaseTask} = require('../base_task.js');
 
 /**
@@ -32,34 +33,34 @@ const BIGQUERY_JOB_STATUS_DONE = 'DONE';
 
 /** BigQuery tasks abstract class. */
 class BigQueryAbstractTask extends BaseTask {
-
   /**
    * Returns a default BigQuery instance based on detailed task.
    * @return {!BigQuery}
    */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     throw new Error('Unimplemented function: getInstanceBigQuery');
   }
 
   /** @override */
   async isDone() {
-    const bigquery = this.getBigQueryForTask();
-    const { jobReference } = this.parameters;
-    const { jobId } = jobReference;
-    const [job] = await bigquery.job(jobId, jobReference).get();
+    const bigQuery = await this.getBigQueryForTask();
+    const {jobReference} = this.parameters;
+    const {jobId} = jobReference;
+    const [job] = await bigQuery.job(jobId, jobReference).get();
     return job.metadata.status.state === BIGQUERY_JOB_STATUS_DONE;
   }
 
   /** @override */
   async completeTask() {
-    const bigquery = this.getBigQueryForTask();
-    const { jobReference } = this.parameters;
-    const { jobId } = jobReference;
-    const [job] = await bigquery.job(jobId, jobReference).get();
-    const { status } = job.metadata;
+    const bigQuery = await this.getBigQueryForTask();
+    const {jobReference} = this.parameters;
+    const {jobId} = jobReference;
+    const [job] = await bigQuery.job(jobId, jobReference).get();
+    const {status} = job.metadata;
     if (status.errors && status.errors.length > 0) {
-      const errorMessage =
-        status.errors.map(({ message }) => message).join(' | ');
+      const errorMessage = status.errors
+        .map(({message}) => message)
+        .join(' | ');
       throw new Error(errorMessage);
     }
     if (status.state !== BIGQUERY_JOB_STATUS_DONE) {
@@ -98,15 +99,35 @@ class BigQueryAbstractTask extends BaseTask {
    * @return {fields: Array}
    */
   getBigQuerySafeSchema(headers) {
-    const fields = headers.map((header) => {
+    const fields = headers.map(header => {
       const name = changeStringToBigQuerySafe(header);
       return {
         name,
         type: 'STRING',
         mode: 'NULLABLE',
-      }
+      };
     });
-    return { fields };
+    return {fields};
+  }
+
+  /**
+   * Gets a default partition type based on the partition id length.
+   * @see https://cloud.google.com/bigquery/docs/partitioned-tables#partitioning_types
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#TimePartitioning
+   * @param {string} tableId
+   * @return {string} The default partition type based on the partition id length.
+   *  - 10: HOUR
+   *  - 8: DAY
+   *  - 6: MONTH
+   *  - 4: YEAR
+   *  - others: undefined
+   */
+  getDefaultPartitionType(tableId) {
+    const partitionLength = tableId.split('$')[1].length;
+    if (partitionLength === 10) return 'HOUR';
+    if (partitionLength === 8) return 'DAY';
+    if (partitionLength === 6) return 'MONTH';
+    if (partitionLength === 4) return 'YEAR';
   }
 }
 

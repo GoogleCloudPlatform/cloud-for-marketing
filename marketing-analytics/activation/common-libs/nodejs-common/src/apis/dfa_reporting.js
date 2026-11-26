@@ -78,6 +78,7 @@ const PICKED_PROPERTIES = [
   'value',
   'quantity',
   'adUserDataConsent',
+  'cartData',
 ];
 
 /**

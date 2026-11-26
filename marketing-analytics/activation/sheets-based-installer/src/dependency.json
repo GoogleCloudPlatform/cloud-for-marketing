@@ -1,102 +1,361 @@
 {
-  "_default": [
-    "appsscript.json",
+  "enhanced_sheet.js": [
+    "utils.js"
+  ],
+  "explicit_auth.js": [
     "api_base.js",
-    "external_api.js",
-    "utils.js",
-    "trigger_functions.js"
+    "explicit_auth.html"
   ],
-  "colab_solution_sheet.js": [
-    "plain_sheet.js",
-    "colab_solution.js"
+  "gcp_api_base.js": [
+    "api_base.js"
   ],
-  "api_access_checker.js": [
-    "plain_sheet.js",
-    "gcloud.js",
-    "3_api"
+  "api_keys.js": [
+    "gcp_api_base.js"
   ],
-  "file_to_storage.js": [
-    "plain_sheet.js",
-    "storage.js"
+  "artifact_registry.js": [
+    "gcp_api_base.js"
   ],
-  "secret_manager_sheet.js": [
-    "plain_sheet.js",
-    "secret_manager.js"
+  "bigquery.js": [
+    "api_base.js"
   ],
-  "sentinel_cron_job.js": [
-    "plain_sheet.js",
-    "cloud_scheduler.js",
-    "sentinel_mojo_sheet.js"
+  "bigquery_data_transfer.js": [
+    "api_base.js"
   ],
-  "sentinel_mojo_sheet.js": [
-    "mojo_sheet.js",
-    "gcloud.js",
-    "sentinel.js",
-    "cloud_scheduler.js"
+  "cloud_asset.js": [
+    "gcp_api_base.js"
   ],
-  "sentinel_task_config.js": [
-    "plain_sheet.js",
-    "gcloud.js",
-    "sentinel.js",
-    "pub_sub.js"
+  "cloud_billing.js": [
+    "api_base.js"
   ],
-  "tentacles_mojo_sheet.js": [
-    "mojo_sheet.js",
-    "gcloud.js",
-    "tentacles.js",
-    "pub_sub.js",
-    "bigquery.js",
-    "logging.js"
+  "cloud_build.js": [
+    "api_base.js"
   ],
-  "tentacles_api_config.js": [
-    "plain_sheet.js",
-    "gcloud.js",
-    "3_api",
-    "storage.js"
+  "cloud_resource_manager.js": [
+    "api_base.js"
   ],
-  "plain_sheet.js": [
-    "data_table_sheet.js"
+  "cloud_run_function.js": [
+    "cloud_resource_manager.js",
+    "gcp_api_base.js"
   ],
-  "data_table_sheet.js": [
-    "enhanced_sheet.js"
+  "cloud_run_invoker.js": [
+    "iam_credentials.js"
   ],
-  "oauth.js": [
-    "secret_manager.js",
-    "secret_manager_sheet.js",
-    "oauth.html"
+  "cloud_run_job.js": [
+    "cloud_resource_manager.js",
+    "gcp_api_base.js"
   ],
-  "mojo_sheet.js": [
-    "mojo.js",
-    "mojo_constant.js"
+  "cloud_run_service.js": [
+    "cloud_resource_manager.js",
+    "gcp_api_base.js"
   ],
-  "mojo_constant.js": [
-    "timezone.js"
+  "cloud_scheduler.js": [
+    "api_base.js"
   ],
-  "tentacles.js": [
-    "prime_solution.js"
+  "cloud_tasks.js": [
+    "api_base.js"
   ],
-  "sentinel.js": [
-    "prime_solution.js"
+  "datastore.js": [
+    "api_base.js",
+    "firestore.js"
   ],
-  "gcloud.js": [
-    "1_gcp"
+  "eventarc.js": [
+    "cloud_resource_manager.js",
+    "gcp_api_base.js"
   ],
-  "colab_solution.js": [
-    "cloud_functions.js",
-    "service_usage.js"
+  "firestore.js": [
+    "gcp_api_base.js"
   ],
-  "prime_solution.js": [
-    "cloud_functions.js",
-    "service_usage.js"
+  "iam_credentials.js": [
+    "api_base.js"
   ],
-  "mojo.js": [
-    "enhanced_sheet.js"
+  "logging.js": [
+    "gcp_api_base.js"
+  ],
+  "pub_sub.js": [
+    "api_base.js"
+  ],
+  "secret_manager.js": [
+    "api_base.js"
+  ],
+  "service_usage.js": [
+    "gcp_api_base.js"
+  ],
+  "storage.js": [
+    "api_base.js",
+    "cloud_resource_manager.js"
   ],
   "external_api.js": [
     "api_base.js",
     "iam_credentials.js"
   ],
-  "explicit_auth.js": [
-    "explicit_auth.html"
+  "mojo.js": [
+    "enhanced_sheet.js",
+    "utils.js"
+  ],
+  "analytics.js": [
+    "external_api.js"
+  ],
+  "apps_script.js": [
+    "api_base.js"
+  ],
+  "campaign_manager.js": [
+    "external_api.js"
+  ],
+  "display_video.js": [
+    "external_api.js"
+  ],
+  "doubleclick_bid_manager.js": [
+    "external_api.js"
+  ],
+  "drive.js": [
+    "external_api.js"
+  ],
+  "gmail.js": [
+    "external_api.js"
+  ],
+  "google_ads.js": [
+    "external_api.js"
+  ],
+  "search_ads.js": [
+    "external_api.js"
+  ],
+  "search_ads_reporting.js": [
+    "external_api.js",
+    "google_ads.js"
+  ],
+  "sheets.js": [
+    "external_api.js"
+  ],
+  "mojo_api_key.js": [
+    "api_keys.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_apps_script.js": [
+    "apps_script.js",
+    "mojo.js"
+  ],
+  "mojo_artifact_registry.js": [
+    "artifact_registry.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_bigquery.js": [
+    "bigquery.js",
+    "mojo.js",
+    "mojo_cloud_storage.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "mojo_cloud_build.js": [
+    "artifact_registry.js",
+    "cloud_build.js",
+    "mojo.js",
+    "mojo_artifact_registry.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "mojo_cloud_storage.js": [
+    "mojo.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "mojo_cloud_task.js": [
+    "cloud_tasks.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_common.js": [
+    "mojo.js"
+  ],
+  "mojo_data_transfer.js": [
+    "bigquery.js",
+    "bigquery_data_transfer.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_eventarc_trigger.js": [
+    "cloud_resource_manager.js",
+    "cloud_run_service.js",
+    "eventarc.js",
+    "mojo.js",
+    "mojo_gcp_base.js",
+    "utils.js"
+  ],
+  "mojo_external_table.js": [
+    "bigquery.js",
+    "drive.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_firestore.js": [
+    "firestore.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_gcp_base.js": [
+    "api_base.js",
+    "cloud_billing.js",
+    "cloud_resource_manager.js",
+    "mojo.js",
+    "service_usage.js",
+    "utils.js"
+  ],
+  "mojo_log_router.js": [
+    "logging.js",
+    "mojo.js",
+    "mojo_gcp_base.js",
+    "utils.js"
+  ],
+  "mojo_pubsub.js": [
+    "mojo.js",
+    "pub_sub.js",
+    "utils.js"
+  ],
+  "mojo_run_function.js": [
+    "cloud_run_function.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_run_job.js": [
+    "cloud_run_job.js",
+    "mojo.js",
+    "mojo_artifact_registry.js",
+    "utils.js"
+  ],
+  "mojo_run_service.js": [
+    "cloud_run_service.js",
+    "mojo.js",
+    "mojo_artifact_registry.js",
+    "utils.js"
+  ],
+  "mojo_scheduler_job.js": [
+    "cloud_scheduler.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_secret_manager.js": [
+    "mojo.js",
+    "secret_manager.js",
+    "utils.js"
+  ],
+  "mojo_service_base.js": [
+    "cloud_asset.js",
+    "cloud_resource_manager.js",
+    "gcp_api_base.js",
+    "mojo.js",
+    "utils.js"
+  ],
+  "mojo_timezone.js": [
+    "mojo.js",
+    "timezone.js"
+  ],
+  "data_table_sheet.js": [
+    "enhanced_sheet.js",
+    "utils.js"
+  ],
+  "mojo_sheet.js": [
+    "mojo.js",
+    "utils.js"
+  ],
+  "oauth.js": [
+    "oauth.html",
+    "secret_manager.js",
+    "utils.js"
+  ],
+  "plain_sheet.js": [
+    "data_table_sheet.js",
+    "enhanced_sheet.js",
+    "utils.js"
+  ],
+  "trigger_functions.js": [
+    "plain_sheet.js",
+    "utils.js"
+  ],
+  "api_access_checker.js": [
+    "campaign_manager.js",
+    "doubleclick_bid_manager.js",
+    "enhanced_sheet.js",
+    "google_ads.js",
+    "plain_sheet.js",
+    "search_ads_reporting.js",
+    "secret_manager.js",
+    "secret_manager_sheet.js",
+    "sheets.js",
+    "utils.js"
+  ],
+  "bifrost_integration_config.js": [
+    "enhanced_sheet.js",
+    "mojo.js",
+    "mojo_firestore.js",
+    "plain_sheet.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "colab_solution_sheet.js": [
+    "cloud_run_function.js",
+    "cloud_run_invoker.js",
+    "drive.js",
+    "enhanced_sheet.js",
+    "mojo.js",
+    "mojo_run_function.js",
+    "plain_sheet.js",
+    "utils.js"
+  ],
+  "file_to_storage.js": [
+    "enhanced_sheet.js",
+    "plain_sheet.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "secret_manager_sheet.js": [
+    "enhanced_sheet.js",
+    "plain_sheet.js",
+    "secret_manager.js",
+    "utils.js"
+  ],
+  "sentinel_cron_job.js": [
+    "cloud_scheduler.js",
+    "enhanced_sheet.js",
+    "plain_sheet.js",
+    "utils.js"
+  ],
+  "sentinel_mojo_sheet.js": [
+    "cloud_build.js",
+    "cloud_run_service.js",
+    "cloud_scheduler.js",
+    "eventarc.js",
+    "firestore.js",
+    "logging.js",
+    "mojo.js",
+    "mojo_cloud_build.js",
+    "mojo_cloud_storage.js",
+    "mojo_eventarc_trigger.js",
+    "mojo_log_router.js",
+    "mojo_pubsub.js",
+    "mojo_run_service.js",
+    "mojo_scheduler_job.js",
+    "storage.js",
+    "utils.js"
+  ],
+  "sentinel_task_config.js": [
+    "cloud_run_invoker.js",
+    "cloud_run_service.js",
+    "enhanced_sheet.js",
+    "json_editor.html",
+    "mojo.js",
+    "mojo_firestore.js",
+    "plain_sheet.js",
+    "pub_sub.js",
+    "sentinel_task_json_schema.js",
+    "utils.js",
+    "workflow_diagram.html"
+  ],
+  "sentinel_task_json_schema.js": [
+    "common_json_schema.js",
+    "utils.js"
+  ],
+  "_default": [
+    "trigger_functions.js"
   ]
 }

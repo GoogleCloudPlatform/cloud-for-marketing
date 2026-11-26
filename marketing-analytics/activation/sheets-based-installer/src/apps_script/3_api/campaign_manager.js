@@ -15,9 +15,10 @@
 /** @fileoverview Campaign Manager 360 API handler class.*/
 
 class CampaignManager extends ExternalApi {
-
   constructor(option) {
     super(option);
+    this.name = 'Campaign Manager 360 API';
+    this.api = 'dfareporting.googleapis.com';
     this.apiUrl = 'https://dfareporting.googleapis.com/dfareporting';
     this.version = 'v4';
   }
@@ -43,10 +44,11 @@ class CampaignManager extends ExternalApi {
    * @return {string}
    */
   getUserProfileId(targetAccountId) {
-    const { items } = this.get('userprofiles');
+    const {items} = this.get('userprofiles');
     if (!items) return;
-    const userProfiles =
-      items.filter(({ accountId }) => accountId === targetAccountId);
+    const userProfiles = items.filter(
+      ({accountId}) => accountId === targetAccountId,
+    );
     if (userProfiles.length === 0) return;
     return userProfiles[0].profileId;
   }
@@ -66,15 +68,16 @@ class CampaignManager extends ExternalApi {
         reason: `Can not find user profile for CM account ID ${accountId}`,
       };
     }
-    const { error } = this.get(
-      `userprofiles/${profileId}/floodlightActivities/${floodlightActivityId}`);
+    const {error} = this.get(
+      `userprofiles/${profileId}/floodlightActivities/${floodlightActivityId}`,
+    );
     if (error) {
       return {
         valid: false,
         reason: error.errors[0].message,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -92,8 +95,9 @@ class CampaignManager extends ExternalApi {
         reason: `Can not find user profile for CM account ID ${accountId}`,
       };
     }
-    const { error, format } =
-      this.get(`userprofiles/${profileId}/reports/${reportId}`);
+    const {error, format} = this.get(
+      `userprofiles/${profileId}/reports/${reportId}`,
+    );
     if (error) {
       return {
         valid: false,
@@ -106,6 +110,6 @@ class CampaignManager extends ExternalApi {
         reason: `Report[${reportId}]'s format is not CSV`,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 }

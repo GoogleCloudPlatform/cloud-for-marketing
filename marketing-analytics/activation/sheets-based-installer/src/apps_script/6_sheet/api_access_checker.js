@@ -16,25 +16,26 @@
 
 /**
  * Apis and their access checking functions.
- * @const {!Object<string, function(ExternalApiAuthOption, string):!VerifyResult>}
+ * @const {!Object<string, function(ExternalApiAuthOption,
+ * string):!VerifyResult>}
  */
 const API_CHECK_FUNCTIONS = {
   'Google Ads Report': (option, resourceId, extraInfo) => {
     return new GoogleAds(option, resourceId, extraInfo).verifyReportAccess();
   },
-  'Search Ads Account': (option, resourceId) => {
-    return new SearchAds(option).verifyAgency(resourceId);
+  'Search Ads Reporting': (option, resourceId) => {
+    return new SearchAdsReporting(option, resourceId).verifyReportAccess();
   },
   'CM360 Account & Report': (option, resourceId, extraInfo) => {
     return new CampaignManager(option).verifyReport(resourceId, extraInfo);
   },
   'DV360 Query Id': (option, resourceId) => {
-    return new DoubleclickBidManager(option).verifyQuery(resourceId);
+    return new DoubleClickBidManager(option).verifyQuery(resourceId);
   },
-  'Sheets': (option, resourceId) => {
+  Sheets: (option, resourceId) => {
     return new Sheets(option).verifySpreadsheet(resourceId);
   },
-}
+};
 
 /**
  * Type of the object that each row of the sheet can be mapped to.
@@ -49,11 +50,10 @@ const API_CHECK_FUNCTIONS = {
 let ApiAccessCheckerRowEntity;
 
 /**
- * The sheet stores names of secrets (in Secret Manage) and configruations of
+ * The sheet stores names of secrets (in Secret Manage) and configurations of
  * Apis. The functions can check whether the secret has access to that Api.
  */
 class ApiAccessChecker extends PlainSheet {
-
   get defaultSheetName() {
     return 'Api Access Checker';
   }
@@ -67,25 +67,92 @@ class ApiAccessChecker extends PlainSheet {
 
   get columnConfiguration() {
     return [
-      { name: 'Secret Name', width: 200 },
-      { name: 'API', width: 200, dataRange: Object.keys(API_CHECK_FUNCTIONS) },
-      { name: 'Resource Id', width: 300 },
-      { name: 'Extra Info' },
-      { name: 'API Access Check', width: 400 },
       {
-        name: COLUMN_NAME_FOR_DEFAULT_CONFIG, width: 200,
-        format: COLUMN_STYLES.MONO_FONT,
+        name: 'Secret Name',
+        dataRange: PlainSheet.instances[SECRET_MANAGER_MENU_OBJECT]
+          ? PlainSheet.instances[
+              SECRET_MANAGER_MENU_OBJECT
+            ].getArrayOfRowEntity().map(({name}) => name)
+          : [],
+        width: 200,
+      },
+      {name: 'API', width: 200, dataRange: Object.keys(API_CHECK_FUNCTIONS)},
+      {name: 'Resource Id', width: 300},
+      {name: 'Extra Info'},
+      {name: 'API Access Check', width: 400, format: COLUMN_STYLES.WRAP_TEXT},
+      {
+        name: COLUMN_NAME_FOR_DEFAULT_CONFIG,
+        width: 200,
+        format: [COLUMN_STYLES.MONO_FONT, COLUMN_STYLES.ALIGN_MIDDLE],
       },
     ];
   }
 
   get inherentMenuItems() {
     return [
-      { name: 'Check selected API', method: 'operateSingleRow' },
-      { separator: true },
-      { name: 'Check all APIs', method: 'operateAllRows' },
-      { name: 'Reset sheet (will lose monification)', method: 'initialize' }
+      {name: 'Check selected API', method: 'operateSingleRow'},
+      {separator: true},
+      {name: 'Check all APIs', method: 'operateAllRows'},
+      {name: 'Refresh secret name list', method: 'refreshDataRange'},
+      {name: 'Reset sheet (will lose modification)', method: 'initialize'},
     ];
+  }
+
+  /**
+   * Gets an ExternalApiAuthOption based on the given secret name.
+   * If secretName was given, OAuth token will be loaded from Secret Manager.
+   * Otherwise, it will try to get the default service account.
+   * @param {string|undefined} secretName
+   * @return {!ExternalApiAuthOption}
+   * @private
+   */
+  getAuthOption_(secretName) {
+    const option = {};
+    if (!secretName) {
+      const serviceAccount = getDocumentProperty('serviceAccount');
+      if (!serviceAccount) {
+        throw new Error('Can not find service account in document properties.');
+      }
+      option.serviceAccount = serviceAccount;
+    } else {
+      const projectId = getDocumentProperty('projectId');
+      const secretManager = new SecretManager(projectId);
+      const {error, data} = secretManager.accessSecret(secretName);
+      if (error) {
+        throw new Error(
+          `Failed to access secret '${secretName}': ${
+            error.message || JSON.stringify(error)
+          }`,
+        );
+      }
+      option.oauth = JSON.parse(data);
+    }
+    return option;
+  }
+
+  /**
+   * Evaluates API verification with auth options and formats the outcome label.
+   * @param {string|undefined} secretName
+   * @param {function(!ExternalApiAuthOption):!VerifyResult} getCheckResult
+   * @return {!VerifyResult}
+   * @private
+   */
+  getAccessCheckResult_(secretName, getCheckResult) {
+    const label = secretName
+      ? `Auth with Secret Manager [name: ${secretName}]`
+      : 'Auth with default service account';
+    try {
+      const option = this.getAuthOption_(secretName);
+      const result = getCheckResult(option);
+      result.label = label;
+      return result;
+    } catch (error) {
+      return {
+        valid: false,
+        label,
+        reason: error.message,
+      };
+    }
   }
 
   /**
@@ -95,7 +162,7 @@ class ApiAccessChecker extends PlainSheet {
    * @return {!Array<!VerifyResult>}
    */
   processResources(configs) {
-    return configs.map(({ secretName, api, resourceId, extraInfo }) => {
+    return configs.map(({secretName, api, resourceId, extraInfo}) => {
       const checkFn = API_CHECK_FUNCTIONS[api];
       if (!checkFn) {
         return {
@@ -103,10 +170,10 @@ class ApiAccessChecker extends PlainSheet {
           reason: `Unsupported API: ${api}`,
         };
       }
-      const getCheckResult = (option) => {
+      const getCheckResult = option => {
         return checkFn(option, resourceId, extraInfo);
       };
-      return gcloud.getAccessCheckResult(secretName, getCheckResult);
+      return this.getAccessCheckResult_(secretName, getCheckResult);
     });
   }
 
@@ -119,9 +186,9 @@ class ApiAccessChecker extends PlainSheet {
     const timeTag = new Date().toISOString();
     const message = result.valid ? 'passed.' : `failed: ${result.reason}`;
     const columnIndex = this.columnName.indexOf('API Access Check');
-    this.getEnhancedSheet().sheet.getRange(rowIndex, columnIndex + 1, 1, 1)
+    this.getEnhancedSheet()
+      .sheet.getRange(rowIndex, columnIndex + 1, 1, 1)
       .setFontColor(result.valid ? 'green' : 'red')
       .setValue(`[${timeTag}] ${result.label || ''} ${message}`);
   }
-
 }

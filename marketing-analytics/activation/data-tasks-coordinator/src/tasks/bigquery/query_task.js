@@ -17,21 +17,28 @@
  */
 
 'use strict';
+
+const {BigQuery} = require('@google-cloud/bigquery');
+
 const {
+  api: {AuthClient},
   storage: {StorageFile},
   utils: {replaceParameters},
 } = require('@google-cloud/nodejs-common');
 const {BigQueryAbstractTask} = require('./bigquery_abstract_task.js');
-const {
-  TaskType,
-  BigQueryTableConfig,
-  StorageFileConfig,
-  WriteDisposition,
-} = require('../../task_config/task_config_dao.js');
+
+/**
+ * @import {
+ *   TaskType,
+ *   BigQueryTableConfig,
+ *   StorageFileConfig,
+ *   WriteDisposition,
+ * } from '../../task_config/task_config_dao.js'
+ */
 
 /**
  * @typedef {{
- *   type:TaskType.QUERY,
+ *   type: typeof TaskType.QUERY,
  *   source:{
  *     sql:(string|undefined),
  *     file:(!StorageFileConfig|undefined),
@@ -55,14 +62,30 @@ let QueryTaskConfig;
 
 /** Executes BigQuery query and exports result to a table task class. */
 class QueryTask extends BigQueryAbstractTask {
-
   /** @override */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
     const destinationTable = this.config.destination
-      ? this.config.destination.table : {};
+      ? this.config.destination.table
+      : {};
     const {external} = this.config.source;
-    return this.getBigQuery(destinationTable, external);
+    const authOptions = {
+      projectId: this.getCloudProject(destinationTable),
+      location: destinationTable.location,
+    };
+    authOptions.scopes = ['https://www.googleapis.com/auth/bigquery'];
+    if (external) {
+      authOptions.scopes.push('https://www.googleapis.com/auth/drive');
+    }
+    if (this.config.secretName) {
+      const authClient = new AuthClient(authOptions.scopes, {
+        SECRET_NAME: this.config.secretName,
+      });
+      await authClient.prepareCredentials();
+      authOptions.authClient = authClient.getDefaultAuth();
+      authOptions.clientOptions = authClient.getOAuth2Token();
+    }
+    return new BigQuery(authOptions);
   }
 
   /**
@@ -77,25 +100,30 @@ class QueryTask extends BigQueryAbstractTask {
       params: {},
     };
     if (this.config.destination) {
-      const { table, writeDisposition } = this.config.destination;
+      const {table, writeDisposition, timePartitioning} =
+        this.config.destination;
       /** @const {BigQueryTableConfig} */
       options.destinationTable = table;
       options.writeDisposition = writeDisposition;
       if (table.tableId.includes('$')) {
-        options.timePartitioning = {
-          type: 'DAY',
-          requirePartitionFilter: false,
-        };
+        const defaultType = this.getDefaultPartitionType(table.tableId);
+        options.timePartitioning = Object.assign(
+          {
+            type: defaultType,
+          },
+          timePartitioning,
+        );
       }
     }
     try {
-      const [job] = await this.getBigQueryForTask().createQueryJob(options);
-      const { jobReference } = job.metadata;
-      const { jobId } = jobReference;
+      const bigQuery = await this.getBigQueryForTask();
+      const [job] = await bigQuery.createQueryJob(options);
+      const {jobReference} = job.metadata;
+      const {jobId} = jobReference;
       const status = job.metadata.status.state;
       const sqlInfo = this.getSqlInfo_();
       this.logger.info(`Job[${jobId}] status ${status} on query [${sqlInfo}]`);
-      const appendedParameters = { jobReference };
+      const appendedParameters = {jobReference};
       if (options.destinationTable) {
         appendedParameters.destinationTable = options.destinationTable;
       }
@@ -104,9 +132,9 @@ class QueryTask extends BigQueryAbstractTask {
         parameters: this.appendParameter(appendedParameters),
       };
     } catch (error) {
-      this.logger.error(`Error in query to BigQuery:`, error);
+      this.logger.error('Error in query to BigQuery:', error);
       this.logger.error(options.query);
-      throw (error);
+      throw error;
     }
   }
 
@@ -116,7 +144,7 @@ class QueryTask extends BigQueryAbstractTask {
    * @private
    */
   getSqlInfo_() {
-    const { sql, file, reportToRefresh } = this.config.source;
+    const {sql, file, reportToRefresh} = this.config.source;
     if (sql) return sql;
     if (file) return `file: ${file.name}`;
     if (reportToRefresh) {
@@ -131,20 +159,29 @@ class QueryTask extends BigQueryAbstractTask {
    * @private
    */
   async getSql_() {
-    if (this.config.source.sql) return this.config.source.sql;
+    if (this.config.source.sql) {
+      const originalConfig = JSON.parse(this.originalConfigString);
+      if (originalConfig.source && originalConfig.source.sql) {
+        this.assertSafeSqlTemplateParameters_(originalConfig.source.sql);
+      }
+      return this.config.source.sql;
+    }
     if (this.config.source.file) {
       /** @const {StorageFileConfig} */
       const {bucket, name, projectId} = this.config.source.file;
-      const sql = await StorageFile
-          .getInstance(bucket, name, {projectId}).loadContent(0);
+      const sql = await StorageFile.getInstance(bucket, name, {
+        projectId,
+      }).loadContent(0);
+      this.assertSafeSqlTemplateParameters_(sql);
       return replaceParameters(sql, this.parameters);
     }
     if (this.config.source.reportToRefresh) {
-      const sql =
-        await this.getRefreshSqlFromReport_(this.config.source.reportToRefresh);
+      const sql = await this.getRefreshSqlFromReport_(
+        this.config.source.reportToRefresh,
+      );
       return sql;
     }
-    throw new Error(`Fail to find source sql or file for Query Task `);
+    throw new Error('Fail to find source sql or file for Query Task ');
   }
 
   /**
@@ -153,13 +190,15 @@ class QueryTask extends BigQueryAbstractTask {
    * @private
    */
   async getRefreshSqlFromReport_(config) {
-    const { datasetId, baseTable, deltaTable, reportTask } = config;
-    const { source } = await this.options.taskConfigDao.load(reportTask);
+    const {datasetId, baseTable, deltaTable, reportTask} = config;
+    this.assertSafeSqlValue_(datasetId, 'reportToRefresh.datasetId');
+    this.assertSafeSqlValue_(baseTable, 'reportToRefresh.baseTable');
+    this.assertSafeSqlValue_(deltaTable, 'reportToRefresh.deltaTable');
+    const {source} = await this.options.taskConfigDao.load(reportTask);
     if (source.target !== 'ADS') {
-      throw new Error(
-        `Unsupported ${taskConfig.source.target} report for refresh query.`);
+      throw new Error(`Unsupported ${source.target} report for refresh query.`);
     }
-    const { attributes, segments } = source.config.reportQuery;
+    const {attributes, segments} = source.config.reportQuery;
     const columns = attributes.concat(segments);
     return `
       WITH date_range AS (

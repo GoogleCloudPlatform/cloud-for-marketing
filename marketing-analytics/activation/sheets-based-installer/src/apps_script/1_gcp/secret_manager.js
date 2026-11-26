@@ -15,15 +15,28 @@
 /** @fileoverview Cloud Secret Manager API handler class.*/
 
 class SecretManager extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   */
   constructor(projectId) {
     super();
-    this.apiUrl = 'https://secretmanager.googleapis.com';
+    this.name = 'Secret Manager API';
+    this.api = 'secretmanager.googleapis.com';
+    this.permissions = [
+      'secretmanager.secrets.create',
+      'secretmanager.secrets.get',
+    ];
+    this.adminRole = 'Secret Manager Admin';
+    this.runtimeRoles = ['roles/secretmanager.secretAccessor'];
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v1';
     this.projectId = projectId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}/secrets`;
   }
@@ -31,26 +44,24 @@ class SecretManager extends ApiBase {
   /**
    * Gets secrets.
    * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets/list
-   * @return {SecretManagerService.ListSecrets}:
+   * @return {!Array<!Object>}
    */
   listSecrets() {
-    return super.get('');
+    return this.list('secrets', '');
   }
 
   /**
    * Creates a secret. Secret need to be created before a version can be added.
    * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets/create
    * @param {string} secretId
-   * @return
+   * @return {!Secret}
    */
   createSecret(secretId) {
-    return this.mutate(`?secretId=${secretId}`,
-      { replication: { automatic: {} } }
-    );
+    return this.mutate(`?secretId=${secretId}`, {replication: {automatic: {}}});
   }
 
   /**
-   * Gets a version of the secret. By default, it gets the latest vesion.
+   * Gets a version of the secret. By default, it gets the latest version.
    * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets.versions/get
    * @param {string} secret
    * @param {string=} version
@@ -62,22 +73,22 @@ class SecretManager extends ApiBase {
   }
 
   /**
-    * Creates a new SecretVersion containing secret data and attaches it to an
-    * existing Secret.
-    * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets/addVersion
-    * @param {string} secretId
-    * @param {string} data
-    * @return {!SecretVersion}
-    */
+   * Creates a new SecretVersion containing secret data and attaches it to an
+   * existing Secret.
+   * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets/addVersion
+   * @param {string} secretId
+   * @param {string} data
+   * @return {!SecretVersion}
+   */
   addSecretVersion(secretId, data) {
-    const { error } = this.getSecretVersion(secretId);
+    const {error} = this.getSecretVersion(secretId);
     if (error) {
       if (error.status !== 'NOT_FOUND') {
         throw new Error(`Fail to get Secret ${secretId}`);
       }
       this.createSecret(secretId);
     }
-    const payload = { payload: { data: Utilities.base64Encode(data) } };
+    const payload = {payload: {data: Utilities.base64Encode(data)}};
     return this.mutate(`${secretId}:addVersion`, payload);
   }
 
@@ -86,13 +97,26 @@ class SecretManager extends ApiBase {
    * @see https://cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets.versions/access
    * @param {string} secretId
    * @param {string=} version
-   * @return {{data: (string|undefined), error: (Error|undefined)}}
+   * @return {{data: (string|undefined), error: (!Error|undefined)}}
    */
   accessSecret(secretId, version = 'latest') {
-    const { error, payload } = this.get(`${secretId}/versions/${version}:access`);
-    if (error) return { error };
-    const data = Utilities.newBlob(Utilities.base64Decode(payload.data))
-      .getDataAsString();
-    return { data };
+    const {error, payload} = this.get(`${secretId}/versions/${version}:access`);
+    if (error) return {error};
+    const data = Utilities.newBlob(
+      Utilities.base64Decode(payload.data),
+    ).getDataAsString();
+    return {data};
+  }
+
+  /**
+   * Returns a link to the secret in Google Cloud Console.
+   * @param {string} secret
+   * @return {string}
+   */
+  getLinkToCloudConsole(secret) {
+    const link = `https://console.cloud.google.com/security/secret-manager/secret/${
+      secret
+    }?project=${this.projectId}`;
+    return link;
   }
 }

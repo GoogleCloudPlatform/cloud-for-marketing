@@ -18,8 +18,8 @@
  * Definition of APIs that users can grant access through OAuth process.
  * @typedef {{
  *   name: string,
- *   scope: string|!Array<string>,
- *   oauthOnly: boolean|undefined,
+ *   scope: (string|!Array<string>),
+ *   oauthOnly: (boolean|undefined),
  * }}
  */
 let OAuthApi;
@@ -28,11 +28,10 @@ let OAuthApi;
  * All supported OAuth APIs by Cyborg.
  * @const {!Object<string,!OAuthApi>}
  */
-const OAUTH_API_SCOPE = Object.freeze({
+const OAUTH_API_LIST = Object.freeze({
   GAds: {
     name: 'Google Ads API',
     scope: 'https://www.googleapis.com/auth/adwords',
-    oauthOnly: true,
   },
   GA: {
     name: 'Google Analytics Management API',
@@ -73,27 +72,63 @@ const OAUTH_API_SCOPE = Object.freeze({
   },
   Gmail: {
     name: 'GMail Notification API',
-    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    scope: 'https://www.googleapis.com/auth/gmail.send',
     oauthOnly: true,
-  }
+  },
+  DataManager: {
+    name: 'Data Manager API',
+    scope: 'https://www.googleapis.com/auth/datamanager',
+  },
 });
 
-/**
- * The array to hold OAuth scopes. In different solutions, there might be
- * different scopes.
- * @const {!Array<!OAuthApi>}
- */
-const DEFAULT_OAUTH_SCOPE = [];
+class OAuthTokenGenerator {
+  /**
+   * @param {!Array<!OAuthApi>} oAuthApis
+   */
+  constructor(oAuthApis) {
+    this.oAuthApis = oAuthApis || Object.values(OAUTH_API_LIST);
+    OAuthTokenGenerator.activeInstance = this;
+    this.menuItem = [
+      {separator: true},
+      {
+        name: 'Generate an OAuth token',
+        method: 'showOAuthSidebar',
+      },
+    ];
+  }
 
-/**
- * Returns the array of OAuth scopes. This function is called by the web page
- * in sidebar to generate the OAuth API list for the user to select.
- * @see '../pages/oauth.html'
- * @return {Array<string>}
- */
-const getOAuthScopes = () => {
-  return DEFAULT_OAUTH_SCOPE;
-};
+  /**
+   * Shows the sidebar to create OAuth token.
+   * This is the function behind OAuth menu Item.
+   */
+  showSidebar() {
+    const template = HtmlService.createTemplateFromFile('pages/oauth');
+    template.oAuthApis = JSON.stringify(this.oAuthApis);
+    const html = template
+      .evaluate()
+      .setTitle('OAuth2 token generator')
+      .setWidth(300);
+    SpreadsheetApp.getUi().showSidebar(html);
+  }
+
+  /**
+   * Saves the token as a secret in Secret Manager. This function is called by
+   * the web page in sidebar to generate the OAuth API list for the user to
+   * select.
+   * @see '../pages/oauth.html'
+   * @param {string} secretName
+   * @param {string} token
+   */
+  saveToken(secretName, token) {
+    const projectId = getDocumentProperty('projectId');
+    const secretManager = new SecretManager(projectId);
+    secretManager.addSecretVersion(secretName, token);
+
+    if (this.onTokenSaved) {
+      this.onTokenSaved();
+    }
+  }
+}
 
 /**
  * Saves the token as a secret in Secret Manager. This function is called by the
@@ -103,10 +138,9 @@ const getOAuthScopes = () => {
  * @param {string} token
  */
 const saveOAuthToken = (secretName, token) => {
-  const projectId = getDocumentProperty('projectId');
-  const secretManager = new SecretManager(projectId);
-  secretManager.addSecretVersion(secretName, token);
-  MENU_OBJECTS.secretmanagersheet.initialize();
+  if (OAuthTokenGenerator.activeInstance) {
+    OAuthTokenGenerator.activeInstance.saveToken(secretName, token);
+  }
 };
 
 /**
@@ -114,21 +148,7 @@ const saveOAuthToken = (secretName, token) => {
  * This is the function behind OAuth menu Item.
  */
 const showOAuthSidebar = () => {
-  const html = HtmlService.createHtmlOutputFromFile('pages/oauth')
-    .setTitle('OAuth2 token generator')
-    .setWidth(300);
-  SpreadsheetApp.getUi().showSidebar(html);
-};
-
-/**
- * Menu item to show the sidebar for OAuth generation.
- */
-const OAUTH_MENUITEM = {
-  menuItem: [
-    { separator: true },
-    {
-      name: 'Generate an OAuth token',
-      method: 'showOAuthSidebar',
-    },
-  ],
+  if (OAuthTokenGenerator.activeInstance) {
+    OAuthTokenGenerator.activeInstance.showSidebar();
+  }
 };

@@ -15,9 +15,10 @@
 /** @fileoverview Google Analytics API handler class.*/
 
 class Analytics extends ExternalApi {
-
   constructor(option) {
     super(option);
+    this.name = 'Google Analytics API';
+    this.api = 'analytics.googleapis.com';
     this.apiUrl = 'https://www.googleapis.com/analytics';
     this.version = 'v3';
   }
@@ -42,10 +43,11 @@ class Analytics extends ExternalApi {
    */
   verifyDataSource(accountId, webPropertyId, customDataSourceId) {
     const customDataSources = [];
-    let link =
-      `accounts/${accountId}/webproperties/${webPropertyId}/customDataSources`;
+    let link = `accounts/${accountId}/webproperties/${
+      webPropertyId
+    }/customDataSources`;
     do {
-      const { error, items, nextLink } = this.get(link);
+      const {error, items, nextLink} = this.get(link);
       if (error) {
         return {
           valid: false,
@@ -54,9 +56,9 @@ class Analytics extends ExternalApi {
       }
       customDataSources.push(...items);
       link = nextLink;
-    } while (link)
-    if (customDataSources.some(({ id }) => id === customDataSourceId)) {
-      return { valid: true };
+    } while (link);
+    if (customDataSources.some(({id}) => id === customDataSourceId)) {
+      return {valid: true};
     }
     return {
       valid: false,

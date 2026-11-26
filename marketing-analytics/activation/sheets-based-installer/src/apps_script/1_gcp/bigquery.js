@@ -19,40 +19,40 @@
  * @see https://cloud.google.com/bigquery/docs/locations
  */
 const BIGQUERY_LOCATIONS = [
-  { displayName: 'United States', locationId: 'US' },
-  { displayName: 'European Union', locationId: 'EU' },
-  { displayName: 'Montréal', locationId: 'northamerica-northeast1' },
-  { displayName: 'Toronto', locationId: 'northamerica-northeast2' },
-  { displayName: 'Iowa', locationId: 'us-central1' },
-  { displayName: 'South Carolina', locationId: 'us-east1' },
-  { displayName: 'Northern Virginia', locationId: 'us-east4' },
-  { displayName: 'Oregon', locationId: 'us-west1' },
-  { displayName: 'Los Angeles', locationId: 'us-west2' },
-  { displayName: 'Salt Lake City', locationId: 'us-west3' },
-  { displayName: 'Las Vegas', locationId: 'us-west4' },
-  { displayName: 'São Paulo', locationId: 'southamerica-east1' },
-  { displayName: 'Santiago', locationId: 'southamerica-west1' },
-  { displayName: 'Taiwan', locationId: 'asia-east1' },
-  { displayName: 'Hong Kong', locationId: 'asia-east2' },
-  { displayName: 'Tokyo', locationId: 'asia-northeast1' },
-  { displayName: 'Osaka', locationId: 'asia-northeast2' },
-  { displayName: 'Seoul', locationId: 'asia-northeast3' },
-  { displayName: 'Mumbai', locationId: 'asia-south1' },
-  { displayName: 'Delhi', locationId: 'asia-south2' },
-  { displayName: 'Singapore', locationId: 'asia-southeast1' },
-  { displayName: 'Jakarta', locationId: 'asia-southeast2' },
-  { displayName: 'Sydney', locationId: 'australia-southeast1' },
-  { displayName: 'Melbourne', locationId: 'australia-southeast2' },
-  { displayName: 'Warsaw', locationId: 'europe-central2' },
-  { displayName: 'Finland', locationId: 'europe-north1' },
-  { displayName: 'Madrid', locationId: 'europe-southwest1' },
-  { displayName: 'Belgium', locationId: 'europe-west1' },
-  { displayName: 'London', locationId: 'europe-west2' },
-  { displayName: 'Frankfurt', locationId: 'europe-west3' },
-  { displayName: 'Netherlands', locationId: 'europe-west4' },
-  { displayName: 'Zürich', locationId: 'europe-west6' },
-  { displayName: 'Milan', locationId: 'europe-west8' },
-  { displayName: 'Paris', locationId: 'europe-west9' },
+  {displayName: 'United States', locationId: 'US'},
+  {displayName: 'European Union', locationId: 'EU'},
+  {displayName: 'Montréal', locationId: 'northamerica-northeast1'},
+  {displayName: 'Toronto', locationId: 'northamerica-northeast2'},
+  {displayName: 'Iowa', locationId: 'us-central1'},
+  {displayName: 'South Carolina', locationId: 'us-east1'},
+  {displayName: 'Northern Virginia', locationId: 'us-east4'},
+  {displayName: 'Oregon', locationId: 'us-west1'},
+  {displayName: 'Los Angeles', locationId: 'us-west2'},
+  {displayName: 'Salt Lake City', locationId: 'us-west3'},
+  {displayName: 'Las Vegas', locationId: 'us-west4'},
+  {displayName: 'São Paulo', locationId: 'southamerica-east1'},
+  {displayName: 'Santiago', locationId: 'southamerica-west1'},
+  {displayName: 'Taiwan', locationId: 'asia-east1'},
+  {displayName: 'Hong Kong', locationId: 'asia-east2'},
+  {displayName: 'Tokyo', locationId: 'asia-northeast1'},
+  {displayName: 'Osaka', locationId: 'asia-northeast2'},
+  {displayName: 'Seoul', locationId: 'asia-northeast3'},
+  {displayName: 'Mumbai', locationId: 'asia-south1'},
+  {displayName: 'Delhi', locationId: 'asia-south2'},
+  {displayName: 'Singapore', locationId: 'asia-southeast1'},
+  {displayName: 'Jakarta', locationId: 'asia-southeast2'},
+  {displayName: 'Sydney', locationId: 'australia-southeast1'},
+  {displayName: 'Melbourne', locationId: 'australia-southeast2'},
+  {displayName: 'Warsaw', locationId: 'europe-central2'},
+  {displayName: 'Finland', locationId: 'europe-north1'},
+  {displayName: 'Madrid', locationId: 'europe-southwest1'},
+  {displayName: 'Belgium', locationId: 'europe-west1'},
+  {displayName: 'London', locationId: 'europe-west2'},
+  {displayName: 'Frankfurt', locationId: 'europe-west3'},
+  {displayName: 'Netherlands', locationId: 'europe-west4'},
+  {displayName: 'Zürich', locationId: 'europe-west6'},
+  {displayName: 'Milan', locationId: 'europe-west8'},
+  {displayName: 'Paris', locationId: 'europe-west9'},
 ];
 
 /** Default configuration for load job. */
@@ -64,16 +64,27 @@ const LOAD_CSV_DEFAULT_OPTION = {
 };
 
 class BigQuery extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   * @param {string=} datasetId
+   */
   constructor(projectId, datasetId) {
     super();
-    this.apiUrl = 'https://bigquery.googleapis.com/bigquery';
+    this.name = 'BigQuery API';
+    this.api = 'bigquery.googleapis.com';
+    this.permissions = ['bigquery.datasets.create', 'bigquery.jobs.create'];
+    this.adminRole = 'BigQuery Admin';
+    this.runtimeRoles = ['roles/bigquery.dataEditor', 'roles/bigquery.jobUser'];
+    this.apiUrl = `https://${this.api}/bigquery`;
     this.version = 'v2';
     this.projectId = projectId;
     this.datasetId = datasetId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
   }
@@ -82,7 +93,8 @@ class BigQuery extends ApiBase {
    * Gets the specified BigQuery table resource by table ID.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables/get
    * @param {string} tableId
-   * @return {!Table} https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#Table
+   * @return {!Table}
+   *     https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#Table
    */
   getTable(tableId) {
     return this.get(`datasets/${this.datasetId}/tables/${tableId}`);
@@ -94,7 +106,7 @@ class BigQuery extends ApiBase {
    * @return {boolean}
    */
   existTable(tableId) {
-    const { error } = this.getTable(tableId);
+    const {error} = this.getTable(tableId);
     if (error) {
       if (error.status === 'NOT_FOUND') return false;
       throw new Error(`Fail to get table ${tableId}, ${error.message}`);
@@ -122,19 +134,43 @@ class BigQuery extends ApiBase {
    */
   updateTable(tableId, config) {
     const response = this.mutate(
-      `datasets/${this.datasetId}/tables/${tableId}`, config, 'PUT');
+      `datasets/${this.datasetId}/tables/${tableId}`,
+      config,
+      'PUT',
+    );
     return response;
   }
 
   /**
-   * Deteles an existing table.
+   * Updates information in an existing table. The update method replaces the
+   * entire table resource, whereas the patch method only replaces fields that
+   * are provided in the submitted table resource.
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables/patch
+   * @param {string} tableId
+   * @param {!Table} config
+   * @return {!Table}
+   */
+  patchTable(tableId, config) {
+    const response = this.mutate(
+      `datasets/${this.datasetId}/tables/${tableId}`,
+      config,
+      'PATCH',
+    );
+    return response;
+  }
+
+  /**
+   * Deletes an existing table.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables/delete
    * @param {string} tableId
-   * @return {object}
+   * @return {!Object}
    */
   deleteTable(tableId) {
     const response = this.mutate(
-      `datasets/${this.datasetId}/tables/${tableId}`, {}, 'DELETE');
+      `datasets/${this.datasetId}/tables/${tableId}`,
+      {},
+      'DELETE',
+    );
     return response;
   }
 
@@ -144,7 +180,7 @@ class BigQuery extends ApiBase {
    * @return {!Table}
    */
   createOrUpdateTable(config) {
-    const { tableId } = config.tableReference;
+    const {tableId} = config.tableReference;
     if (this.existTable(tableId)) {
       return this.updateTable(tableId, config);
     }
@@ -157,7 +193,28 @@ class BigQuery extends ApiBase {
    * @return {!Dataset}
    */
   getDataset() {
-    return super.get(`datasets/${this.datasetId}`);
+    return this.get(`datasets/${this.datasetId}`);
+  }
+
+  /**
+   * Returns a list of datasets for a given project.
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/list
+   * @return {!Array<!Dataset>}
+   */
+  listDataset() {
+    return this.list('datasets', 'datasets');
+  }
+
+  /**
+   * Returns a list of tables for a given dataset.
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/tables/list
+   * @param {string=} datasetId
+   * @return {!Array<!Table>}
+   */
+  listTable(datasetId = this.datasetId) {
+    const uri = `datasets/${datasetId}/tables`;
+    const results = this.list('tables', uri);
+    return results;
   }
 
   /**
@@ -165,7 +222,7 @@ class BigQuery extends ApiBase {
    * @return {boolean}
    */
   existDataset() {
-    const { error } = this.getDataset();
+    const {error} = this.getDataset();
     if (error) {
       if (error.status === 'NOT_FOUND') return false;
       throw new Error(`Fail to get dataset ${tableId}, ${error.message}`);
@@ -176,36 +233,39 @@ class BigQuery extends ApiBase {
   /**
    * Creates a new empty dataset.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/insert
-   * @param {string} datasetId
-   * @param {!Dataset} options
+   * @param {string=} datasetId
+   * @param {!Dataset=} options
    * @return {!Dataset}
    */
   createDataset(datasetId = this.datasetId, options = {}) {
-    const payload = Object.assign({
-      datasetReference: {
-        datasetId,
-        projectId: this.projectId,
+    const payload = Object.assign(
+      {
+        datasetReference: {
+          datasetId,
+          projectId: this.projectId,
+        },
+        location: 'US',
       },
-      location: 'US',
-    }, options);
+      options,
+    );
     return this.mutate('datasets', payload);
   }
 
   /**
    * Updates information in an existing dataset.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/update
-   * @param {string} datasetId
-   * @param {!Dataset} config
+   * @param {string=} datasetId
+   * @param {!Dataset=} options
    * @return {!Dataset}
    */
-  updateDataset(datasetId = this.datasetId, config = {}) {
-    const response = this.mutate(`datasets/${datasetId}`, config, 'PUT');
+  updateDataset(datasetId = this.datasetId, options = {}) {
+    const response = this.mutate(`datasets/${datasetId}`, options, 'PUT');
     return response;
   }
 
   /**
    * Creates or updates a dataset.
-   * @param {!Dataset} config
+   * @param {!Dataset} options
    * @return {!Dataset}
    */
   createOrUpdateDataset(options) {
@@ -219,9 +279,10 @@ class BigQuery extends ApiBase {
    * Starts a query job and waits until it's done.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/insert
    * @param {string} query
+   * @return {!JobReference}
    */
   runQueryJob(query) {
-    const request = { configuration: { query: { query, useLegacySql: false } } };
+    const request = {configuration: {query: {query, useLegacySql: false}}};
     const response = this.mutate('jobs', request);
     return this.waitForJobToComplete_(response);
   }
@@ -242,10 +303,10 @@ class BigQuery extends ApiBase {
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/getQueryResults
    * @param {string} jobId
    * @param {string} location
-   * @return {Array<object>}
+   * @return {!Array<!Object>}
    */
   getQueryResult(jobId, location) {
-    const { rows } = this.get(`queries/${jobId}?location=${location}`);
+    const {rows} = this.get(`queries/${jobId}?location=${location}`);
     return rows;
   }
 
@@ -255,7 +316,7 @@ class BigQuery extends ApiBase {
    * @return {string}
    */
   getUniqueValue(query) {
-    const { jobId, location } = this.runQueryJob(query);
+    const {jobId, location} = this.runQueryJob(query);
     const rows = this.getQueryResult(jobId, location);
     return rows[0].f[0].v;
   }
@@ -268,26 +329,30 @@ class BigQuery extends ApiBase {
    * @see https://cloud.google.com/bigquery/docs/reference/api-uploads#resumable
    * @param {string} tableId
    * @param {string} content
-   * @param {object} options
-   * @return
+   * @param {!Object} options
+   * @return {!JobReference}
    */
-  loadData(tableId, content, options) {
+  loadDirectData(tableId, content, options) {
     const destinationTable = {
       projectId: this.projectId,
       datasetId: this.datasetId,
       tableId,
     };
     const load = Object.assign(
-      { destinationTable }, LOAD_CSV_DEFAULT_OPTION, options);
+      {destinationTable},
+      LOAD_CSV_DEFAULT_OPTION,
+      options,
+    );
     const param = this.getFetchAppParams();
     param.headers['X-Upload-Content-Type'] = '*/*';
     param.headers['X-Upload-Content-Length'] = content.length;
     param.method = 'POST';
-    param.payload = JSON.stringify({ configuration: { load } });
-    const url = 'https://www.googleapis.com/upload/bigquery/' +
+    param.payload = JSON.stringify({configuration: {load}});
+    const url =
+      'https://www.googleapis.com/upload/bigquery/' +
       `${this.version}/projects/${this.projectId}/jobs?uploadType=resumable`;
     const response = this.fetchAndReturnRawResponse(url, param);
-    const { Location: uploadUrl } = response.getHeaders();
+    const {Location: uploadUrl} = response.getHeaders();
     console.log('BQ Load upload url', uploadUrl);
     if (!uploadUrl) {
       throw new Error('Could not get upload Url for BigQuery load job.');
@@ -297,15 +362,48 @@ class BigQuery extends ApiBase {
   }
 
   /**
+   * Loads a data file from Cloud Storage into a BigQuery table. By default, it
+   * is a CSV file.
+   * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#jobconfigurationload
+   * @param {string} tableId
+   * @param {string} gsUrl The Google Cloud Storage URI (e.g.
+   *     gs://bucket/file.csv)
+   * @param {!Object=} options
+   * @return {!JobReference}
+   */
+  loadStorageFile(tableId, gsUrl, options = {}) {
+    const destinationTable = {
+      projectId: this.projectId,
+      datasetId: this.datasetId,
+      tableId,
+    };
+    const load = Object.assign(
+      {
+        destinationTable,
+        sourceUris: [gsUrl],
+      },
+      LOAD_CSV_DEFAULT_OPTION,
+      options,
+    );
+    const request = {configuration: {load}};
+    const response = this.mutate('jobs', request);
+    return this.waitForJobToComplete_(response);
+  }
+
+  /**
    * Waits the BigQuery job completed and returns the job reference.
-   * @param {Job} response https://cloud.google.com/bigquery/docs/reference/rest/v2/Job
+   * @param {!Job} response
+   *     https://cloud.google.com/bigquery/docs/reference/rest/v2/Job
    * @return {!JobReference} A job reference is a fully qualified identifier for
    *   referring to a job.
    * @see https://cloud.google.com/bigquery/docs/reference/rest/v2/JobReference
    */
   waitForJobToComplete_(response) {
-    const { jobReference } = response;
-    const { jobId, location } = jobReference;
+    const {jobReference, error} = response;
+    if (error) {
+      throw new Error(`Failed to start BigQuery job: ${error.message}`);
+    }
+    const {jobId, location} = jobReference;
     let status = response.status;
     while (status.state !== 'DONE') {
       console.log(`Job[${jobId}] is running. Wait for 10s before rechecking.`);
@@ -317,4 +415,42 @@ class BigQuery extends ApiBase {
     }
     return jobReference;
   }
+
+  /**
+   * Returns a link to the BigQuery dataset in Google Cloud Console.
+   * @return {string}
+   */
+  getLinkToCloudConsole() {
+    const link = `https://console.cloud.google.com/bigquery?project=${
+      this.projectId
+    }&ws=1m4!1m3!3m2!1s${this.projectId}!2s${this.datasetId}`;
+    return link;
+  }
+
+  /**
+   * Returns a link to the BigQuery table in Google Cloud Console.
+   * @param {string} tableId
+   * @return {string}
+   */
+  getLinkToTable(tableId) {
+    const link = `https://console.cloud.google.com/bigquery?project=${
+      this.projectId
+    }&ws=!1m5!1m4!4m3!1s${this.projectId}!2s${this.datasetId}!3s${tableId}`;
+    return link;
+  }
 }
+
+// Attributes used in Cyborg sheet to manage this resource.
+BigQuery.ATTRIBUTE_NAMES = Object.freeze({
+  location: 'Location',
+  partitionExpiration: 'Partition Expiration (days)',
+  // This default table expiration time is a fix value. Updating a table
+  // can't prevent it. So it should not be set for most of the cases.
+  tableExpiration: 'Table Expiration (days)',
+});
+
+BigQuery.LOAD_JOB_ATTRIBUTE_NAMES = Object.freeze({
+  source: 'Source',
+  skipLeadingRows: 'Skip Leading Rows',
+  sourceFormat: 'Source Format',
+});

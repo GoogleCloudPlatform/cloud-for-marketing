@@ -15,15 +15,25 @@
 /** @fileoverview Cloud Pub/Sub API handler class.*/
 
 class PubSub extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   */
   constructor(projectId) {
     super();
-    this.apiUrl = 'https://pubsub.googleapis.com';
+    this.name = 'Cloud Pub/Sub API';
+    this.api = 'pubsub.googleapis.com';
+    this.permissions = ['pubsub.topics.create', 'pubsub.subscriptions.create'];
+    this.adminRole = 'Pub/Sub Admin';
+    this.runtimeRoles = ['roles/pubsub.editor'];
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v1';
     this.projectId = projectId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
   }
@@ -68,7 +78,7 @@ class PubSub extends ApiBase {
    * @param {string} subscriptionName
    * @return {!Subscription}
    * @see https://cloud.google.com/pubsub/docs/reference/rest/v1/projects.subscriptions#Subscription
-  */
+   */
   getSubscription(subscriptionName) {
     return this.get(`subscriptions/${subscriptionName}`);
   }
@@ -113,8 +123,8 @@ class PubSub extends ApiBase {
     const response = this.getSubscription(subscriptionName);
     if (response.name) return true;
     if (response.error.code === 404) return false;
-    console.error(`Unknown status of Pub/sub Subscription ${subscriptionName}`, response);
-    throw new Error(`Unknown status of Pub/sub Subscription ${subscriptionName}`);
+    console.error(`Fail to get Pub/Sub ${subscriptionName}`, response);
+    throw response.error;
   }
 
   /**
@@ -122,14 +132,16 @@ class PubSub extends ApiBase {
    * create the topic first.
    * @param {string} topicName
    * @param {string} subscriptionName
-   * @param {!Subscription} options
+   * @param {!Subscription=} options
    * @return {!Subscription}
    */
   createOrUpdateSubscription(topicName, subscriptionName, options = {}) {
     if (!this.existTopic(topicName)) this.createTopic(topicName);
     let subscription;
     const payload = Object.assign(
-      { topic: `projects/${this.projectId}/topics/${topicName}` }, options);
+      {topic: `projects/${this.projectId}/topics/${topicName}`},
+      options,
+    );
     if (this.existSubscription(subscriptionName)) {
       subscription = this.updateSubscription(subscriptionName, {
         subscription: payload,
@@ -150,7 +162,30 @@ class PubSub extends ApiBase {
    * @return {{messageIds: !Array<string>}}
    */
   publish(topic, messages) {
-    return this.mutate(`topics/${topic}:publish`, { messages });
+    return this.mutate(`topics/${topic}:publish`, {messages});
   }
 
+  /**
+   * Creates or returns the target Pub/Sub topic idempotently.
+   * @param {string} topicName
+   * @return {!Topic}
+   */
+  createOrUpdateTopic(topicName) {
+    const cleanName = topicName.replace(/^projects\/[^/]+\/topics\//, '');
+    const topic = this.getTopic(cleanName);
+    if (topic && topic.name) return topic;
+    return this.createTopic(cleanName);
+  }
+
+  /**
+   * Returns a link to the Pub/Sub topic in Google Cloud Console.
+   * @param {string} topicName
+   * @return {string}
+   */
+  getLinkToCloudConsole(topicName) {
+    const cleanName = topicName.replace(/^projects\/[^/]+\/topics\//, '');
+    return `https://console.cloud.google.com/cloudpubsub/topic/detail/${
+      cleanName
+    }?project=${this.projectId}`;
+  }
 }
