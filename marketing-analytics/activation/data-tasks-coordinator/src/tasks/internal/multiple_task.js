@@ -266,6 +266,9 @@ class MultipleTask extends KnotTask {
    * In this way, the Tentacles config can be embedded here and not required to
    * be uploaded to Tentacles' Firestore. It also brings the flexibility to
    * modify the config items based on the file to be processed.
+   * However, it requests the Tentacles HTTP-based Cloud Run Function's Ingress
+   * to be 'All'. Some company might have policy to forbid this. Alternatively,
+   * can use Cloud Storage event driven Tentacles.
    * @param {string} tag The multiple task tag to mark task instances.
    * @param {!Array<string>} records Array of multiple task instances data. Each
    *     element is a JSON string of the 'appendedParameters' object for an task

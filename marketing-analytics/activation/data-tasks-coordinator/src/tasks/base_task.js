@@ -19,14 +19,15 @@
 'use strict';
 const {Storage} = require('@google-cloud/storage');
 const {
-  utils: {
-    replaceParameters,
-    getLogger,
-  }
+  utils: {replaceParameters, getLogger},
 } = require('@google-cloud/nodejs-common');
-const {TaskGroup} = require('../task_config/task_config_dao.js');
 const {FIELD_NAMES} = require('../task_log/task_log_dao.js');
-const {TaskManager, TaskManagerOptions} = require('../task_manager.js');
+const {TaskManager} = require('../task_manager.js');
+
+/**
+ * @typedef {import('../task_manager.js').TaskManagerOptions} TaskManagerOptions
+ * @typedef {import('../task_config/task_config_dao.js').TaskGroup} TaskGroup
+ */
 
 /**
  * Base class of Sentinel tasks. Tasks are divided into three kinds based on the
@@ -42,7 +43,6 @@ const {TaskManager, TaskManagerOptions} = require('../task_manager.js');
  *     API batch predict job, or DCM generating offline reports.
  */
 class BaseTask {
-
   /**
    * Initiates a task instance based on the configuration and parameters.
    * @param {Object<string,string>} config The configuration of the task. Parts
@@ -109,7 +109,8 @@ class BaseTask {
     const updatesToTaskLog = (await this.completeTask()) || {};
     if (this.config.appendedParameters) {
       updatesToTaskLog.parameters = this.appendParameter(
-        this.config.appendedParameters);
+        this.config.appendedParameters,
+      );
     }
     return {
       [FIELD_NAMES.REGULAR_CHECK]: false,
@@ -145,7 +146,7 @@ class BaseTask {
    *     saved to TaskLog, e.g. Job ID, or other external system id.
    * @abstract
    */
-  doTask() { }
+  doTask() {}
 
   /**
    * Executes operations that needs to be done after the job is finished, e.g.
@@ -164,7 +165,8 @@ class BaseTask {
    */
   setConfig_() {
     this.config = JSON.parse(
-        replaceParameters(this.originalConfigString, this.parameters));
+      replaceParameters(this.originalConfigString, this.parameters),
+    );
   }
 
   /**
@@ -207,6 +209,83 @@ class BaseTask {
    */
   getLogger() {
     return getLogger(this.constructor.name);
+  }
+
+  /**
+   * Validates that a single value interpolated into a SQL query does not
+   * contain SQL metacharacters, spaces, or comment sequences.
+   * @param {*} value The value to validate.
+   * @param {string} paramName Parameter path or field name for error reporting.
+   * @protected
+   */
+  assertSafeSqlValue_(value, paramName) {
+    if (
+      typeof value !== 'string' &&
+      typeof value !== 'number' &&
+      typeof value !== 'boolean'
+    ) {
+      const actualType = Array.isArray(value) ? 'array' : typeof value;
+      throw new Error(
+        `Unsafe SQL parameter "${paramName}": expected a primitive value ` +
+          `(string, number, or boolean), but received ${actualType}.`,
+      );
+    }
+    const strValue = String(value);
+    if (strValue.includes('--')) {
+      throw new Error(
+        `Unsafe SQL parameter "${paramName}": value contains disallowed SQL ` +
+          'comment sequence "--".',
+      );
+    }
+    if (!/^[a-zA-Z0-9_.\-:/$]*$/.test(strValue)) {
+      const invalidChars = Array.from(
+        new Set(strValue.match(/[^a-zA-Z0-9_.\-:/$]/g)),
+      )
+        .map(ch => JSON.stringify(ch))
+        .join(', ');
+      throw new Error(
+        `Unsafe SQL parameter "${paramName}": value contains disallowed ` +
+          `character(s) ${invalidChars}. Only alphanumeric characters and ` +
+          '"_", ".", "-", ":", "/", "$" are allowed (spaces, quotes, ' +
+          'semicolons, backticks, and other SQL metacharacters are forbidden).',
+      );
+    }
+  }
+
+  /**
+   * Validates all parameter values referenced by `${...}` placeholders in a
+   * raw SQL template string. Only parameters actually referenced in the SQL
+   * template are checked so unrelated pipeline metadata (e.g. GCS file
+   * metadata or upstream records) does not cause false rejections.
+   * @param {string} sqlTemplate Raw SQL template before parameter replacement.
+   * @protected
+   */
+  assertSafeSqlTemplateParameters_(sqlTemplate) {
+    if (typeof sqlTemplate !== 'string' || !this.parameters) return;
+    const regex = /\$\{([^}]*)\}/g;
+    let match;
+    while ((match = regex.exec(sqlTemplate)) !== null) {
+      const paramPath = match[1];
+      const splitNames = paramPath.split('.');
+      let value = this.parameters;
+      let found = true;
+      for (const namePiece of splitNames) {
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          !Object.prototype.hasOwnProperty.call(value, namePiece) ||
+          value[namePiece] === undefined ||
+          value[namePiece] === null
+        ) {
+          found = false;
+          break;
+        }
+        value = value[namePiece];
+      }
+      if (found) {
+        this.assertSafeSqlValue_(value, paramPath);
+      }
+    }
   }
 }
 

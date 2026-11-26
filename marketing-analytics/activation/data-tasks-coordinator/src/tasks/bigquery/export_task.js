@@ -51,7 +51,6 @@ let ExportTaskConfig;
 
 /** BigQuery export table to Cloud Storage task class. */
 class ExportTask extends BigQueryAbstractTask {
-
   /** @override */
   getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
@@ -65,29 +64,35 @@ class ExportTask extends BigQueryAbstractTask {
    * an asterisk in the exported file name and try again.
    * @override
    */
-  doTask() {
+  async doTask() {
     /** @const {BigQueryTableConfig} */ const source = this.config.source;
     /** @const {StorageFileConfig} */
     const destination = this.config.destination;
-    const sourceTable = this.getBigQueryForTask()
-        .dataset(source.datasetId)
-        .table(source.tableId);
+    const bigQuery = await this.getBigQueryForTask();
+    const sourceTable = bigQuery
+      .dataset(source.datasetId)
+      .table(source.tableId);
     /** @const {File} */ const storageFile = this.getStorage(destination)
-        .bucket(destination.bucket)
-        .file(destination.name);
-    const { allowMultiple = true } = this.config.options || {};
-    return this.exportTable_(sourceTable, storageFile).catch((error) => {
-      if (!destination.name.includes('*') && allowMultiple &&
-        error.message.includes('too large to be exported to a single file')) {
+      .bucket(destination.bucket)
+      .file(destination.name);
+    const {allowMultiple = true} = this.config.options || {};
+    return this.exportTable_(sourceTable, storageFile).catch(error => {
+      if (
+        !destination.name.includes('*') &&
+        allowMultiple &&
+        error.message.includes('too large to be exported to a single file')
+      ) {
         this.logger.info(
-            'Source table is too large to be exported in one file. Trying to '
-            + 'add * to the output file and export again now...');
-        const multiStorageFile = this.getStorage(destination).bucket(
-            destination.bucket).file(destination.name + '*');
+          'Source table is too large to be exported in one file. Trying to ' +
+            'add * to the output file and export again now...',
+        );
+        const multiStorageFile = this.getStorage(destination)
+          .bucket(destination.bucket)
+          .file(destination.name + '*');
         return this.exportTable_(sourceTable, multiStorageFile);
       }
       this.logger.error('Error in extract BQ to GCS:', error);
-      throw (error);
+      throw error;
     });
   }
 
@@ -106,14 +111,18 @@ class ExportTask extends BigQueryAbstractTask {
     const destinationUris = job.configuration.extract.destinationUris;
     const fileCounts = job.statistics.extract.destinationUriFileCounts[0];
     const status = job.status.state;
-    const { jobReference } = job;
-    const { jobId } = jobReference;
+    const {jobReference} = job;
+    const {jobId} = jobReference;
     this.logger.info(
-        `Job[${jobId}] status ${status} with ${fileCounts} files.`);
+      `Job[${jobId}] status ${status} with ${fileCounts} files.`,
+    );
     return {
       jobId,
-      parameters: this.appendParameter(
-        { jobReference, destination, destinationFile: destinationUris.join(',') }),
+      parameters: this.appendParameter({
+        jobReference,
+        destination,
+        destinationFile: destinationUris.join(','),
+      }),
     };
   }
 }

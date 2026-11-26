@@ -81,7 +81,6 @@ const INTERNAL_TASK_TYPE = Object.freeze({
  * to Cloud Storage. Besides these jobs, it also support many other tasks.
  */
 class Sentinel {
-
   /**
    * Initializes the Sentinel instance.
    * @param {!TaskManagerOptions} options
@@ -121,7 +120,7 @@ class Sentinel {
      * @return {!Promise<(!Array<string>|undefined)>} IDs of the 'start load
      *     task' messages.
      */
-    const monitorStorage = async (file) => {
+    const monitorStorage = async file => {
       try {
         const taskIds = await this.getTaskIdByFile_(file.name);
         if (taskIds.length === 0) {
@@ -129,11 +128,13 @@ class Sentinel {
         }
         this.logger.debug(`Find ${taskIds.length} Task for [${file.name}]`);
         const partitionDay = getDatePartition(file.name);
-        return Promise.all(taskIds.map((taskId) => {
-          this.logger.debug(`Trigger Load task: ${taskId}.`);
-          const parameters = JSON.stringify({ file, partitionDay });
-          return this.taskManager.sendTaskMessage(parameters, { taskId });
-        }));
+        return Promise.all(
+          taskIds.map(taskId => {
+            this.logger.debug(`Trigger Load task: ${taskId}.`);
+            const parameters = JSON.stringify({file, partitionDay});
+            return this.taskManager.sendTaskMessage(parameters, {taskId});
+          }),
+        );
       } catch (error) {
         this.logger.error(`Error in handling file: ${file.name}`, error);
         throw error;
@@ -149,19 +150,20 @@ class Sentinel {
    * @private
    */
   async getTaskIdByFile_(fileName) {
-    const regex = /task[\[|{}]([\w-]*)[\]|}]/i;
+    const regex = /task[\[{]([\w-]+)[\]}]/i;
     const task = fileName.match(regex);
     if (task) return [task[1]];
-    const matchesFileNamePattern = ({ source = {} }) => {
-      const { fileNamePattern } = source;
+    const matchesFileNamePattern = ({source = {}}) => {
+      const {fileNamePattern} = source;
       if (fileNamePattern) return new RegExp(fileNamePattern).test(fileName);
       return false;
-    }
-    const configs = await this.taskConfigDao.list(
-      [{ property: 'type', value: TaskType.LOAD }]);
+    };
+    const configs = await this.taskConfigDao.list([
+      {property: 'type', value: TaskType.LOAD},
+    ]);
     return configs
-      .filter(({ entity: config }) => matchesFileNamePattern(config))
-      .map(({ id }) => id);
+      .filter(({entity: config}) => matchesFileNamePattern(config))
+      .map(({id}) => id);
   }
 
   /**
@@ -201,21 +203,35 @@ class Sentinel {
       if (this.isFinishTaskMessage_(message)) {
         return this.finishTaskByMessage_(message);
       }
-      if (this.isBigQueryLoggingMessage_(message)) {
-        return this.finishBigQueryTask_(message);
+      const jobId = this.getJobIdFromMessageForCompletedJob_(message);
+      if (jobId) {
+        return this.notifyJobTaskToBeCompleted_(jobId);
       }
       this.logger.error(getMessage(message));
     };
     return coordinateTask;
   }
 
-  /** Returns whether this is a message to start a new task. */
+  /**
+   * Returns whether this is a message to start a new task.
+   *
+   * @param {!PubsubMessage} message
+   * @return {boolean}
+   * @private
+   */
   isStartTaskMessage_(message) {
     const attributes = message.attributes || {};
     return !!attributes.taskId;
   }
 
-  /** Starts the task based on a Pub/sub message. */
+  /**
+   * Starts the task based on a Pub/sub message.
+   *
+   * @param {!PubsubMessage} message
+   * @param {!EventContext} context
+   * @return {!Promise<(string|number)>}
+   * @private
+   */
   async startTaskByMessage_(message, context) {
     const attributes = message.attributes || {};
     const data = getMessage(message);
@@ -225,16 +241,20 @@ class Sentinel {
     let parametersStr;
     if (!data) {
       parametersStr = '{}';
-    } else if (data.indexOf('${') === -1) { // No placeholder in parameters.
+    } else if (data.indexOf('${') === -1) {
+      // No placeholder in parameters.
       parametersStr = data;
-    } else { // There are placeholders in parameters. Need default values.
+    } else {
+      // There are placeholders in parameters. Need default values.
       const regex = /\${([^}]*)}/g;
-      const parameters = data.match(regex).map((match) => {
+      const parameters = data.match(regex).map(match => {
         return match.substring(2, match.length - 1);
       });
-      const { timeZone, timezone } = JSON.parse(data);
-      const defaultParameters =
-        await getDefaultParameters(parameters, timeZone || timezone);
+      const {timeZone, timezone} = JSON.parse(data);
+      const defaultParameters = await getDefaultParameters(
+        parameters,
+        timeZone || timezone,
+      );
       parametersStr = replaceParameters(data, defaultParameters);
     }
     const taskLog = {
@@ -244,13 +264,25 @@ class Sentinel {
     return this.startTask_(messageId, taskLog);
   }
 
-  /** Returns whether this is a message to finish a task. */
+  /**
+   * Returns whether this is a message to finish a task.
+   *
+   * @param {!PubsubMessage} message
+   * @return {boolean}
+   * @private
+   */
   isFinishTaskMessage_(message) {
     const attributes = message.attributes || {};
     return !!attributes.taskLogId;
   }
 
-  /** Finishes the task based on a Pub/sub message. */
+  /**
+   * Finishes the task based on a Pub/sub message.
+   *
+   * @param {!PubsubMessage} message
+   * @return {!Promise<(!Array<string>|undefined)>}
+   * @private
+   */
   finishTaskByMessage_(message) {
     const attributes = message.attributes || {};
     this.logger.debug(`Complete task ${attributes.taskLogId}`);
@@ -258,28 +290,51 @@ class Sentinel {
   }
 
   /**
-   * Returns whether this is a message from BigQuery Logging of a completed job.
+   * Extracts and returns the job ID or execution name from a Cloud Logging
+   * message for completed BigQuery jobs or Cloud Run jobs.
+   *
+   * @param {!PubsubMessage} message The Pub/Sub message containing the Cloud
+   *     Logging payload.
+   * @return {string|undefined} The extracted job ID or execution name, or
+   *     undefined if not a matched event.
+   * @private
    */
-  isBigQueryLoggingMessage_(message) {
+  getJobIdFromMessageForCompletedJob_(message) {
     const data = getMessage(message);
     try {
-      const payload = JSON.parse(data);
-      return payload.resource
-          && payload.resource.type === 'bigquery_resource'
-          && payload.protoPayload
-          && payload.protoPayload.methodName === 'jobservice.jobcompleted';
+      const {resource, protoPayload} = JSON.parse(data);
+      if (!resource || !protoPayload) return;
+      if (
+        resource.type === 'bigquery_resource' &&
+        protoPayload.methodName === 'jobservice.jobcompleted'
+      ) {
+        const event = protoPayload.serviceData.jobCompletedEvent;
+        const job = event.job;
+        const eventName = event.eventName;
+        const jobId = job.jobName.jobId;
+        const jobStatus = job.jobStatus.state;
+        this.logger.debug(
+          `BigQuery JobId[${jobId}] [${eventName}] [${jobStatus}]`,
+        );
+        return jobId;
+      }
+      if (
+        resource.type === 'cloud_run_job' &&
+        protoPayload.methodName === '/Jobs.RunJob' &&
+        protoPayload.response.status.completionTime
+      ) {
+        const name = protoPayload.response.metadata.name;
+        const status = protoPayload.status.message;
+        this.logger.debug(`Cloud Run execution name [${name}] [${status}]`);
+        return name;
+      }
     } catch (error) {
-      this.logger.error('Checking whether the message is from BigQuery', error);
-      return false;
+      this.logger.error(
+        'Checking whether the message is from expected job completion',
+        error,
+      );
+      return;
     }
-  }
-
-  /** Finishes the task (if any) related to the completed job in the message. */
-  finishBigQueryTask_(message) {
-    const data = getMessage(message);
-    const payload = JSON.parse(data);
-    const event = payload.protoPayload.serviceData.jobCompletedEvent;
-    return this.handleBigQueryJobCompletedEvent_(event);
   }
 
   /**
@@ -317,11 +372,14 @@ class Sentinel {
       const task = await this.prepareTask(taskLog.taskId, parameters);
       const updatesToTaskLog = await task.start();
       this.logger.debug('Task started with:', JSON.stringify(updatesToTaskLog));
-      const needEnableCheckCronJob = task.isManualAsynchronous()
-        && !taskLog[FIELD_NAMES.MULTIPLE_TAG] && !taskLog[FIELD_NAMES.EMBEDDED_TAG];
+      const needEnableCheckCronJob =
+        task.isManualAsynchronous() &&
+        !taskLog[FIELD_NAMES.MULTIPLE_TAG] &&
+        !taskLog[FIELD_NAMES.EMBEDDED_TAG];
       if (needEnableCheckCronJob) {
         this.logger.info(
-          `Asynchronous tasks started. Resume the Status Check Task.`);
+          `Asynchronous tasks started. Resume the Status Check Task.`,
+        );
         await this.options.statusCheckCronJob.resume();
       }
       await this.taskLogDao.afterStart(taskLogId, updatesToTaskLog);
@@ -351,8 +409,8 @@ class Sentinel {
   async prepareTask(taskConfigId, parameters = {}) {
     /** @const {!BaseTask} */
     const task = parameters.intrinsic
-        ? this.prepareInternalTask_(parameters.intrinsic, parameters)
-        : await this.prepareExternalTask_(taskConfigId, parameters);
+      ? this.prepareInternalTask_(parameters.intrinsic, parameters)
+      : await this.prepareExternalTask_(taskConfigId, parameters);
     return task;
   }
 
@@ -395,7 +453,7 @@ class Sentinel {
     const task = this.buildTask(taskConfig, parameters);
     task.injectContext(this.options);
     return task;
-  };
+  }
 
   /**
    * Finishes a task in a 'duplicated message proof' way by using
@@ -448,7 +506,7 @@ class Sentinel {
         await this.taskManager.handleFailedTask(taskLogId, taskLog, error);
       // Send the message to retry the task.
       if (errorHandledStatus === ErrorHandledStatus.RETRIED) {
-        return this.taskManager.sendTaskMessage('', { taskLogId });
+        return this.taskManager.sendTaskMessage('', {taskLogId});
       }
       if (errorHandledStatus !== ErrorHandledStatus.IGNORED) {
         return result;
@@ -456,31 +514,22 @@ class Sentinel {
     }
     return this.taskManager.startTasks(
       taskLog.next,
-      { [FIELD_NAMES.PARENT_ID]: taskLogId },
-      updatedParameterStr
+      {[FIELD_NAMES.PARENT_ID]: taskLogId},
+      updatedParameterStr,
     );
   }
 
   /**
-   * Based on the incoming message, updates the TaskLog and triggers next tasks
-   * if there is any in TaskConfig of the current finished task.
-   * For Load/Query/Export tasks, the taskLog saves 'job Id' generated when the
-   * job starts at the beginning. When these kinds of job is done, the log event
-   * will be sent here with 'job Id'. So we can match to TaskLogs in database
-   * waiting for the job is done.
-   * @param event
-   * @return {!Promise<(!Array<string>|number|undefined)>} The message Id array
-   *     of the next tasks and an empty Array if there is no followed task.
-   *     Returns taskLogId (number) when an error occurs.
-   *     Returns undefined if there is no related taskLog.
+   * Notifies the system to complete a task based on the provided job ID.
+   * It queries the TaskLog by job ID and finishes the matching task.
+   *
+   * @param {string} jobId The ID of the completed job (e.g., BigQuery job ID or
+   *     Cloud Run execution name).
+   * @return {!Promise<(!Array<string>|undefined)>} Ids of messages to trigger
+   *     next task(s), or undefined if no matching task log is found.
    * @private
    */
-  async handleBigQueryJobCompletedEvent_(event) {
-    const job = event.job;
-    const eventName = event.eventName;
-    const jobId = job.jobName.jobId;
-    const jobStatus = job.jobStatus.state;
-    this.logger.debug(`Task JobId[${jobId}] [${eventName}] [${jobStatus}]`);
+  async notifyJobTaskToBeCompleted_(jobId) {
     const filter = {property: 'jobId', value: jobId};
     const taskLogs = await this.taskLogDao.list([filter]);
     if (taskLogs.length > 1) {
@@ -489,14 +538,15 @@ class Sentinel {
     if (taskLogs.length === 1) {
       return this.finishTask_(taskLogs[0].id);
     }
-    this.logger.debug(`BigQuery JobId[${jobId}] is not a Sentinel Job.`);
+    this.logger.info(`Couldn't find a Sentinel TaskLog with jobId: ${jobId}.`);
   }
 
   /**
    * A HTTP based Cloud Functions which returns Sentinel workflow information.
    * @see getWorkflowNodesAndTitle_
-   * @param {object} request
-   * @param {object} response
+   * @param {!Object} request
+   * @param {!Object} response
+   * @return {!Promise<void>}
    */
   async workflowReporter(request, response) {
     const parameters = request.body;
@@ -509,11 +559,17 @@ class Sentinel {
       responseContent = 'json',
     } = parameters;
     // default output
-    const output =
-      Object.assign({ target: 'mermaid', format: 'dev' }, parameters.output);
-    const { nodes, title } = await this.getWorkflowNodesAndTitle_(
-      taskLogId, taskConfigId, lastRun, timeZone);
-    const { target, format } = output;
+    const output = Object.assign(
+      {target: 'mermaid', format: 'dev'},
+      parameters.output,
+    );
+    const {nodes, title} = await this.getWorkflowNodesAndTitle_(
+      taskLogId,
+      taskConfigId,
+      lastRun,
+      timeZone,
+    );
+    const {target, format} = output;
     let result;
     if (target === 'mermaid') {
       const style = format === 'link' ? OPTIONS_INK : OPTIONS_DEV;
@@ -527,9 +583,11 @@ class Sentinel {
       result = `Unknown target: ${target}`;
     }
     if (responseContent === 'text') {
-      response.send(typeof result === 'string' ? result : JSON.stringify(result));
+      response.send(
+        typeof result === 'string' ? result : JSON.stringify(result),
+      );
     } else {
-      response.send({ result });
+      response.send({result});
     }
   }
 
@@ -559,24 +617,27 @@ class Sentinel {
      * @param {Date|Timestamp} obj
      * @return {string}
      */
-    const getTimeString = (obj) => {
+    const getTimeString = obj => {
       const date = obj.toDate ? obj.toDate() : obj;
-      return date.toLocaleString('en', { timeZone });
-    }
+      return date.toLocaleString('en', {timeZone});
+    };
     if (taskLogId) {
       const taskLog = await this.taskLogDao.load(taskLogId);
       if (!taskLog) {
         title = `Error_Not_found_TaskLogId ${taskLogId}`;
       } else {
         const startTime = getTimeString(taskLog.createTime);
-        title = `${taskLog.taskId}' execution ${taskLogId},`
-          + ` started at ${startTime}`;
+        title =
+          `${taskLog.taskId}' execution ${taskLogId},` +
+          ` started at ${startTime}`;
         targetLogId = taskLogId;
       }
     } else if (taskConfigId) {
-      if (lastRun) {// get the last run task log id of the given task config
+      if (lastRun) {
+        // get the last run task log id of the given task config
         const taskLog = await this.getLastRunTaskLog_(taskConfigId);
-        if (!taskLog) {// Not run yet.
+        if (!taskLog) {
+          // Not run yet.
           title = `No ${taskConfigId}'s logs found. Show the workflow instead`;
         } else {
           targetLogId = taskLog.id;
@@ -588,8 +649,10 @@ class Sentinel {
       }
     }
     if (targetLogId) {
-      const logNodeLoader =
-        new TaskLogNodeLoader(this.taskLogDao, this.taskConfigDao);
+      const logNodeLoader = new TaskLogNodeLoader(
+        this.taskLogDao,
+        this.taskConfigDao,
+      );
       const logs = await logNodeLoader.getWorkFlow(targetLogId);
       const configNodeLoader = new TaskConfigNodeLoader(this.taskConfigDao);
       const configs = await configNodeLoader.getWorkFlow(taskConfigId);
@@ -600,11 +663,13 @@ class Sentinel {
           const log = logs[j];
           if (log.taskId === config.taskId && log.level === config.level) {
             nodes.push(log);
-            configs.forEach((c) => {
+            configs.forEach(c => {
               if (c.parentId === config.id) c.parentId = log.id;
               if (config.tagHeld) {
-                if (c.embeddedTag === config.tagHeld) c.embeddedTag = log.tagHeld;
-                if (c.multipleTag === config.tagHeld) c.multipleTag = log.tagHeld;
+                if (c.embeddedTag === config.tagHeld)
+                  c.embeddedTag = log.tagHeld;
+                if (c.multipleTag === config.tagHeld)
+                  c.multipleTag = log.tagHeld;
               }
             });
             logs.splice(j, 1);
@@ -614,7 +679,7 @@ class Sentinel {
         config.isTaskConfig = true;
         nodes.push(config);
       }
-      logs.forEach((log) => {
+      logs.forEach(log => {
         nodes.push(log);
       });
     } else if (taskConfigId) {
@@ -625,7 +690,7 @@ class Sentinel {
         title = `Error_No_TaskLog_or_TaskConfig`;
       }
     }
-    return { nodes, title };
+    return {nodes, title};
   }
 
   /**
@@ -634,21 +699,20 @@ class Sentinel {
    * @return {!TaskLog|undefined}
    */
   async getLastRunTaskLog_(taskConfigId) {
-    const taskLogs =
-      await this.taskLogDao.list([{ property: 'taskId', value: taskConfigId }]);
+    const taskLogs = await this.taskLogDao.list([
+      {property: 'taskId', value: taskConfigId},
+    ]);
     if (taskLogs.length > 0) {
-      taskLogs.sort(
-        ({ entity: a }, { entity: b }) => b.createTime - a.createTime);
+      taskLogs.sort(({entity: a}, {entity: b}) => b.createTime - a.createTime);
       return taskLogs[0];
     }
   }
-
 }
 
 /**
  * Extracts the date information from the file name. If there is no date
  * recognized, will return today's date.
- * @param {string} filename. It is supposed to contain date information in
+ * @param {string} filename It is supposed to contain date information in
  *     format 'YYYY-MM-DD' or 'YYYYMMDD'. Though it will also take 'YYYY-MMDD'
  *     or 'YYYYMM-DD'.
  * @return {string} Date string in format "YYYYMMDD".
@@ -662,7 +726,8 @@ const getDatePartition = (filename) => {
   } else {
     partition = (new Date()).toISOString().split('T')[0];
     console.log(
-        `No date find in file: ${filename}. Using current date: ${partition}.`);
+      `No date found in file: ${filename}. Using current date: ${partition}.`,
+    );
   }
   return partition.replace(/-/g, '');
 };
@@ -686,10 +751,13 @@ const getDatePartition = (filename) => {
  * @param {string=} timeZone Default value is UTC.
  * @param {number=} unixMillis Unix timestamps in milliseconds. Default value is
  *     now. Used for test.
- * @return {{string: string}}
+ * @return {!Promise<!Object<string, string>>}
  */
-const getDefaultParameters = async (parameters, timeZone = 'UTC',
-    unixMillis = Date.now()) => {
+const getDefaultParameters = async (
+  parameters,
+  timeZone = 'UTC',
+  unixMillis = Date.now(),
+) => {
   const SECRET_NAME_PREFIX = 'SECRET/';
   const DATE_KEYWORDS = [
     'now',
@@ -714,7 +782,7 @@ const getDefaultParameters = async (parameters, timeZone = 'UTC',
    * @param {string=} parameter
    * @return {string|number}
    */
-  const getDefaultValue = async (parameter) => {
+  const getDefaultValue = async parameter => {
     if (parameter.startsWith(SECRET_NAME_PREFIX)) {
       const secretManager = new SecretManager();
       const secretName = parameter.substring(SECRET_NAME_PREFIX.length);
@@ -725,17 +793,20 @@ const getDefaultParameters = async (parameters, timeZone = 'UTC',
         throw new Error(`Cannot find secret in parameters for ${parameter}.`);
       }
     }
-    const regex = new RegExp(DATE_KEYWORDS.map((k) => `(${k})`).join('|'), 'ig');
-    let realParameter = parameter.replace(/(yesterday)/ig, 'today_sub_1')
-      .replace(regex, (match) => match.toLowerCase());
-    const now = DateTime.fromMillis(unixMillis, { zone: timeZone });
+    const regex = new RegExp(DATE_KEYWORDS.map(k => `(${k})`).join('|'), 'ig');
+    let realParameter = parameter
+      .replace(/(yesterday)/gi, 'today_sub_1')
+      .replace(regex, match => match.toLowerCase());
+    const now = DateTime.fromMillis(unixMillis, {zone: timeZone});
     if (realParameter === 'now') return now.toISO(); // 'now' is a Date ISO String.
     // 'lastHour' is used for hourly partitioning table.
     if (realParameter === 'lastHour') return now.toFormat('yyyyMMddHH');
     if (realParameter === 'today') return now.toFormat('yyyyMMdd');
     // [last|current]_[week|month|quarter|year]_[start|end]
-    if (realParameter.startsWith('last_')
-      || realParameter.startsWith('current_')) {
+    if (
+      realParameter.startsWith('last_') ||
+      realParameter.startsWith('current_')
+    ) {
       const pattern =
         /^(last|current)_(week|month|quarter|year)_(start|end)(_.+)?$/;
       if (!pattern.test(realParameter))
@@ -743,7 +814,8 @@ const getDefaultParameters = async (parameters, timeZone = 'UTC',
       const periods = realParameter.split('_');
       const target = periods.slice(0, 3).join('_');
       const targetPeriod = realParameter.startsWith('last_')
-        ? now.minus({ [periods[1]]: 1 }) : now;
+        ? now.minus({[periods[1]]: 1})
+        : now;
       const targetDate = targetPeriod[`${periods[2]}Of`](periods[1]);
       const diff = now.diff(targetDate, 'day').toObject().days;
       const mathMethod = periods[2] === 'start' ? 'floor' : 'ceil';
@@ -779,16 +851,17 @@ const getDefaultParameters = async (parameters, timeZone = 'UTC',
           break;
         default:
           throw new Error(
-              `Unknown operator in default parameter: ${parameter}`);
+            `Unknown operator in default parameter: ${parameter}`,
+          );
       }
       const day = suffixes[++index];
-      if (typeof day === "undefined") {
+      if (typeof day === 'undefined') {
         throw new Error(`Malformed of default parameter: ${parameter}`);
       }
       date = date[operationOfLib]({days: day});
     }
     return date.toFormat('yyyyMMdd');
-  }
+  };
 
   const result = {};
   for (const parameter of parameters) {
@@ -806,7 +879,7 @@ const getDefaultParameters = async (parameters, timeZone = 'UTC',
  * @param {string} namespace The `namespace` of this instance, e.g. prefix of
  *     the topics, Firestore root collection name, Datastore namespace, etc.
  * @param {!Database} database The database.
- * @return {!Sentinel} The Sentinel instance.
+ * @return {!Promise<!Sentinel>} The Sentinel instance.
  */
 const getSentinel = async (namespace, database) => {
 
@@ -843,7 +916,8 @@ const guessSentinel = async (namespace = process.env['PROJECT_NAMESPACE'],
   databaseMode = process.env['DATABASE_MODE']) => {
   if (!namespace) {
     console.warn(
-        'Fail to find ENV variables PROJECT_NAMESPACE, will set as `sentinel`');
+      'Fail to find ENV variables PROJECT_NAMESPACE, will set as `sentinel`',
+    );
     namespace = 'sentinel';
   }
   if (!databaseMode) {

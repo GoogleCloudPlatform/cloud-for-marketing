@@ -46,9 +46,8 @@ let CreateExternalTableTaskConfig;
 
 /** Task to create a BigQuery external table on a Google Sheet. */
 class CreateExternalTableTask extends BigQueryAbstractTask {
-
   /** @override */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
     const destinationTable = this.config.destination.table;
     return this.getBigQuery(destinationTable, true);
@@ -60,15 +59,18 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
    * @override
    */
   async doTask() {
-    const { source, destination } = this.config;
+    const {source, destination} = this.config;
     await this.precheckTargetTable_(destination.table);
-    const { sheet } = source;
-    const { schema } = destination.tableSchema || {};
+    const {sheet} = source;
+    const {schema} = destination.tableSchema || {};
     const options = {
-      externalDataConfiguration:
-        await this.getSheetConfiguration_(sheet, schema),
+      externalDataConfiguration: await this.getSheetConfiguration_(
+        sheet,
+        schema,
+      ),
     };
-    const [table] = await this.getBigQueryForTask()
+    const bigQuery = await this.getBigQueryForTask();
+    const [table] = await bigQuery
       .dataset(destination.table.datasetId)
       .createTable(destination.table.tableId, options);
     if (!table) {
@@ -76,7 +78,7 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
     }
     this.logger.info(`Created external table ${destination.table.tableId}`);
     return {
-      parameters: this.appendParameter({ destinationTable: destination.table }),
+      parameters: this.appendParameter({destinationTable: destination.table}),
     };
   }
 
@@ -86,7 +88,7 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
   }
 
   /** @override */
-  async completeTask() { }
+  async completeTask() {}
 
   /**
    * Pre-checks for the target table. If it's an existing external table, will
@@ -96,23 +98,24 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
    * @private
    */
   async precheckTargetTable_(tableOptions) {
-    const { tableId } = tableOptions;
+    const {tableId} = tableOptions;
     if (!tableId) {
       throw new Error(`Missing destination external table Id.`);
     }
     if (tableId.indexOf('$') > -1) {
       throw new Error(`External table [${tableId}] can't be a partition one.`);
     }
-    const [dataset] = await this.getBigQueryForTask()
+    const bigQuery = await this.getBigQueryForTask();
+    const [dataset] = await bigQuery
       .dataset(tableOptions.datasetId)
-      .get({ autoCreate: true });
+      .get({autoCreate: true});
     const table = dataset.table(tableId);
     const [tableExists] = await table.exists();
     if (!tableExists) {
       this.logger.debug(`Destination table doesn't exist: `, tableOptions);
       return;
     }
-    const { type } = (await table.get())[0].metadata;
+    const {type} = (await table.get())[0].metadata;
     if (type !== 'EXTERNAL') {
       throw new Error(`Target table [${tableId}] is not an external table.`);
     }
@@ -143,8 +146,10 @@ class CreateExternalTableTask extends BigQueryAbstractTask {
       config.schema = schema;
     } else if (sheet.safeColumnNames) {
       const spreadsheet = new Spreadsheets(sheet.url);
-      const headers =
-        await spreadsheet.getHeadline(sheet.sheetName, skipLeadingRows);
+      const headers = await spreadsheet.getHeadline(
+        sheet.sheetName,
+        skipLeadingRows,
+      );
       config.schema = this.getBigQuerySafeSchema(headers);
     } else {
       config.autodetect = true;

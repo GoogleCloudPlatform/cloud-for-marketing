@@ -419,18 +419,29 @@ const replaceParameters = (str, parameters, ignoreUnfounded = false) => {
   const splitNames = matchResult[1].split('.');
   const left = str.substring(indexOfFirstPlaceholder + matchResult[0].length);
   let value = parameters;
-  for (let index in splitNames) {
-    const namePiece = splitNames[index];
-    if (!value || !value[namePiece]) {
+  let unreplaced = false;
+  for (const namePiece of splitNames) {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(value, namePiece) ||
+      !value[namePiece]
+    ) {
       if (ignoreUnfounded) {
         value = matchResult[0];
+        unreplaced = true;
         break;
       }
-      console.error(`Fail to find property ${matchResult[1]} in parameters: `,
-          parameters);
+      console.error(
+        `Fail to find property ${matchResult[1]} in parameters: `,
+        parameters,
+      );
       throw new Error(`Fail to find property ${matchResult[1]} in parameter.`);
     }
     value = value[namePiece];
+  }
+  if (!unreplaced) {
+    value = JSON.stringify(String(value)).slice(1, -1);
   }
   return prefix + value + replaceParameters(left, parameters, ignoreUnfounded);
 };

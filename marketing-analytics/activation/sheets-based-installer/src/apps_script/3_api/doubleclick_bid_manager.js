@@ -18,8 +18,7 @@
  * Report DV360 is known as DoubleClick Bid Manager API.
  * @see https://developers.google.com/bid-manager/reference/rest
  */
-class DoubleclickBidManager extends ExternalApi {
-
+class DoubleClickBidManager extends ExternalApi {
   constructor(option) {
     super(option);
     this.name = 'DoubleClick Bid Manager API';
@@ -45,7 +44,7 @@ class DoubleclickBidManager extends ExternalApi {
    * @return {VerifyResult}
    */
   verifyQuery(queryId) {
-    const { error, metadata } = this.getQuery(queryId);
+    const {error, metadata} = this.getQuery(queryId);
     if (error) {
       return {
         valid: false,
@@ -58,7 +57,7 @@ class DoubleclickBidManager extends ExternalApi {
         reason: `Query[${queryId}]'s format is not CSV`,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -70,7 +69,6 @@ class DoubleclickBidManager extends ExternalApi {
   getQuery(queryId) {
     return this.get(`queries/${queryId}`);
   }
-
 
   /**
    * Creates a query.

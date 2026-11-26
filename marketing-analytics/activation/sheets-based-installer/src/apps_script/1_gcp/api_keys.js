@@ -14,33 +14,41 @@
 
 /** @fileoverview API Keys API handler class.*/
 
-class ApiKeys extends ApiBase {
-
+class ApiKeys extends GcpApiBase {
+  /**
+   * @param {string} projectId
+   */
   constructor(projectId) {
     super();
     this.name = 'API Keys API';
     this.api = 'apikeys.googleapis.com';
+    this.permissions = ['apikeys.keys.create', 'apikeys.keys.getKeyString'];
+    this.adminRole = 'API Keys Admin';
+    this.runtimeRoles = [];
     this.apiUrl = `https://${this.api}`;
     this.version = 'v2';
     this.projectId = projectId;
     this.locations = 'global';
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}`;
   }
 
   /**
-   * Lists the API keys owned by a project.
+   * Returns the list of API keys with the give display name.
    * @see https://cloud.google.com/api-keys/docs/reference/rest/v2/projects.locations.keys/list
-   * @return {{
-   *   accessToken: string,
-   *   expireTime: string
-   * }}
+   * @param {string} name
+   * @return {!Array<!Key>}
    */
-  list() {
-    return this.get(`projects/${this.projectId}/locations/${this.locations}/keys`);
+  loadKeyByName(name) {
+    const uri = `projects/${this.projectId}/locations/${this.locations}/keys`;
+    const keys = this.list('keys', uri);
+    return keys.filter(({displayName}) => displayName === name);
   }
 
   /**
@@ -50,7 +58,7 @@ class ApiKeys extends ApiBase {
    * @return {!Operation}
    */
   getOperation(operationName) {
-    return super.get(operationName);
+    return this.get(operationName);
   }
 
   /**
@@ -61,7 +69,9 @@ class ApiKeys extends ApiBase {
    * @return {!Key}
    */
   getKey(keyId) {
-    return this.get(`projects/${this.projectId}/locations/${this.locations}/keys/${keyId}`);
+    return this.get(
+      `projects/${this.projectId}/locations/${this.locations}/keys/${keyId}`,
+    );
   }
 
   /**
@@ -71,40 +81,43 @@ class ApiKeys extends ApiBase {
    * @return {{keyString: string}}
    */
   getKeyString(keyId) {
-    return this.get(`projects/${this.projectId}/locations/${this.locations}/keys/${keyId}/keyString`);
+    const {error, keyString} = this.get(
+      `projects/${this.projectId}/locations/${this.locations}/keys/${
+        keyId
+      }/keyString`,
+    );
+    if (error) throw error;
+    return keyString;
   }
 
   /**
    * Creates a new API key.
    * @see https://cloud.google.com/api-keys/docs/reference/rest/v2/projects.locations.keys/create
-   * @param {string} keyId
-   * @param {object=} restrictions
+   * @param {string} keyName
+   * @param {!Object=} restrictions
    * @return {!Operation}
    */
-  createKey(keyId, restrictions) {
+  createKey(keyName, restrictions) {
+    const keyId = keyName.toLowerCase().replace(/[^(\w)]/g, '-');
     return this.mutate(
-      `projects/${this.projectId}/locations/${this.locations}/keys?keyId=${keyId}`,
+      `projects/${this.projectId}/locations/${this.locations}/keys?keyId=${
+        keyId
+      }`,
       {
-        displayName: keyId.substring(0, 63),
+        displayName: keyName,
         restrictions,
-      });
+      },
+    );
   }
 
   /**
    * Creates an Api key and returns the result.
-   * @param {string} keyId
-   * @param {object=} restrictions
-   * @return {object} The response of the create operation of an API key.
+   * @param {string} keyName
+   * @param {!Object=} restrictions
+   * @return {!Object} The response of the create operation of an API key.
    */
-  createKeyAndReturnResult(keyId, restrictions) {
-    const { name } = this.createKey(keyId, restrictions);
-    let rawResponse = this.getOperation(name);
-    while (rawResponse.done !== true && !rawResponse.error) {
-      Utilities.sleep(1000);
-      rawResponse = this.getOperation(rawResponse.name);
-      console.log('Wait and get operation', rawResponse.name);
-    }
-    return rawResponse;
+  createKeyAndReturnResult(keyName, restrictions) {
+    const operation = this.createKey(keyName, restrictions);
+    return this.waitAndResolveOperation(operation, 'API key creation', 1000);
   }
-
 }

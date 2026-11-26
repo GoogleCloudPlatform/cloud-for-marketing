@@ -133,8 +133,8 @@ create_monitor_sink() {
 of tasks and then trigger next ones."
   local sinkName logFilter sinkDest
   sinkName=$(get_default_sink_name)
-  logFilter="resource.type=\"bigquery_resource\" AND protoPayload.methodName=\"\
-jobservice.jobcompleted\""
+  logFilter="(resource.type=\"bigquery_resource\" AND protoPayload.methodName=\"\
+jobservice.jobcompleted\") OR (resource.type = \"cloud_run_job\" AND protoPayload.methodName=\"/Jobs.RunJob\")"
   sinkDest="pubsub.googleapis.com/projects/${GCP_PROJECT}/topics/${sinkName}"
 
   create_or_update_sink ${sinkName} "${logFilter}" "${sinkDest}"
@@ -448,7 +448,7 @@ start_task_locally() {
   cat <<EOF
 ==========================
 Invoke task based locally. However the task configuration is still expected to \
-be on Cloud. The task configuration needs to be updated to Firestore for any
+be on Cloud. The task configuration needs to be updated to Firestore for any \
 modification.
 EOF
   check_authentication

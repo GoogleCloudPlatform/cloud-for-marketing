@@ -18,17 +18,25 @@
  * This class is used to check the (GCP) project billing status.
  */
 class CloudBilling extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   */
   constructor(projectId) {
     super();
     this.name = 'Cloud Billing API';
     this.api = 'cloudbilling.googleapis.com';
+    this.permissions = [];
+    this.adminRole = 'Billing Account Viewer';
+    this.runtimeRoles = [];
     this.apiUrl = `https://${this.api}`;
     this.version = 'v1';
     this.projectId = projectId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
   }
@@ -36,11 +44,10 @@ class CloudBilling extends ApiBase {
   /**
    * Gets the billing information for a project.
    * @see https://cloud.google.com/billing/docs/reference/rest/v1/projects/getBillingInfo
-   * @return {ProjectBillingInfo}
+   * @return {!ProjectBillingInfo}
    * @see https://cloud.google.com/billing/docs/reference/rest/v1/ProjectBillingInfo
    */
   getBillingInfo() {
     return this.get('billingInfo');
   }
-
 }

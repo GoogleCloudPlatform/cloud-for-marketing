@@ -30,6 +30,7 @@ const { DataTransferTask } = require('./bigquery/data_transfer_task.js');
 const { CreateExternalTableTask } = require('./bigquery/create_external_table.js');
 const { CopyGcsTask } = require('./gcp/copy_gcs_task.js');
 const { ExecuteNotebookTask } = require('./gcp/execute_notebook_task.js');
+const { ExecuteRunJobTask } = require('./gcp/execute_run_job_task.js');
 const { InvokeCloudFunctionTask } = require('./gcp/invoke_cloud_function_task.js');
 const { GmcXmlFeedToJsonlTask } = require('./gmc/gmc_xml_feed_to_jsonl_task.js');
 const { GmcWebpageFetch } = require('./gmc/gmc_webpage_fetcher.js');
@@ -56,6 +57,7 @@ const ALL_TASKS = Object.freeze({
   [TaskType.CREATE_EXTERNAL]: CreateExternalTableTask,
   [TaskType.COPY_GCS]: CopyGcsTask,
   [TaskType.EXECUTE_NOTEBOOK]: ExecuteNotebookTask,
+  [TaskType.EXECUTE_RUN_JOB]: ExecuteRunJobTask,
   [TaskType.INVOKE_CLOUD_FUNCTION]: InvokeCloudFunctionTask,
   [TaskType.DOWNLOAD]: DownloadTask,
   [TaskType.GMC_XML_FEED_TO_JSONL]: GmcXmlFeedToJsonlTask,

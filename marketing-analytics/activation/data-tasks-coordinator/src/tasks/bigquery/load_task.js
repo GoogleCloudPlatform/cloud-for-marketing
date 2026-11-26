@@ -105,9 +105,8 @@ const DEFAULT_RETRY_TIMES = 3;
 
 /** BigQuery load Cloud Storage file to table task class. */
 class LoadTask extends BigQueryAbstractTask {
-
   /** @override */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
     const destinationTable = this.config.destination.table;
     return this.getBigQuery(destinationTable);
@@ -116,7 +115,7 @@ class LoadTask extends BigQueryAbstractTask {
   /** @override */
   async isDone() {
     /** @type {boolean} If the target file is empty, skip loading. */
-    const { isEmptyFile } = this.parameters;
+    const {isEmptyFile} = this.parameters;
     if (isEmptyFile) return true;
     return super.isDone();
   }
@@ -140,8 +139,10 @@ class LoadTask extends BigQueryAbstractTask {
     if (sourceFile.name.indexOf('*') === -1 && metadata.autodetect) {
       /** @const {StorageFile} */
       const storageFile = StorageFile.getInstance(
-          sourceFile.bucket, sourceFile.name,
-          {projectId: this.getCloudProject(sourceFile)});
+        sourceFile.bucket,
+        sourceFile.name,
+        {projectId: this.getCloudProject(sourceFile)},
+      );
       const size = await storageFile.getFileSize();
       if (size === 0) {
         this.logger.info('Skip for empty file:', sourceFile);
@@ -161,18 +162,25 @@ class LoadTask extends BigQueryAbstractTask {
     // @see the typedef of LoadTaskDestination
     if (!metadata.autodetect && !destination.tableSchema.schema) {
       destination.tableSchema.schema = await this.getSchemaForExternal_(
-        destination, metadata, sourceFile);
+        destination,
+        metadata,
+        sourceFile,
+      );
       Object.assign(metadata, destination.tableSchema);
-      this.logger.debug('External schema: ',
-        JSON.stringify(destination.tableSchema.schema));
+      this.logger.debug(
+        'External schema: ',
+        JSON.stringify(destination.tableSchema.schema),
+      );
     }
-    const storeTable = await this.getTableForLoading_(destination.table,
-        destination.tableSchema);
+    const storeTable = await this.getTableForLoading_(
+      destination.table,
+      destination.tableSchema,
+    );
     const [job] = await storeTable.load(undefined, metadata);
     const errors = job.status.errors;
     if (errors && errors.length > 0) throw errors;
-    const { jobReference } = job;
-    const { jobId } = jobReference;
+    const {jobReference} = job;
+    const {jobId} = jobReference;
     this.logger.debug(`Job ${jobId} status ${job.status.state}.`);
     return {
       jobId,
@@ -194,9 +202,10 @@ class LoadTask extends BigQueryAbstractTask {
    */
   async getOrCreateTable_(tableOptions, tableSchema) {
     const tableIdWithoutPartition = tableOptions.tableId.split('$')[0];
-    const [dataset] = await this.getBigQueryForTask()
-        .dataset(tableOptions.datasetId)
-        .get({autoCreate: true});
+    const bigQuery = await this.getBigQueryForTask();
+    const [dataset] = await bigQuery
+      .dataset(tableOptions.datasetId)
+      .get({autoCreate: true});
     const table = dataset.table(tableIdWithoutPartition);
     const [tableExists] = await table.exists();
     let result;
@@ -227,10 +236,11 @@ class LoadTask extends BigQueryAbstractTask {
     const table = await this.getOrCreateTable_(tableOptions, schema);
     if (!schema.timePartitioning) return table;
     this.logger.debug('Get partition table: ', tableOptions.tableId);
-    const [result] = await this.getBigQueryForTask()
-        .dataset(tableOptions.datasetId)
-        .table(tableOptions.tableId)
-        .get();
+    const bigQuery = await this.getBigQueryForTask();
+    const [result] = await bigQuery
+      .dataset(tableOptions.datasetId)
+      .table(tableOptions.tableId)
+      .get();
     return result;
   }
 
@@ -244,10 +254,13 @@ class LoadTask extends BigQueryAbstractTask {
    */
   async getSchemaForExternal_(destination, metadata, sourceFile) {
     if (destination.schemaSource) {
-      this.logger.debug('External schema from report: ',
-          destination.schemaSource);
+      this.logger.debug(
+        'External schema from report: ',
+        destination.schemaSource,
+      );
       const taskConfig = await this.options.taskConfigDao.load(
-          destination.schemaSource);
+        destination.schemaSource,
+      );
       const task = new ReportTask(taskConfig, this.parameters);
       task.injectContext(this.options);
       return this.getSchemaFromReportTask_(task);
@@ -255,24 +268,31 @@ class LoadTask extends BigQueryAbstractTask {
     if (destination.schemaFile) {
       this.logger.debug('External schema from file: ', destination.schemaFile);
       const schemaFile = StorageFile.getInstance(
-          destination.schemaFile.bucket, destination.schemaFile.name,
-          {projectId: this.getCloudProject(destination.schemaFile)});
+        destination.schemaFile.bucket,
+        destination.schemaFile.name,
+        {projectId: this.getCloudProject(destination.schemaFile)},
+      );
       return JSON.parse(await schemaFile.loadContent());
     }
     if (destination.csvSafeColumnNames) {
-      if (metadata.compression
-        || metadata.sourceFormat.toUpperCase() !== 'CSV') {
+      if (
+        metadata.compression ||
+        metadata.sourceFormat.toUpperCase() !== 'CSV'
+      ) {
         this.logger.error('Can not figure column names for', metadata);
       } else {
         /** @const {StorageFile} */
         const storageFile = StorageFile.getInstance(
-          sourceFile.bucket, sourceFile.name,
-          { projectId: this.getCloudProject(sourceFile) });
+          sourceFile.bucket,
+          sourceFile.name,
+          {projectId: this.getCloudProject(sourceFile)},
+        );
         // Get first 100k bytes. This should be enough to cover the first line.
         const partialContent = await storageFile.loadContent(0, 100_000);
-        const { skipLeadingRows = 1 } = metadata;
-        const headers = partialContent.split('\n')[skipLeadingRows - 1]
-          .split(metadata.fieldDelimiter || ',');
+        const {skipLeadingRows = 1} = metadata;
+        const headers = partialContent
+          .split('\n')
+          [skipLeadingRows - 1].split(metadata.fieldDelimiter || ',');
         return this.getBigQuerySafeSchema(headers);
       }
     }
@@ -296,11 +316,14 @@ class LoadTask extends BigQueryAbstractTask {
       if (task.getReport().isFatalError(error.toString())) {
         this.logger.error(
           'Fail immediately without retry for generateSchema error: ',
-          error.toString());
+          error.toString(),
+        );
         throw error;
       } else if (retriedTimes > DEFAULT_RETRY_TIMES) {
-        this.logger.error(`Retried over ${DEFAULT_RETRY_TIMES} times.`,
-          error.toString());
+        this.logger.error(
+          `Retried over ${DEFAULT_RETRY_TIMES} times.`,
+          error.toString(),
+        );
         throw error;
       } else {
         retriedTimes++;

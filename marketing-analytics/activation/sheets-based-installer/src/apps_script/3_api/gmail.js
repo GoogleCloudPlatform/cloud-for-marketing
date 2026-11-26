@@ -15,12 +15,11 @@
 /** @fileoverview Gmail API handler class.*/
 
 class Gmail extends ExternalApi {
-
   constructor(option) {
     super(option);
     this.name = 'Gmail API';
     this.api = 'gmail.googleapis.com';
-    this.apiUrl = 'https://gmail.googleapis.com/gmail';
+    this.apiUrl = `https://${this.api}/gmail`;
     this.version = 'v1';
   }
 
@@ -50,8 +49,9 @@ class Gmail extends ExternalApi {
 Subject: ${subject}
 
 ${content}`;
-    return this.mutate('me/messages/send',
-      { raw: Utilities.base64Encode(message) });
+    return this.mutate('me/messages/send', {
+      raw: Utilities.base64Encode(message),
+    });
   }
 
   /**
@@ -70,7 +70,7 @@ ${content}`;
   }
 
   watch(userId, topicName) {
-    const payload = { topicName };
+    const payload = {topicName};
     return this.mutate(`${userId}/watch`, payload);
   }
 }

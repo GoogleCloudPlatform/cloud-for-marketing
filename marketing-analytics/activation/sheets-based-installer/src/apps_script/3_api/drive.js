@@ -14,15 +14,14 @@
 
 /** @fileoverview Google Drive API handler class.*/
 
-/** @const DRIVE_ROLE_MAP Drive file's role name and role vaules in API. */
+/** @const DRIVE_ROLE_MAP Drive file's role name and role values in API. */
 const DRIVE_ROLE_MAP = {
   Viewer: 'reader',
   Commenter: 'commenter',
   Editor: 'writer',
-}
+};
 
 class Drive extends ExternalApi {
-
   constructor(option) {
     super(option);
     this.name = 'Google Drive API';
@@ -82,7 +81,7 @@ class Drive extends ExternalApi {
       type: 'user',
       emailAddress: email,
       role: DRIVE_ROLE_MAP[role] || 'reader',
-    }
+    };
     const response = this.mutate(`files/${fileId}/permissions`, payload);
     if (response.role !== role) {
       console.log(`User ${email} has role`, response.role);

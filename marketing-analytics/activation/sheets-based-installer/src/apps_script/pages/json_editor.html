@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<!--
+  Copyright 2024 Google LLC
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+ -->
+<html>
+
+<head>
+  <link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre-icons.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.14.0/src-noconflict/ace.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ace-editor-builds@1.2.4/src-min-noconflict/ace.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
+  <script>
+    /**
+     * There could be different sheets to open this dialog. This host name
+     * will be passed back to server function to indicate which sheet the
+     * opened dialog belongs to.
+     */
+    const hostName = '<?= hostName ?>';
+    /** Names of several server functions. */
+    const getSchemaFunction = '<?= getSchemaFunction ?>';
+    const getItemFunction = '<?= getItemFunction ?>';
+    const saveItemFunction = '<?= saveItemFunction ?>';
+    /**
+     * Cached schemas.
+     * The key is category name the value is the JSON editor schema.
+     */
+    const categorySchemas = JSON.parse('<?= categorySchemasStr ?>');
+    /**
+     * Item names of current sheet.
+     * The key is category and the value is an array of names of items belong
+     * to that category.
+     */
+    const itemNames = JSON.parse('<?= itemNamesStr ?>');
+    /**
+     * Item JSON objects.
+     * The key is category and the value is the map with item names as keys
+     * and JSON objects as values.
+     */
+    const itemConfigs = JSON.parse('<?= itemConfigsStr ?>');
+    function getCachedItemJson(category, itemName) {
+      if (!itemConfigs[category]) itemConfigs[category] = {};
+      return itemConfigs[category][itemName];
+    }
+    function setCachedItemJson(category, itemName, json) {
+      if (!itemConfigs[category]) itemConfigs[category] = {};
+      itemConfigs[category][itemName] = json;
+    }
+
+    /** The JSON Editor object. */
+    let editor;
+    /** Default JSON Editor options. */
+    const options = {
+      theme: 'spectre',
+      schema: {},
+      iconlib: 'spectre',
+      object_layout: 'grid',
+      show_errors: 'change',
+      compact: true,
+      disable_collapse: true,
+      titleHidden: true,
+      display_required_only: true,
+      required_by_default: true,
+      remove_empty_properties: true,
+    };
+
+    /**
+     * The original category, item name and JSON before any edition.
+     * After loading or saving a JSON value, this object will be updated so
+     * when the user wants to switch to another item, a confirmation dialog
+     * will be popped to warn the user the modification will be lost.
+     * If the user selects 'Cancel', then this object will be used to restore
+     * the settings of category and item selectors; if the user selects 'OK',
+     * the modification will be discarded and the JSON object will be cleared.
+     */
+    const originalValues = {};
+    function updateOrigin() {
+      originalValues.category = document.getElementById('category').value;
+      originalValues.itemName = document.getElementById('itemName').value;
+      // Persist the original JSON object.
+      originalValues.json = JSON.parse(JSON.stringify(editor.getValue()));
+      console.log('[JSON Cache] Set:', originalValues.itemName, originalValues.json);
+    }
+    function restoreOrigin() {
+      document.getElementById('category').value = originalValues.category;
+      document.getElementById('itemName').value = originalValues.itemName;
+    }
+    function clearOrigin() {
+      console.log('[JSON Cache] Clear:', originalValues.itemName);
+      delete originalValues.json;
+    }
+
+    /** Compares two objects are the same. */
+    function deepCompare(source, target) {
+      const sourceType = Object.prototype.toString.call(source);
+      if (sourceType === Object.prototype.toString.call(target)) {
+        if (sourceType === '[object Object]' || sourceType === '[object Array]'
+        ) {
+          if (Object.keys(source).length !== Object.keys(target).length) {
+            console.log('[deepCompare] Different key lengths source/target',
+              source, target);
+            return false;
+          }
+          return Object.keys(source).every(
+            (key) => deepCompare(source[key], target[key])
+          );
+        }
+        if (source !== target) {
+          console.log(
+            '[deepCompare] Different values source/target', source, target);
+        }
+        return source === target;
+      }
+      console.log(
+        '[deepCompare] Different types source/target', source, target);
+      return false;
+    }
+    /** Returns the value of an JSON object with a specified path. */
+    function getValueByPath(obj, sourcePath) {
+      let source = obj;
+      const sourceProperties = sourcePath.split('.');
+      sourceProperties.forEach((key, index) => {
+        if (typeof source === 'undefined') {
+          console.warn('[getValueByPath] Get undefined source', sourcePath, obj);
+          source = undefined;
+        } else {
+          source = source[key];
+        }
+      });
+      return source;
+    }
+
+    /**
+     * Initialize the Json Editor.
+     * This is a asynchronous process, so needs to wait it is completed.
+     */
+    async function initializeEditor() {
+      if (editor) editor.destroy();
+      await new Promise((resolve, reject) => {
+        const element = document.getElementById('editor_holder');
+        editor = new window.JSONEditor(element, options);
+        editor.on('ready', resolve);
+        console.log('[Editor] Initialized.')
+      });
+    }
+
+    /**
+     * If there was modification on current JSON, confirm with the user before
+     * quitting the editor or load another config JSON.
+     */
+    function isModificationDiscarded() {
+      if (typeof originalValues.json === 'undefined') {
+        console.log('[Check Modification] No cached JSON. Safely to change.');
+        return true;
+      }
+      // To remove 'null' properties in editor.
+      const updatedJson = JSON.parse(JSON.stringify(editor.getValue()));
+      if (deepCompare(originalValues.json, updatedJson)) {
+        console.log('[Check Modification] No modification. Safely to change.');
+        clearOrigin(); // clear json if no change
+        return true;
+      }
+      console.debug(
+        '[Check Modification]  cached', JSON.stringify(originalValues.json));
+      console.debug('[Check Modification] current', JSON.stringify(updatedJson));
+      const shouldContinue = window.confirm(
+        'Do you want to continue? Will lose current unsaved content.'
+      );
+      if (shouldContinue === false) {
+        console.log('[Check Modification] Cancelled. Restore selector values.');
+        restoreOrigin();
+      } else {
+        console.log(
+          '[Check Modification] Confirmed. Clear JSON cache and continue.');
+        clearOrigin();
+      }
+      return shouldContinue;
+    }
+
+    /**
+     * Update the Json Editor schema, item selector and item values based on
+     * the category value.
+     */
+    async function changeCategory(defaultItem) {
+      const shouldContinue = isModificationDiscarded();
+      console.log('[Change Category] Should continue?', shouldContinue);
+      if (!shouldContinue) return;
+      const category = document.getElementById('category').value.trim();
+      console.log('[Change Category] Change to:', category);
+      if (!categorySchemas[category]) {
+        if (editor) editor.disable();
+        const schema = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+          [getSchemaFunction](category);
+        });
+        console.log('[Change Category] Load schema from server for:', category);
+        categorySchemas[category] = JSON.parse(schema);
+      }
+      options.schema = categorySchemas[category];
+      await initializeEditor();
+      updateItemSelector(category, defaultItem);
+      await changeItem();
+    }
+
+    /**
+     * Regenerate options for item selector element. If a defaultValue is
+     * present, will use it set the default value.
+     */
+    function updateItemSelector(category, defaultValue) {
+      const itemNameElement = document.getElementById('itemName');
+      itemNameElement.options.length = 0;
+      const items = itemNames[category] || [];
+      items.forEach((item) => {
+        const optionElement = document.createElement('option');
+        optionElement.value = item;
+        optionElement.text = item;
+        itemNameElement.appendChild(optionElement);
+      });
+      console.log('[Item Selector] Refreshed options.');
+      if (defaultValue) {
+        console.log('[Item Selector] Set default value:', defaultValue);
+        itemNameElement.value = defaultValue;
+      }
+    }
+
+    /**
+     * Update the value for the Json Editor based on item selected.
+     */
+    async function changeItem() {
+      const shouldContinue = isModificationDiscarded();
+      console.log('[Change Item] Should continue?', shouldContinue);
+      if (!shouldContinue) return;
+      const itemName = document.getElementById('itemName').value;
+      console.log('[Change Item] Change to:', itemName);
+      editor.disable();
+      let value;
+      if (itemName) {
+        const category = document.getElementById('category').value;
+        if (!getCachedItemJson(category, itemName)) {
+          const config = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+            [getItemFunction](hostName, category, itemName);
+          });
+          console.log('[Change Item] Load item from server for:', itemName);
+          setCachedItemJson(category, itemName, JSON.parse(config));
+        }
+        value = itemConfigs[category][itemName];
+      } else {
+        value = {}; // No valid items (new empty config).
+      }
+      console.log('[Change Item] Get config', itemName, value);
+      await setValue(value);
+      editor.enable();
+      updateOrigin();
+    }
+
+    /**
+     * Set value for JSON editor.
+     * If there is 'dynamic' setting in schema, update the schema based on
+     * value and re-initialize editor, then set the value for the editor.
+     * After that, add listeners to the 'source' element to handle
+     * the modification in the JSON editor (not from Category or Item changes).
+     */
+    async function setValue(value) {
+      const { dynamic } = options.schema;
+      if (dynamic) {
+        Object.keys(dynamic).forEach((key) => {
+          const source = getValueByPath(value, key);
+          updateDynamicSchema(source, dynamic[key]);
+        });
+      }
+      await initializeEditor();
+      editor.setValue(value);
+      await registerListeners();
+      // } else {
+      //   editor.setValue(value);
+      // }
+    }
+
+    /** Update dynamic schema. */
+    function updateDynamicSchema(source, targetPath) {
+      console.log('[Dyn schema] Get source:', source);
+      let targetSchema = options.schema;
+      targetPath.split('.').forEach((key) => {
+        targetSchema = targetSchema.properties[key];
+      });
+      if (typeof source !== 'undefined') {
+        targetSchema['$ref'] = `#/definitions/${source}`;
+        console.log('[Dyn schema] Updated schema:', targetPath, targetSchema);
+      } else {
+        console.log('[Dyn schema] Default schema:', targetPath, targetSchema);
+      }
+    };
+
+    /** Returns a function to handle 'onchange' event on the selector. */
+    function getDynamicOnChangeFn(sourcePath, targetPath) {
+      return async () => {
+        const shouldContinue = isModificationDiscarded();
+        console.log('[Change Dynamic] Should continue?', shouldContinue);
+        if (!shouldContinue) {
+          editor.getEditor(`root.${sourcePath}`).setValue(
+            getValueByPath(originalValues.json, sourcePath)
+          );
+          return;
+        }
+        const source = editor.getEditor(`root.${sourcePath}`).getValue();
+        const values = editor.getValue();
+        console.log('[Change Dynamic] Change to:', source);
+        updateDynamicSchema(source, targetPath);
+        console.log('[Change Dynamic] Updated schema.');
+        await initializeEditor();
+        editor.setValue(values);
+        await registerListeners();
+      };
+    };
+
+    /** Adds onchange function to dynamic source elements. */
+    async function registerListeners() {
+      const { dynamic } = options.schema;
+      if (dynamic) {
+        Object.keys(dynamic).forEach(async (key) => {
+          const jsonEditorPath = key.split('.').map((p) => `[${p}]`).join('');
+          console.log('[Register Listener] Add listener for:', jsonEditorPath);
+          const fn = getDynamicOnChangeFn(key, dynamic[key]);
+          document.getElementById(`root${jsonEditorPath}`).onchange = fn;
+        });
+      }
+    }
+
+    /** Saves the config to server and update cache. */
+    async function saveItem(name) {
+      const itemName = name || document.getElementById('itemName').value;
+      if (!itemName) {
+        console.log('[Save Item] Empty item name... will create a new one.');
+        return createNewItem();
+      }
+      const category = document.getElementById('category').value;
+      const updatedJson = editor.getValue();
+      editor.disable();
+      await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+        [saveItemFunction](
+          hostName,
+          category,
+          itemName,
+          JSON.stringify(updatedJson)
+        );
+      });
+      console.log('[Save Item] Save to server for:', itemName);
+      setCachedItemJson(category, itemName, updatedJson);
+      updateOrigin();
+      editor.enable();
+      window.alert(`${itemName} has been saved successfully.`);
+    }
+
+    /** Creates a new config and save it to server and update item selector. */
+    async function createNewItem() {
+      let newName;
+      do {
+        const name = window.prompt('Please input the name: ');
+        if (name === null) {
+          return;
+        }
+        newName = name.trim();
+        if (newName === '') {
+          window.alert('Please input a name.');
+          continue;
+        }
+        const category = document.getElementById('category').value;
+        const items = itemNames[category] || [];
+        if (items.some((item) => newName === item)) {
+          window.alert(`'${newName}' exists. Please input another name.`);
+          continue;
+        }
+        console.log('[Create New Item] Saving item:', name);
+        await saveItem(newName);
+        items.push(newName);
+        itemNames[category] = items;
+        updateItemSelector(category, newName);
+        break;
+      } while (true);
+    }
+  </script>
+</head>
+
+<!-- Note, we can't take over the onunload event.  -->
+
+<body onload="changeCategory('<?= defaultItem ?>')">
+  <div data-theme="spectre" class="je-ready">
+    <div class="je-object__container">
+      <div class="je-panel">
+        <div class="container je-noindent">
+          <div>
+            <div class="columns">
+              <div class="column col-8" data-schematype="string">
+                <div class="form-group">
+                  <label class="required je-label form-label" for="category">
+                    <?= categoryName ?>
+                  </label>
+                  <select class="form-select" id="category" onchange="changeCategory()">
+                    <? for (let group in groupedCategories) { ?>
+                    <optgroup label='<?= group ?>'>
+                      <? for (let key in groupedCategories[group]) { ?>
+                      <option value="<?= key ?>" <?=key===defaultCategory ? 'selected' : '' ?> >
+                        <?= groupedCategories[group][key] ?>
+                      </option>
+                      <? } ?>
+                    </optgroup>
+                    <? } ?>
+                  </select>
+                </div>
+              </div>
+              <div class="column col-4" data-schematype="string">
+                <div class="form-group">
+                  <label class="required je-label form-label" for="itemName">
+                    <?= itemName ?>
+                  </label>
+                  <select class="form-select" id="itemName" onchange="changeItem()"></select>
+                  <button type="button" onclick="createNewItem()"
+                    class="btn btn-sm btn-primary mr-2 my-1 json-editor-btn-edit json-editor-btntype-editjson">
+                    <i class="icon icon-edit"></i>
+                    <span> Create new </span>
+                  </button>
+                  <button type="button" onclick="saveItem()"
+                    class="btn btn-sm btn-primary mr-2 my-1 json-editor-btn-edit json-editor-btntype-editjson">
+                    <span> Save </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="editor_holder"></div>
+</body>
+
+</html>

@@ -15,28 +15,32 @@
 /** @fileoverview Cloud Scheduler API handler class.*/
 
 class CloudScheduler extends ApiBase {
-
+  /**
+   * @param {string=} projectId
+   * @param {string=} locationId
+   */
   constructor(projectId, locationId) {
     super();
-    this.apiUrl = 'https://cloudscheduler.googleapis.com';
+    this.name = 'Cloud Scheduler API';
+    this.api = 'cloudscheduler.googleapis.com';
+    this.permissions = [
+      'cloudscheduler.jobs.create',
+      'cloudscheduler.jobs.get',
+    ];
+    this.adminRole = 'Cloud Scheduler Admin';
+    this.runtimeRoles = ['roles/cloudscheduler.admin'];
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v1';
     this.projectId = projectId;
     this.locationId = locationId;
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/${this.projectId}`;
-  }
-
-  /**
-   * Lists information about the supported locations for this service.
-   * @see https://cloud.google.com/scheduler/docs/reference/rest/v1/projects.locations/list
-   * @return {!ListLocationsResponse}
-   * @see https://cloud.google.com/scheduler/docs/reference/rest/Shared.Types/ListLocationsResponse
-   */
-  listLocations() {
-    return this.get('locations');
   }
 
   /**
@@ -59,7 +63,7 @@ class CloudScheduler extends ApiBase {
    */
   createJob(jobId, options) {
     const name = `projects/${this.projectId}/locations/${this.locationId}/jobs/${jobId}`;
-    const payload = Object.assign({ name }, options);
+    const payload = Object.assign({name}, options);
     return this.mutate(`locations/${this.locationId}/jobs`, payload);
   }
 
@@ -73,11 +77,13 @@ class CloudScheduler extends ApiBase {
    */
   updateJob(jobId, options) {
     const name = `projects/${this.projectId}/locations/${this.locationId}/jobs/${jobId}`;
-    const payload = Object.assign({ name }, options);
+    const payload = Object.assign({name}, options);
     const updateMask = encodeURIComponent(Object.keys(options).join(','));
     return this.mutate(
       `locations/${this.locationId}/jobs/${jobId}?updateMask=${updateMask}`,
-      payload, 'PATCH');
+      payload,
+      'PATCH',
+    );
   }
 
   /**
@@ -107,4 +113,25 @@ class CloudScheduler extends ApiBase {
     return this.mutate(`locations/${this.locationId}/jobs/${jobId}:run`);
   }
 
+  /**
+   * Returns a link to Cloud Scheduler.
+   * @return {string}
+   */
+  getLinkToCloudConsole() {
+    const link = `https://console.cloud.google.com/cloudscheduler?project=${
+      this.projectId
+    }`;
+    return link;
+  }
 }
+
+CloudScheduler.ATTRIBUTE_NAMES = Object.freeze({
+  schedule: 'Schedule',
+  timeZone: 'Time Zone',
+  'httpTarget.uri': 'Target URI',
+  'httpTarget.httpMethod': 'HTTP Method',
+  'httpTarget.oidcToken.serviceAccountEmail': 'OIDC Service Account',
+  'pubsubTarget.topicName': 'Target Topic',
+  'pubsubTarget.data': 'Message Body',
+  'pubsubTarget.attributes': 'Attributes',
+});

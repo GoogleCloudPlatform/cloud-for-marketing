@@ -15,10 +15,11 @@
 /** @fileoverview Google Sheets API handler class.*/
 
 class Sheets extends ExternalApi {
-
   constructor(option) {
     super(option);
-    this.apiUrl = 'https://sheets.googleapis.com';
+    this.name = 'Google Sheets API';
+    this.api = 'sheets.googleapis.com';
+    this.apiUrl = `https://${this.api}`;
     this.version = 'v4';
   }
 
@@ -33,20 +34,20 @@ class Sheets extends ExternalApi {
   }
 
   /**
-   * Verifies the accessibililty of the spreadsheet.
+   * Verifies the accessibility of the spreadsheet.
    * @see https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get
    * @param {string} spreadsheetId
    * @return {VerifyResult}
    */
   verifySpreadsheet(spreadsheetId) {
-    const { error } = this.get(`spreadsheets/${spreadsheetId}`);
+    const {error} = this.get(`spreadsheets/${spreadsheetId}`);
     if (error) {
       return {
         valid: false,
         reason: error.message,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -56,15 +57,16 @@ class Sheets extends ExternalApi {
    * @return {VerifyResult}
    */
   verifySheet(spreadsheetId, sheetName) {
-    const { error } = this.get(
-      `spreadsheets/${spreadsheetId}`, { ranges: sheetName });
+    const {error} = this.get(`spreadsheets/${spreadsheetId}`, {
+      ranges: sheetName,
+    });
     if (error) {
       return {
         valid: false,
         reason: error.message,
       };
     }
-    return { valid: true };
+    return {valid: true};
   }
 
   /**
@@ -75,8 +77,9 @@ class Sheets extends ExternalApi {
    * @return {Array<Array<string>>}
    */
   getHeadline(spreadsheetId, sheetName, row = 1) {
-    const range = `'${sheetName}'!A${row}:${row}`
+    const range = `'${sheetName}'!A${row}:${row}`;
     return this.get(
-      `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`);
+      `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`,
+    );
   }
 }

@@ -15,8 +15,8 @@
 # limitations under the License.
 
 # Cloud Functions Runtime Environment.
-CF_RUNTIME="${CF_RUNTIME:=nodejs20}"
-CF_MEMORY="${CF_MEMORY:=2048MB}"
+CF_RUNTIME="${CF_RUNTIME:=nodejs24}"
+CF_MEMORY="${CF_MEMORY:=2Gi}"
 
 # Counter for steps.
 STEP=0
@@ -240,7 +240,7 @@ file..."
     for i in "${!CONFIG_ITEMS[@]}"; do
       value=$(get_value_from_json_file "${CONFIG_FILE}" "${CONFIG_ITEMS[$i]}")
       key=${CONFIG_ITEMS[$i]}
-      declare -g "${key}=${value}"
+      declare -gx "${key}=${value}"
       printf '%s\n' "  ${key} = ${!key}"
     done
     printf '%s\n\n' "  (Configuration values can be changed during the \

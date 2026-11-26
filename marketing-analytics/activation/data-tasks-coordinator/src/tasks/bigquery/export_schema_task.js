@@ -40,9 +40,8 @@ let ExportSchemaTaskConfig;
 
 /** BigQuery get table schema to Cloud Storage task class. */
 class ExportSchemaTask extends BigQueryAbstractTask {
-
   /** @override */
-  getBigQueryForTask() {
+  async getBigQueryForTask() {
     /** @const {BigQueryTableConfig} */
     const sourceTable = this.config.source;
     return this.getBigQuery(sourceTable);
@@ -56,15 +55,20 @@ class ExportSchemaTask extends BigQueryAbstractTask {
     /** @const {BigQueryTableConfig} */ const source = this.config.source;
     /** @const {StorageFileConfig} */
     const destination = this.config.destination;
+    const bigQuery = await this.getBigQueryForTask();
     /** @const {Table} */
-    const sourceTable = this.getBigQueryForTask()
-        .dataset(source.datasetId)
-        .table(source.tableId);
+    const sourceTable = await bigQuery
+      .dataset(source.datasetId)
+      .table(source.tableId);
     /** @const {File} */
     const file = this.getStorage(destination)
-        .bucket(destination.bucket)
-        .file(destination.name);
-    const [{metadata: {schema}}] = await sourceTable.get();
+      .bucket(destination.bucket)
+      .file(destination.name);
+    const [
+      {
+        metadata: {schema},
+      },
+    ] = await sourceTable.get();
     this.logger.debug('Get schema of ', source);
     this.logger.debug(schema);
     await file.save(JSON.stringify(schema));

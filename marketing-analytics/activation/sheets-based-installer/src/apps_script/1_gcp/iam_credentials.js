@@ -15,7 +15,8 @@
 /** @fileoverview Service Account Credentials API handler class.*/
 
 class IamCredentials extends ApiBase {
-
+  /**
+   */
   constructor() {
     super();
     this.name = 'Service Account Credentials API';
@@ -24,7 +25,10 @@ class IamCredentials extends ApiBase {
     this.version = 'v1';
   }
 
-  /** @override */
+  /**
+   * @override
+   * @return {string}
+   */
   getBaseUrl() {
     return `${this.apiUrl}/${this.version}/projects/-`;
   }
@@ -32,6 +36,8 @@ class IamCredentials extends ApiBase {
   /**
    * Generates an OAuth 2.0 access token for a service account.
    * @see https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken
+   * @param {string} serviceAccount
+   * @param {!Array<string>} scope
    * @return {{
    *   accessToken: string,
    *   expireTime: string
@@ -39,7 +45,22 @@ class IamCredentials extends ApiBase {
    */
   generateAccessToken(serviceAccount, scope) {
     return this.mutate(
-      `serviceAccounts/${serviceAccount}:generateAccessToken`, { scope });
+      `serviceAccounts/${serviceAccount}:generateAccessToken`,
+      {scope},
+    );
   }
 
+  /**
+   * Generates an OpenID Connect ID token for a service account.
+   * @see https://cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateIdToken
+   * @param {string} serviceAccount
+   * @param {string} audience The resource(url) that this token grants access
+   *     to.
+   * @return {{token: string}}
+   */
+  generateIdToken(serviceAccount, audience) {
+    return this.mutate(`serviceAccounts/${serviceAccount}:generateIdToken`, {
+      audience,
+    });
+  }
 }

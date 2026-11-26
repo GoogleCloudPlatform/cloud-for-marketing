@@ -1,6 +1,6 @@
 {
   "name": "@google-cloud/sheets-based-installer",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "description": "Google Sheets based installer",
   "type": "module",
   "author": "Google Inc.",
@@ -22,6 +22,15 @@
     "glob": "^10.3.10",
     "open": "^10.0.4",
     "uglify-js": "^3.17.4"
+  },
+  "scripts": {
+    "deps:gen": "node tools/auto_generate_dependencies.js",
+    "deps:check": "node tools/auto_generate_dependencies.js --check"
+  },
+  "devDependencies": {
+    "gts": "^7.0.0",
+    "jasmine": "^5.7.0",
+    "prettier": "^3.8.3"
   },
   "cloud-repo-tools": {
     "requiresKeyFile": true,

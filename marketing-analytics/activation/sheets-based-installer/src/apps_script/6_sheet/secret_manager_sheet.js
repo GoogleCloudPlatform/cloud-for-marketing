@@ -15,14 +15,30 @@
 /** @fileoverview Secret Manager Sheet.*/
 
 /**
+ * `oauth.js` and `api_access_checker.js` need to invoke some menu functions of
+ * this sheet. If the menu object has a dynamic name (like other sheets, which
+ * are based on the 'Sheet Name'), it would be hard to get this sheet. So, we
+ * use a constant name as the menu object.
+ * Note, there should not be multiple instances of this sheet.
+ * @const {string} SECRET_MANAGER_MENU_OBJECT
+ */
+const SECRET_MANAGER_MENU_OBJECT = 'secretManager';
+
+/**
  * The sheet list all secret names in Secret Manager.
  */
 class SecretManagerSheet extends PlainSheet {
-
+  /** @return {string} */
   get defaultSheetName() {
     return 'Secret Manager';
   }
 
+  /** @return {string} */
+  get menuObjectName() {
+    return SECRET_MANAGER_MENU_OBJECT;
+  }
+
+  /** @return {!Object} */
   get defaultHeadlineStyle() {
     return {
       backgroundColor: '#FBBC04',
@@ -30,71 +46,74 @@ class SecretManagerSheet extends PlainSheet {
     };
   }
 
+  /** @return {!Array<!Object>} */
   get columnConfiguration() {
     return [
-      { name: 'Name', width: 200 },
+      {name: 'Name', width: 200},
       {
-        name: 'Latest Version', width: 100,
-        format: { fn: 'setHorizontalAlignment', format: 'center' },
+        name: 'Latest Version',
+        width: 100,
+        format: {fn: 'setHorizontalAlignment', format: 'center'},
       },
       {
-        name: 'State', width: 100,
-        format: { fn: 'setHorizontalAlignment', format: 'center' },
+        name: 'State',
+        width: 100,
+        format: {fn: 'setHorizontalAlignment', format: 'center'},
       },
-      { name: 'Created', width: 300 },
-      { name: COLUMN_NAME_FOR_DEFAULT_CONFIG, format: COLUMN_STYLES.MONO_FONT },
+      {name: 'Created', width: 300},
+      {name: COLUMN_NAME_FOR_DEFAULT_CONFIG, format: COLUMN_STYLES.MONO_FONT},
     ];
   }
 
+  /** @return {!Array<!Object>} */
   get inherentMenuItems() {
     return [
-      { name: 'Refresh secrets', method: 'listSecrets' },
+      {name: 'Refresh secrets', method: 'listSecrets'},
       {
-        name: 'Save OAuth token in deployed Cloud Functions to Secret Manager',
-        method: 'saveOauthTokenFromCloudFunctionsToSecretManager',
+        name: 'Add a new version to the selected secret',
+        method: 'createOrUpdateSecret',
       },
-      { name: 'Reset sheet', method: 'initialize' },
+      {name: 'Reset sheet', method: 'initialize'},
     ];
   }
 
-
   /**
-   * Gets the OAuth token from deployed Cloud Functions and saves it as a secret
-   * in Secret Manage.
+   * Adds a new version to the selected secret.
+   * The target secret can be a new one.
    */
-  saveOauthTokenFromCloudFunctionsToSecretManager() {
-    const projectId = getDocumentProperty('projectId');
-    const locationId = getDocumentProperty('locationId');
-    const namespace = getDocumentProperty('namespace');
-    const cloudFunctions = new CloudFunctions(projectId, locationId);
-    const results = ['api', 'main'].map((functionSuffix) => {
-      const functionName = `${namespace}_${functionSuffix}`;
-      const blobs = cloudFunctions.getSourceCode(functionName);
-      if (blobs.error) {
-        console.log(blobs.error.message);
-        return false;
-      }
-      const blob = blobs.filter(
-        (blob) => blob.getName() === 'keys/oauth2.token.json')[0];
-      if (!blob) {
-        console.log('There is no OAuth token in Cloud Functions', functionName);
-        return false;
-      } else {
-        const secretName = `${functionName}_legacy_token`;
-        const token = blob.getDataAsString();
-        console.log(
-          `Found OAuth token in ${functionName}, will save it as ${secretName}.`);
-        const secretManager = new SecretManager(projectId);
-        secretManager.addSecretVersion(secretName, token);
-        return true;
-      }
-    });
-    if (results.indexOf(true) === -1) {
-      const ui = SpreadsheetApp.getUi();
-      ui.alert(`No existing OAuth token could be found.`);
-    } else {
-      this.listSecrets();
+  createOrUpdateSecret() {
+    const rowIndex = this.getSelectedRow();
+    const {name: secretName} =
+      this.getArrayOfRowEntity()[rowIndex - ROW_INDEX_SHIFT];
+    const ui = SpreadsheetApp.getUi();
+    const result = ui.prompt(
+      `Please enter new version for the selected secret '${secretName}': \n\n`,
+    );
+    if (result.getSelectedButton() === ui.Button.CLOSE) {
+      return;
     }
+    const secret = result.getResponseText();
+    const projectId = getDocumentProperty('projectId');
+    const secretManager = new SecretManager(projectId);
+    const response = secretManager.addSecretVersion(secretName, secret);
+    if (!response || response.error) {
+      const errMsg =
+        response && response.error
+          ? response.error.message || JSON.stringify(response.error)
+          : 'Unknown error';
+      ui.alert(`Failed to add secret version: ${errMsg}`);
+      return;
+    }
+    const {name: fullName, createTime, state} = response;
+    const version = fullName ? fullName.split('/versions/')[1] : 'N/A';
+    const updated = {
+      latestVersion: version,
+      state: state || 'ENABLED',
+      created: createTime || new Date().toISOString(),
+    };
+    this.updateCells(updated, rowIndex);
+    const link = secretManager.getLinkToCloudConsole(secretName);
+    this.updateLink(rowIndex, this.columnName.indexOf('Name') + 1, link);
   }
 
   /** @override */
@@ -109,21 +128,28 @@ class SecretManagerSheet extends PlainSheet {
     enhancedSheet.clearData();
     const projectId = getDocumentProperty('projectId');
     const secretManager = new SecretManager(projectId);
-    const { secrets } = secretManager.listSecrets();
+    const secrets = secretManager.listSecrets();
     if (secrets) {
-      const rows = secrets.map(({ name: fullName }) => {
+      const links = [];
+      const rows = secrets.map(({name: fullName}) => {
         const secret = fullName.split('/secrets/')[1];
-        const { createTime, state, name } = secretManager.getSecretVersion(secret);
-        const version = name.split('/versions/')[1];
+        const versionResponse = secretManager.getSecretVersion(secret);
+        const {createTime, state, name} = versionResponse || {};
+        const version = name ? name.split('/versions/')[1] : 'N/A';
         const row = [];
         row[0] = secret;
         row[1] = version;
-        row[2] = state;
-        row[3] = createTime;
+        row[2] = state || 'UNKNOWN';
+        row[3] = createTime || 'N/A';
+        const linkToSecret = secretManager.getLinkToCloudConsole(secret);
+        links.push(linkToSecret);
         return row;
       });
-      enhancedSheet.save(rows, 2);
+      enhancedSheet.save(rows, ROW_INDEX_SHIFT);
+      const linkColumnIndex = this.columnName.indexOf('Name') + 1;
+      links.forEach((link, index) => {
+        this.updateLink(index + ROW_INDEX_SHIFT, linkColumnIndex, link);
+      });
     }
   }
-
 }

@@ -1,5 +1,10 @@
 # Release Notes
 
+
+## 2.7.0 (2025-05-13)
+
+### Update to the v24 of the Google Ads API
+
 ## 2.6.0 (2025-12-20)
 
 ### Update to the v22 of the Google Ads API

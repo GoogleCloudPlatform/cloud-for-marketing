@@ -25,9 +25,15 @@ const {
 const {api: {adsdatahub: {AdsDataHub}}} = require(
     '@google-cloud/nodejs-common');
 const { BaseTask } = require('./base_task.js');
-const {TaskType, BigQueryTableConfig,} = require(
-    '../task_config/task_config_dao.js');
-const {ErrorOptions} = require('../task_config/task_config_dao.js');
+
+/**
+ * @import {
+ *   TaskType,
+ *   BigQueryTableConfig,
+ *   StorageFileConfig,
+ * } from '../task_config/task_config_dao.js'
+ * @import  {ErrorOptions} from ('../task_config/task_config_dao.js');
+ */
 
 /**
  * @typedef {{
@@ -71,7 +77,6 @@ const JOB_ID_PARAMETER = 'operationName';
  * delete the query once the operation is finished.
  */
 class QueryAdhTask extends BaseTask {
-
   /** @override */
   isManualAsynchronous() {
     return true;
@@ -81,9 +86,10 @@ class QueryAdhTask extends BaseTask {
   async doTask() {
     const source = this.config.source;
     const tableName = this.getDestTable(this.config.destination.table);
-    const { customerId, title } = source;
-    const spec = source.spec
-      || this.getLegacySpec_(source.endDate, source.dateRangeInDays);
+    const {customerId, title} = source;
+    const spec =
+      source.spec ||
+      this.getLegacySpec_(source.endDate, source.dateRangeInDays);
     const sql = await this.getSql_();
     const adh = this.getAdhInstance_(customerId);
 
@@ -94,35 +100,38 @@ class QueryAdhTask extends BaseTask {
       if (source.parameterTypes) {
         query.parameterTypes = source.parameterTypes;
       }
-      const { name } = await adh.startTransientQuery(query, spec, tableName);
+      const {name} = await adh.startTransientQuery(query, spec, tableName);
       return {
-        parameters: this.appendParameter({ [JOB_ID_PARAMETER]: name })
+        parameters: this.appendParameter({[JOB_ID_PARAMETER]: name}),
       };
     }
     if (title) {
-      const { queries } = await adh.listQuery({ filter: `title=${title}` });
+      const {queries} = await adh.listQuery({filter: `title=${title}`});
       if (queries && queries.length > 0) {
         const queryName = queries[0].name;
-        const { name } = await adh.startQuery(queryName, spec, tableName);
+        const {name} = await adh.startQuery(queryName, spec, tableName);
         return {
-          parameters: this.appendParameter({ [JOB_ID_PARAMETER]: name })
+          parameters: this.appendParameter({[JOB_ID_PARAMETER]: name}),
         };
       }
     }
     throw new Error(
-      `Can not find ADH query for task: ${JSON.stringify(source)}`);
+      `Can not find ADH query for task: ${JSON.stringify(source)}`,
+    );
   }
 
   /** @override */
   async isDone() {
-    const { customerId } = this.config.source;
+    const {customerId} = this.config.source;
     const operationName = this.parameters[JOB_ID_PARAMETER];
     const adh = this.getAdhInstance_(customerId);
     const response = await adh.getQueryStatus(operationName);
-    const { done, error } = response;
+    const {done, error} = response;
     if (error) {
-      this.logger.error('ADH query task failed, will NOT retry: ',
-        error.toString());
+      this.logger.error(
+        'ADH query task failed, will NOT retry: ',
+        error.toString(),
+      );
       throw new Error(error.message);
     }
     return done === true;
@@ -145,13 +154,19 @@ class QueryAdhTask extends BaseTask {
    */
   async getSql_() {
     if (this.config.source.sql) {
+      const originalConfig = JSON.parse(this.originalConfigString);
+      if (originalConfig.source && originalConfig.source.sql) {
+        this.assertSafeSqlTemplateParameters_(originalConfig.source.sql);
+      }
       return this.config.source.sql;
     }
     if (this.config.source.file) {
       /** @const {StorageFileConfig} */
       const {bucket, name, projectId} = this.config.source.file;
-      const sql = await StorageFile
-          .getInstance(bucket, name, {projectId}).loadContent(0);
+      const sql = await StorageFile.getInstance(bucket, name, {
+        projectId,
+      }).loadContent(0);
+      this.assertSafeSqlTemplateParameters_(sql);
       return replaceParameters(sql, this.parameters);
     }
   }
@@ -161,7 +176,7 @@ class QueryAdhTask extends BaseTask {
    * @return {string}
    */
   getDestTable(table) {
-    const { projectId, datasetId, tableId } = table;
+    const {projectId, datasetId, tableId} = table;
     const result = [tableId];
     if (datasetId) {
       result.unshift(datasetId);
@@ -177,7 +192,7 @@ class QueryAdhTask extends BaseTask {
    * integration can have its own authorization. This function is used to get the
    * authorization related information from the 'config' object and form an
    * 'option' object for the API classes.
-   * TODO: This function is copied from 'base_report.js'. Refactory required.
+   * TODO: This function is copied from 'base_report.js'. Refactor required.
    * @return {{SECRET_NAME:(string|undefined)}}
    */
   getOption() {
@@ -197,7 +212,7 @@ class QueryAdhTask extends BaseTask {
   getLegacySpec_(endDate, dateRangeInDays) {
     if (!endDate) return;
     const endDateTime = DateTime.fromISO(endDate);
-    const startDateTime = endDateTime.minus({ days: dateRangeInDays });
+    const startDateTime = endDateTime.minus({days: dateRangeInDays});
     return {
       startDate: {
         year: startDateTime.year,

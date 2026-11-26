@@ -16,7 +16,6 @@
 
 const OAUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/';
 
-
 /**
  * OAuth2 refresh token.
  *
@@ -25,7 +24,7 @@ const OAUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/';
  *   client_secret: string,
  *   token: {
  *     refresh_token: string,
-*   },
+ *   },
  * }}
  */
 let OAuthRefreshToken;
@@ -34,8 +33,8 @@ let OAuthRefreshToken;
  * Authorization option for external Api classes.
  *
  * @typedef {{
- *   oauth: !OAuthRefreshToken|undefined,
- *   serviceAccount: string|undefined,
+ *   oauth: (!OAuthRefreshToken|undefined),
+ *   serviceAccount: (string|undefined),
  * }}
  */
 let ExternalApiAuthOption;
@@ -51,7 +50,6 @@ let ExternalApiAuthOption;
  * @abstract
  */
 class ExternalApi extends ApiBase {
-
   /**
    * @param {!ExternalApiAuthOption=} option
    */
@@ -70,68 +68,53 @@ class ExternalApi extends ApiBase {
   }
 
   /**
-   * If target API is not enabled in the backend GCP, this function will try
-   * to enable it when it gets a speicific error.
    * @override
-   */
-  fetchAndReturnJson(url, params) {
-    const response = super.fetchAndReturnJson(url, params);
-    if (response.error) {
-      const { error } = response;
-      if (error.code === 403
-        && error.message.indexOf('API has not been used in project') > -1) {
-        const regex = /not been used in project ([0-9]*) before or it is disabled/;
-        const projectId = regex.exec(error.message)[1];
-        if (projectId) {
-          const result = gcloud.enableApi(this.api, projectId);
-          if (result.status === RESOURCE_STATUS.OK) {
-            console.log(`Enabled ${this.name} for the backend project.`);
-            Utilities.sleep(5000); // Wait 5 seconds to let the enabled API work.
-            return super.fetchAndReturnJson(url, params);
-          }
-          console.log(`Failed to enabled ${this.name} for the backend project.`);
-        }
-      }
-    }
-    return response;
-  }
-
-  /**
-   * @override
-   * Returns an OAuth access key baded on the given OAuth refresh token.
+   * Returns an OAuth access key based on the given OAuth refresh token.
    * @return {string} access token.
    */
   getAccessToken() {
     if (!this.oauth && !this.serviceAccount) return super.getAccessToken();
     if (this.oauth) {
-      const { client_id, client_secret, token: { refresh_token } } = this.oauth;
+      const {
+        client_id,
+        client_secret,
+        token: {refresh_token},
+      } = this.oauth;
       const payload = {
         client_id,
         client_secret,
         refresh_token,
         grant_type: 'refresh_token',
-      }
+      };
       const params = {
         method: 'POST',
         payload: JSON.stringify(payload),
         contentType: 'application/json',
         muteHttpExceptions: true,
-        headers: { Accept: 'application/json', },
-      }
-      const { error, access_token } =
-        this.fetchAndReturnJson(`${OAUTH_BASE_URL}token`, params);
+        headers: {Accept: 'application/json'},
+      };
+      const {error, access_token} = this.fetchAndReturnJson(
+        `${OAUTH_BASE_URL}token`,
+        params,
+      );
       if (error) throw error;
-      console.log(`${this.constructor.name} generated OAuth2 access token for`,
-        client_id);
+      console.log(
+        `${this.constructor.name} generated OAuth2 access token for`,
+        client_id,
+      );
       return access_token;
     }
     if (this.serviceAccount) {
       const iamCredentials = new IamCredentials();
-      const { accessToken, error } =
-        iamCredentials.generateAccessToken(this.serviceAccount, this.getScope());
+      const {accessToken, error} = iamCredentials.generateAccessToken(
+        this.serviceAccount,
+        this.getScope(),
+      );
       if (error) throw error;
-      console.log(`${this.constructor.name} generated JWT access token for`,
-        this.serviceAccount);
+      console.log(
+        `${this.constructor.name} generated JWT access token for`,
+        this.serviceAccount,
+      );
       return accessToken;
     }
   }
@@ -142,8 +125,8 @@ class ExternalApi extends ApiBase {
  *
  * @typedef {{
  *   valid: boolean,
- *   label: string|undefined,
- *   reason: string|undefined,
+ *   label: (string|undefined),
+ *   reason: (string|undefined),
  * }}
  */
 let VerifyResult;

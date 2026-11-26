@@ -15,17 +15,6 @@
 /** @fileoverview Google Sheets AppsScript trigger functions. */
 
 /**
- * A menu item contains a label and a function name.
- * To assign a function dynamically, `MENU_OBJECTS` is used to host those
- * instance objects that have the detailed functions. In this way, different
- * sheets will have their own functions even they are the same ones (but for
- * different sheet).
- * @see https://developers.google.com/apps-script/reference/base/menu
- * @const {!Object<string, !Object<string, function>>}
- */
-const MENU_OBJECTS = {};
-
-/**
  * Creates the 'Cyborg' menu when a user who has permission to edit opens the
  * spreadsheet. This function will use a global variable `SOLUTION_MENUS` which
  * defines all the menu items.
@@ -36,67 +25,88 @@ function onOpen() {
    * Creates menu items and add them to the given menu.
    *
    * @param {!Menu} menu
-   * @param {!Array<{
-   *   name: string|undefined,
-   *   method: string|undefined,
-  *   seperator: boolean|undefined,
-   * }>} menuItems An array of menu item.
+   * @param {!Array<!Object>} menuItems An array of menu item.
    */
   const insertMenuItem = (menu, menuItems) => {
-    menuItems.forEach(({ name, method, separator }) => {
-      if (!separator) {
-        menu.addItem(name, method);
-      } else {
+    menuItems.forEach((item) => {
+      const {separator, name, method, sheetName, menuItem = []} = item;
+      if (separator) {
         menu.addSeparator();
+      } else if (name && method) {
+        menu.addItem(name, method);
+      } else if (menuItem.length > 0) {
+        const subMenuName = sheetName || name;
+        // If there is a 'name' or 'sheetName' for an array of menu items, then
+        // add all menu items as sub menu items of that name.
+        if (subMenuName) {
+          const subMenu = SpreadsheetApp.getUi().createMenu(subMenuName);
+          insertMenuItem(subMenu, menuItem);
+          menu.addSubMenu(subMenu);
+        } else {  // Append the menu items to the current menu.
+          insertMenuItem(menu, menuItem);
+        }
+      } else {
+        console.log('Unknown menu item', item);
       }
     });
-  }
+  };
   const menu = SpreadsheetApp.getUi().createMenu('🤖 Cyborg');
-  SOLUTION_MENUS.forEach(({ sheetName, menuItem = [], separator }) => {
-    if (separator) {
-      menu.addSeparator();
-      return;
-    }
-    if (menuItem.length === 0) return;
-    if (sheetName) {
-      const subMenu = SpreadsheetApp.getUi().createMenu(sheetName);
-      insertMenuItem(subMenu, menuItem);
-      menu.addSubMenu(subMenu);
-    } else {
-      insertMenuItem(menu, menuItem);
-    }
-  });
+  insertMenuItem(menu, SOLUTION_MENUS);
   menu.addToUi();
 }
 
 /**
- * The columns listed in this array are expected to have a JSON string.
- * `onEdit` trigger  will run a function to validate and format the content.
- */
-const JSON_COLUMNS = [];
-
-/**
- * For those registed JSON cells (@see JSON_COLUMNS), `onEdit` trigger tries to
- * format the string with a better style for readablity and changes the font
- * color to red if it is an malformat JSON string.
+ * OnEdit trigger routes the edit event to the specific active sheet instance
+ * (currently supported for PlainSheet and its subclasses) to handle tasks like
+ * formatting JSON columns automatically.
+ *
+ * NOTE: If other sheet classes (e.g., MojoSheet) need to support automatic
+ * format or validation on edit features in the future, you should:
+ * 1. Add their class registry to the event routing logic below
+ *    (e.g., `sheetInstance = sheetInstance ||
+ * MojoSheet.instances[menuObjectName]`).
+ * 2. Implement an `onEdit(event)` instance method within that sheet class.
+ *    Look at `PlainSheet.prototype.onEdit` for reference on handling range
+ * dimensions.
+ *
  * @see https://developers.google.com/apps-script/guides/triggers#onedite
+ * @param {!Object} event Event object from Google Apps Script.
  */
 function onEdit(event) {
   const range = event.range;
   const activeSheet = range.getSheet();
   const sheetName = activeSheet.getName();
-  if (range.getRow() > 1) {
-    const columnNames = activeSheet.getRange(
-      1, range.getColumn(), 1, range.getNumColumns()).getDisplayValues()[0];
-    columnNames.forEach((columnName, index) => {
-      if (JSON_COLUMNS.indexOf(`${sheetName}.${columnName}`) > -1) {
-        const columnIndex = index + range.getColumn();
-        const rowStart = range.getRow();
-        for (let i = 0; i < range.getNumRows(); i++) {
-          const cell = activeSheet.getRange(rowStart + i, columnIndex, 1, 1);
-          formatSheetRowForJsonCell(cell);
-        }
-      }
-    });
+
+  if (typeof getSafePropertyName !== 'undefined' &&
+      typeof PlainSheet !== 'undefined') {
+    const menuObjectName = getSafePropertyName(sheetName);
+    const sheetInstance = PlainSheet.instances[menuObjectName];
+    if (sheetInstance && typeof sheetInstance.processEditEvent === 'function') {
+      sheetInstance.processEditEvent(event);
+    }
   }
+}
+
+/**
+ * Initializes all sheets of the application. This function is used by Cyborg
+ * command init.
+ * @param {!Array<!Object>=} menuItems Array of menu items to process.
+ */
+function initializeApplication(menuItems = SOLUTION_MENUS) {
+  menuItems.forEach((menuItem) => {
+    const {sheetName, initialize, menuItem: subMenuItems} = menuItem;
+    if (Array.isArray(subMenuItems)) {
+      initializeApplication(subMenuItems);
+    }
+    if (!sheetName || !initialize) {
+      if (sheetName) console.log('Skip non sheet menu item', sheetName);
+      return;
+    }
+    if (SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName)) {
+      console.log(`Sheet [${sheetName}] exists. Skip initializing.`);
+    } else {
+      menuItem.initialize();
+      console.log(`Initialized Sheet [${sheetName}].`);
+    }
+  });
 }

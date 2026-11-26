@@ -15,13 +15,12 @@
 /** @fileoverview Display & Video 360 API handler class.*/
 
 class DisplayVideo extends ExternalApi {
-
   constructor(option) {
     super(option);
     this.name = 'Display & Video 360 API';
     this.api = 'displayvideo.googleapis.com';
     this.apiUrl = `https://${this.api}`;
-    this.version = 'v3';
+    this.version = 'v4';
   }
 
   /** @override */
@@ -32,31 +31,6 @@ class DisplayVideo extends ExternalApi {
   /** @override */
   getScope() {
     return 'https://www.googleapis.com/auth/display-video';
-  }
-
-  /**
-   * DV 360 API lists results in pages. To get the complete list, this function
-   * uses the `nextPageToken` in the response to generate next request.
-   * @param {string} requestUri
-   * @param {Object} parameters
-   * @param {*} entityName The name of entity in the response.
-   * @return {Array<Object>}
-   */
-  getEntities(requestUri, parameters, entityName) {
-    let result = [];
-    let nextPageToken;
-    let counter = 0;
-    do {
-      const response = super.get(requestUri, parameters);
-      if (response[entityName])
-        result = result.concat(response[entityName]);
-      nextPageToken = response.nextPageToken;
-      if (nextPageToken) {
-        parameters.pageToken = nextPageToken;
-        console.log(`Get next page for ${entityName}`, counter++);
-      }
-    } while (nextPageToken)
-    return result;
   }
 
   listPartners(parameters = {}) {
@@ -73,8 +47,7 @@ class DisplayVideo extends ExternalApi {
    */
   listAdvertisers(partnerId, parameters = {}) {
     parameters.partnerId = partnerId;
-    const advertisers = this.getEntities(
-      'advertisers', parameters, 'advertisers');
+    const advertisers = this.list('advertisers', 'advertisers', parameters);
     return advertisers;
   }
 
@@ -96,8 +69,11 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<Campaign>}
    */
   listCampaigns(advertiserId, parameters = {}) {
-    const campaigns = this.getEntities(
-      `advertisers/${advertiserId}/campaigns`, parameters, 'campaigns');
+    const campaigns = this.list(
+      'campaigns',
+      `advertisers/${advertiserId}/campaigns`,
+      parameters,
+    );
     return campaigns;
   }
 
@@ -109,8 +85,11 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<InsertionOrder>}
    */
   listInsertionOrders(advertiserId, parameters = {}) {
-    const insertionOrders = this.getEntities(
-      `advertisers/${advertiserId}/insertionOrders`, parameters, 'insertionOrders');
+    const insertionOrders = this.list(
+      'insertionOrders',
+      `advertisers/${advertiserId}/insertionOrders`,
+      parameters,
+    );
     return insertionOrders;
   }
 
@@ -123,7 +102,8 @@ class DisplayVideo extends ExternalApi {
    */
   getInsertionOrder(advertiserId, insertionOrderId) {
     return this.get(
-      `advertisers/${advertiserId}/insertionOrders/${insertionOrderId}`);
+      `advertisers/${advertiserId}/insertionOrders/${insertionOrderId}`,
+    );
   }
 
   /**
@@ -134,8 +114,11 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<LineItem>}
    */
   listLineItems(advertiserId, parameters = {}) {
-    const lineItems = this.getEntities(
-      `advertisers/${advertiserId}/lineItems`, parameters, 'lineItems');
+    const lineItems = this.list(
+      'lineItems',
+      `advertisers/${advertiserId}/lineItems`,
+      parameters,
+    );
     return lineItems;
   }
 
@@ -148,9 +131,11 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<LineItemAssignedTargetingOption>}
    */
   listLineItemAssignedTargetingOptions(advertiserId, lineItemIds) {
-    const lineItemAssignedTargetingOptions = this.getEntities(
+    const lineItemAssignedTargetingOptions = this.list(
+      'lineItemAssignedTargetingOptions',
       `advertisers/${advertiserId}/lineItems:bulkListAssignedTargetingOptions`,
-      { lineItemIds }, 'lineItemAssignedTargetingOptions');
+      {lineItemIds},
+    );
     return lineItemAssignedTargetingOptions;
   }
 
@@ -162,10 +147,11 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<AdGroup>}
    */
   listAdGroups(advertiserId, lineItemIds) {
-    const adGroups = this.getEntities(
+    const adGroups = this.list(
+      'adGroups',
       `advertisers/${advertiserId}/adGroups`,
-      { filter: lineItemIds.map((lineItemId) => `lineItemId=${lineItemId}`) },
-      'adGroups');
+      {filter: lineItemIds.map(lineItemId => `lineItemId=${lineItemId}`)},
+    );
     return adGroups;
   }
 
@@ -178,9 +164,13 @@ class DisplayVideo extends ExternalApi {
    * @return {Array<AdGroupAssignedTargetingOption>}
    */
   listAdGroupAssignedTargetingOptions(advertiserId, adGroupIds) {
-    const adGroupAssignedTargetingOptions = this.getEntities(
-      `advertisers/${advertiserId}/adGroups:bulkListAdGroupAssignedTargetingOptions`,
-      { adGroupIds }, 'adGroupAssignedTargetingOptions');
+    const adGroupAssignedTargetingOptions = this.list(
+      'adGroupAssignedTargetingOptions',
+      `advertisers/${
+        advertiserId
+      }/adGroups:bulkListAdGroupAssignedTargetingOptions`,
+      {adGroupIds},
+    );
     return adGroupAssignedTargetingOptions;
   }
 }
